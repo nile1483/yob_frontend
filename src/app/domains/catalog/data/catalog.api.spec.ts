@@ -9,6 +9,7 @@ import { CatalogApi } from './catalog.api';
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 const CATEGORIES_URL = '/api/method/yob_storefront.api.catalog.get_categories';
 const CATEGORY_URL = '/api/method/yob_storefront.api.catalog.get_category';
+const ITEM_URL = '/api/method/yob_storefront.api.catalog.get_item';
 
 describe('CatalogApi', () => {
   let api: CatalogApi;
@@ -173,6 +174,85 @@ describe('CatalogApi', () => {
 
       expect(error?.code).toBe('category_not_found');
       expect(error?.httpStatus).toBe(404);
+    });
+  });
+
+  describe('getItem', () => {
+    it('sends the slug and calls the documented method', () => {
+      api.getItem('hex-bolt-m10-50').subscribe();
+
+      const req = http.expectOne((r) => r.url === ITEM_URL);
+      expect(req.request.method).toBe('GET');
+      expect(req.request.params.get('slug')).toBe('hex-bolt-m10-50');
+      req.flush({ message: { data: {} } });
+    });
+
+    it('does not send a quantity, leaving the backend default of 1', () => {
+      api.getItem('hex-bolt-m10-50').subscribe();
+
+      const req = http.expectOne((r) => r.url === ITEM_URL);
+      // No quantity control exists yet, so sending one would be inventing intent.
+      expect(req.request.params.has('qty')).toBe(false);
+      req.flush({ message: { data: {} } });
+    });
+
+    it('returns the unwrapped item payload', () => {
+      let result: { name?: string; custom_slug?: string; uom?: string } | undefined;
+      api.getItem('hex-bolt-m10-50').subscribe((item) => (result = item));
+
+      http.expectOne((r) => r.url === ITEM_URL).flush({
+        message: {
+          data: {
+            name: 'YOB-BOLT-M10',
+            item_name: 'Hex Bolt M10 x 50mm',
+            custom_slug: 'hex-bolt-m10-50',
+            uom: 'Nos',
+            rate: 11.25,
+          },
+          notice: 'Item loaded',
+        },
+      });
+
+      // Note the detail-only field names: custom_slug, not slug; uom, not stock_uom.
+      expect(result?.custom_slug).toBe('hex-bolt-m10-50');
+      expect(result?.uom).toBe('Nos');
+      expect(JSON.stringify(result)).not.toContain('message');
+    });
+
+    it('passes item_not_found through with its stable code', () => {
+      let error: YobApiError | undefined;
+      api.getItem('nope').subscribe({ error: (e: YobApiError) => (error = e) });
+
+      http
+        .expectOne((r) => r.url === ITEM_URL)
+        .flush(
+          { message: { errors: [{ code: 'item_not_found', detail: 'Item not found.', field: 'slug' }] } },
+          { status: 404, statusText: 'Not Found' },
+        );
+
+      expect(error?.code).toBe('item_not_found');
+      expect(error?.httpStatus).toBe(404);
+    });
+
+    it('normalizes the raw Frappe 403 the real bench currently returns for items', () => {
+      // The storefront user lacks Item doctype permission, and get_item has no
+      // try/except, so the failure escapes as a raw Frappe body rather than a YOB one.
+      let error: YobApiError | undefined;
+      api.getItem('hex-bolt-m10-50').subscribe({ error: (e: YobApiError) => (error = e) });
+
+      http.expectOne((r) => r.url === ITEM_URL).flush(
+        {
+          exception: 'frappe.exceptions.PermissionError: No permission for Item',
+          exc_type: 'PermissionError',
+          exc: '["Traceback ..."]',
+        },
+        { status: 403, statusText: 'Forbidden' },
+      );
+
+      expect(error?.kind).toBe('frappe');
+      expect(error?.code).not.toBe('item_not_found');
+      // Whatever it is, it must not carry the traceback onward.
+      expect(JSON.stringify(error)).not.toContain('Traceback');
     });
   });
 });

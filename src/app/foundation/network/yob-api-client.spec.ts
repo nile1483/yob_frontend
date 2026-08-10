@@ -299,7 +299,7 @@ describe('YobApiClient', () => {
       expect(captured.error()?.field).toBeUndefined();
     });
 
-    it('does not mistake application_access_denied for a session failure', () => {
+    it('leaves an explicit YOB application_access_denied untouched at 403', () => {
       const captured = collect(client.get(CATEGORIES));
 
       http.expectOne(`/api/method/${CATEGORIES}`).flush(
@@ -316,15 +316,19 @@ describe('YobApiClient', () => {
         { status: 403, statusText: 'Forbidden' },
       );
 
+      // An explicit YOB envelope code must survive untouched, even at HTTP 403.
+      // Collapsing it into the generic permission code would lose the backend's own
+      // semantic - this one means "wrong/untrusted domain", not "not permitted".
       expect(captured.error()?.code).toBe('application_access_denied');
-      expect(captured.error()?.isSessionFailure).toBe(false);
+      expect(captured.error()?.kind).toBe('yob');
+      expect(captured.error()?.code).not.toBe(YOB_CLIENT_ERROR_CODES.permissionDenied);
     });
   });
 
   describe('raw Frappe error normalization', () => {
     const TRACEBACK = '["Traceback (most recent call last):\\n  File \\"apps/frappe/frappe/app.py\\"..."]';
 
-    it('normalizes a 403 PermissionError into a session failure', () => {
+    it('normalizes a 403 PermissionError into a permission denial, not a session verdict', () => {
       const captured = collect(client.get(CATEGORIES));
 
       http.expectOne(`/api/method/${CATEGORIES}`).flush(
@@ -341,9 +345,12 @@ describe('YobApiClient', () => {
       const error = captured.error();
       expect(error?.kind).toBe('frappe');
       expect(error?.httpStatus).toBe(403);
-      expect(error?.code).toBe(YOB_CLIENT_ERROR_CODES.sessionRequired);
+      expect(error?.code).toBe(YOB_CLIENT_ERROR_CODES.permissionDenied);
       expect(error?.frappeExcType).toBe('PermissionError');
-      expect(error?.isSessionFailure).toBe(true);
+      // The transport layer cannot know whether the session is gone or the user was
+      // simply refused: an authenticated user denied a doctype looks identical.
+      expect(error?.detail).not.toMatch(/sign in/i);
+      expect(error?.detail).not.toMatch(/session/i);
     });
 
     it('never retains the Frappe traceback or its HTML exception text', () => {
@@ -367,7 +374,7 @@ describe('YobApiClient', () => {
       expect(serialised).not.toContain('Traceback');
       expect(serialised).not.toContain('<details>');
       expect(serialised).not.toContain('_server_messages');
-      expect(captured.error()?.detail).toBe('Your session is not valid. Please sign in again.');
+      expect(captured.error()?.detail).toBe('You do not have permission to view this.');
     });
 
     it('normalizes a 400 CSRFTokenError distinctly from a session failure', () => {
@@ -387,8 +394,7 @@ describe('YobApiClient', () => {
       expect(error?.httpStatus).toBe(400);
       expect(error?.code).toBe(YOB_CLIENT_ERROR_CODES.csrfTokenInvalid);
       expect(error?.frappeExcType).toBe('CSRFTokenError');
-      // The session is still valid; only the token needs refreshing.
-      expect(error?.isSessionFailure).toBe(false);
+      expect(error?.code).not.toBe(YOB_CLIENT_ERROR_CODES.permissionDenied);
     });
 
     it('falls back to a generic failure for an unrecognised Frappe exception', () => {

@@ -6,10 +6,12 @@ import type {
   CategoryListItemDto,
   CategoryMetaDto,
   CategoryPayloadDto,
+  ItemDetailDto,
 } from '../contracts/catalog.types';
 
 const GET_CATEGORIES = 'yob_storefront.api.catalog.get_categories';
 const GET_CATEGORY = 'yob_storefront.api.catalog.get_category';
+const GET_ITEM = 'yob_storefront.api.catalog.get_item';
 
 /** `get_category` returns its counts in `meta`; the payload and counts travel together. */
 export interface CategoryResult {
@@ -62,5 +64,23 @@ export class CatalogApi {
         meta: response.meta as CategoryMetaDto | undefined,
       })),
     );
+  }
+
+  /**
+   * One item, by its slug.
+   *
+   * Lives here rather than in an `ItemApi` because `get_item` is a catalog endpoint -
+   * splitting one RPC call into its own service would add a file and a name without
+   * adding a boundary.
+   *
+   * `qty` is left at the backend default of 1, matching `getCategory`. Item pricing is
+   * quantity-sensitive, and there is no quantity control on this page to justify
+   * sending one; quantity arrives with add-to-cart, where the user chooses it.
+   *
+   * Failures reach the caller as a `YobApiError`: `item_not_found` (404) for an
+   * unknown slug, `validation_failed` (422) for a blank one - both wire-verified.
+   */
+  getItem(slug: string): Observable<ItemDetailDto> {
+    return this.api.get<ItemDetailDto>(GET_ITEM, { slug }).pipe(map((response) => response.data));
   }
 }

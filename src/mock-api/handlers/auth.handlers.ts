@@ -15,7 +15,7 @@ const CSRF_HEADER = 'X-Frappe-CSRF-Token';
  * `get_session_context` - the call `SessionStore.restore()` makes on boot.
  *
  * Not guest-allowed, so with no session it must answer the raw Frappe 403, which the
- * network layer normalises to `client_session_required` and the session store reads as
+ * network layer normalises to `client_permission_denied` and the session store reads as
  * guest. Returning a tidy YOB error here would quietly break that path.
  */
 const getSessionContext: MockHandler = (ctx) => {

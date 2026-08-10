@@ -222,13 +222,15 @@ reports guest.
 `foundation/auth/auth.api.ts` wraps these endpoints; `foundation/session/session.store.ts`
 owns the state. Behaviour worth knowing before building on it:
 
-- Restore maps **only** `client_session_required` to guest. Every other failure leaves
-  the status `unknown` with `restoreError` set, so a backend outage or an
+- Restore maps a `client_permission_denied` to guest - **contextually**, because
+  `get_session_context` is not guest-allowed (see section 7b). Every other failure
+  leaves the status `unknown` with `restoreError` set, so a backend outage or an
   `application_access_denied` can never masquerade as "signed out".
 - Login establishes the session from its own response - the payload is byte-identical
   in shape to `get_session_context`, so a second round trip would be waste.
-- Logout clears local state on success and on `client_session_required`; any other
-  failure propagates with local state untouched.
+- Logout clears local state on success and on `client_permission_denied` (being
+  refused `logout` means the session is already gone); any other failure propagates
+  with local state untouched.
 - Nothing is persisted. `provideAppInitializer` calls `restore()` before first render.
 - Restore is bounded by `SESSION_RESTORE_TIMEOUT_MS` (10 s). Because it blocks
   bootstrap, a backend that accepts the connection and then never answers would
@@ -297,7 +299,6 @@ YobApiError extends Error
 - errors        readonly YobErrorItem[]   - every error, not just the first
 - frappeExcType?  string  - Frappe's exception class, on raw Frappe failures
 - method?       string  - the RPC method, for diagnostics
-- isSessionFailure  getter
 ```
 
 Two deliberate departures from the original sketch:
@@ -323,14 +324,45 @@ collide with the backend registry, so a reader always knows the code was inferre
 client_network_unavailable   status 0 - offline, DNS, connection refused, proxy down
 client_request_timeout       connection accepted but no answer within the caller's bound
 client_unreadable_response   non-JSON body (edge 421) or a broken envelope
-client_session_required      403 + exc_type PermissionError
+client_permission_denied     403 + exc_type PermissionError
 client_csrf_token_invalid    400 + exc_type CSRFTokenError
 client_unexpected_failure    any other Frappe exception, or an unclassifiable failure
 ```
 
-`client_session_required` and `client_csrf_token_invalid` are intentionally distinct:
-the first means sign in again, the second means refresh the CSRF token from
-`get_session_context` while leaving the session alone.
+### 7b. HTTP status and exception type do not establish session state
+
+**A raw Frappe 403 `PermissionError` has endpoint-dependent meaning.** Proven against
+the real bench, which returns exactly that response in two unrelated situations:
+
+| Caller | Same wire response means |
+| --- | --- |
+| guest calling `get_session_context` | no session |
+| **authenticated** user calling `get_category` on a category with items | Frappe role permission on the `Item` doctype is missing |
+
+Status and `exc_type` are identical in both. The bodies differ only in human-readable
+text inside the traceback, which is never parsed - matching on strings like
+`"No permission for Item"` would be brittle and would mean retaining unsafe
+`_server_messages`.
+
+So the network layer reports the neutral **`client_permission_denied`** and draws no
+conclusion about the session. It previously emitted `client_session_required` here,
+which was wrong: a signed-in user browsing a refused catalog page would have been
+treated as signed out.
+
+**Authentication semantics live in the auth/session layer.** `SessionStore` reads a
+permission denial as guest in exactly two places, because in each the *operation*
+supplies the meaning the response cannot:
+
+- `restore()` - `get_session_context` is not guest-allowed, so being refused it
+  answers the question "who am I?"
+- `signOut()` - being refused `logout` means the session being ended is already gone
+
+Nowhere else may infer session state from a permission denial. `YobApiError` has no
+`isSessionFailure`: the question cannot be answered from the failure alone.
+
+Explicit YOB envelope codes are untouched by all of this. A `403` carrying
+`application_access_denied` keeps that code - the backend named its own semantic, and
+collapsing it into the generic one would lose it.
 
 The full stable code registry is recorded in
 `reference/api/live/verified-responses.json` under `stable_error_codes`, sourced from

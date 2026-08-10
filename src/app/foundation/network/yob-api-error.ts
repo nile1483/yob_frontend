@@ -33,8 +33,20 @@ export const YOB_CLIENT_ERROR_CODES = {
   requestTimeout: 'client_request_timeout',
   /** A response arrived but could not be understood (non-JSON, or a broken envelope). */
   unreadableResponse: 'client_unreadable_response',
-  /** Frappe refused an unauthenticated call to a secure endpoint (403 PermissionError). */
-  sessionRequired: 'client_session_required',
+  /**
+   * Frappe refused the request with a 403 `PermissionError`.
+   *
+   * Deliberately says *permission denied* and nothing about the session. Real backend
+   * behaviour disproved the earlier assumption that this always meant "not signed
+   * in": the same raw 403 is returned to a fully authenticated user who lacks Frappe
+   * role permission on a doctype - `get_category` on a category containing items
+   * answers exactly this today.
+   *
+   * Status and `exc_type` cannot tell the two apart, so the transport layer must not
+   * guess. What a permission denial *means* depends on which operation was being
+   * performed, and that is knowledge only the caller has - see `SessionStore`.
+   */
+  permissionDenied: 'client_permission_denied',
   /** Frappe rejected a mutation for a missing/stale CSRF token (400 CSRFTokenError). */
   csrfTokenInvalid: 'client_csrf_token_invalid',
   /** Anything else that does not fit a documented shape. */
@@ -105,10 +117,15 @@ export class YobApiError extends Error {
     }
   }
 
-  /** True when the caller should re-establish the session before retrying. */
-  get isSessionFailure(): boolean {
-    return this.code === YOB_CLIENT_ERROR_CODES.sessionRequired;
-  }
+  /*
+   * There is deliberately no `isSessionFailure` here.
+   *
+   * It used to answer "is this a session problem?" from the HTTP status and Frappe
+   * exception type alone - a question those two facts cannot answer. An authenticated
+   * user denied a doctype produces the identical wire response to a guest. Any code
+   * that needs to conclude something about the session must do it from the operation
+   * it was performing, not from the shape of the failure.
+   */
 }
 
 /** Build a `YobApiError` from a single synthesised code. */
@@ -264,9 +281,11 @@ function frappeRefusal(
   excType: string,
 ): { code: YobClientErrorCode; detail: string } {
   if (status === 403 && excType === 'PermissionError') {
+    // Says only what is actually known. Telling the user to sign in again would be
+    // wrong - and confusing - for the authenticated-but-unauthorised case.
     return {
-      code: YOB_CLIENT_ERROR_CODES.sessionRequired,
-      detail: 'Your session is not valid. Please sign in again.',
+      code: YOB_CLIENT_ERROR_CODES.permissionDenied,
+      detail: 'You do not have permission to view this.',
     };
   }
 

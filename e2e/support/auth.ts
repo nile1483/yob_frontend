@@ -30,18 +30,29 @@ export async function signInAsMockBuyer(page: Page, options: { goTo?: string } =
 }
 
 /**
- * Sign in, then land on a URL that carries mock query flags.
+ * Sign in on a page load that carries mock query flags, then continue to `goTo`.
  *
- * Needed because flags such as `?mockScenario=empty` are read once when the mock
- * services are constructed - which happens on document load. Signing in first and
- * then `goto`-ing the flagged URL would restart the app and drop the mock session, so
- * the flags have to be present on the page load that signs in.
+ * Flags such as `?mockScenario=empty` are read once, when the mock services are
+ * constructed on document load - so they must be present on the load that signs in.
+ * That also means the destination has to be reached *client-side*: a later
+ * `page.goto` would be a fresh document, restarting the app, dropping the mock
+ * session and losing the flags. Handing the destination to the sign-in page as a
+ * `returnUrl` keeps the whole journey inside one page load.
  */
-export async function signInWithMockFlags(page: Page, flags: string): Promise<void> {
-  await page.goto(`/login?${flags}`);
+export async function signInWithMockFlags(
+  page: Page,
+  flags: string,
+  options: { goTo?: string } = {},
+): Promise<void> {
+  const destination = options.goTo;
+  const query = destination
+    ? `${flags}&returnUrl=${encodeURIComponent(destination)}`
+    : flags;
+
+  await page.goto(`/login?${query}`);
   await page.getByTestId('login-username').fill(MOCK_CREDENTIALS.username);
   await page.getByTestId('login-password').fill(MOCK_CREDENTIALS.password);
   await page.getByTestId('login-submit').click();
 
-  await expect(page).toHaveURL('/catalog');
+  await expect(page).toHaveURL(destination ?? '/catalog');
 }

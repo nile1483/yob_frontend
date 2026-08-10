@@ -2,6 +2,7 @@ import { type MockReply, mockPermissionError, mockSuccess, mockYobError } from '
 import type { MockContext, MockHandler } from '../core/mock-handler';
 import {
   MOCK_CATEGORIES_BY_SLUG,
+  MOCK_ITEM_DETAILS_BY_SLUG,
   MOCK_TOP_LEVEL_CATEGORIES,
   mockChildCategories,
 } from '../fixtures/catalog.fixture';
@@ -82,7 +83,37 @@ const getCategory: MockHandler = (ctx) => {
   });
 };
 
-/** Both endpoints are login-protected; without a session Frappe refuses before YOB runs. */
+/**
+ * `get_item` - one item by slug.
+ *
+ * Both failure paths here are wire-verified against the real bench: a blank slug is
+ * 422 `validation_failed` with field=slug, an unknown slug is 404 `item_not_found`
+ * with field=slug. The success payload is source-verified only - see `ItemDetailDto`.
+ */
+const getItem: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  const slug = ctx.params.get('slug');
+  if (slug === null || slug === '') {
+    return mockYobError('validation_failed', 'Item slug is required.', {
+      field: 'slug',
+      status: 422,
+    });
+  }
+
+  const detail = MOCK_ITEM_DETAILS_BY_SLUG[slug];
+  if (detail === undefined) {
+    return mockYobError('item_not_found', 'Item not found.', { field: 'slug', status: 404 });
+  }
+
+  // No meta on this endpoint, matching the source.
+  return mockSuccess(detail, { notice: 'Item loaded' });
+};
+
+/** All endpoints are login-protected; without a session Frappe refuses before YOB runs. */
 function requireSession(ctx: MockContext): MockReply | null {
   return ctx.session.isAuthenticated() ? null : mockPermissionError(ctx.rpcMethod);
 }
@@ -90,4 +121,5 @@ function requireSession(ctx: MockContext): MockReply | null {
 export const CATALOG_HANDLERS: Readonly<Record<string, MockHandler>> = {
   'yob_storefront.api.catalog.get_categories': getCategories,
   'yob_storefront.api.catalog.get_category': getCategory,
+  'yob_storefront.api.catalog.get_item': getItem,
 };

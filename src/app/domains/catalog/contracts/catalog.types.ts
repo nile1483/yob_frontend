@@ -102,6 +102,86 @@ export interface CategoryMetaDto {
 }
 
 /**
+ * The nested `pricing` object `get_item` returns.
+ *
+ * It duplicates most of the top-level pricing fields and adds a few of its own.
+ * **Prefer the top-level fields** - they are what the UI reads. This is typed because
+ * it is genuinely on the wire and a later phase may want `total_discount` or
+ * `selling_price_list`, and because leaving it untyped invites someone to reach for
+ * `pricing.rate` and end up displaying a different number from the card next to it.
+ */
+export interface ItemPricingDto {
+  readonly item: {
+    readonly name: string;
+    readonly item_name: string;
+    readonly item_group: string;
+    readonly image: string | null;
+    readonly stock_uom: string;
+  };
+  readonly selling_price_list: string;
+  readonly qty: number;
+  readonly base_price: number;
+  readonly rate: number;
+  readonly discount_percentage: number;
+  readonly discount_amount: number;
+  readonly total_discount: number;
+  readonly net_amount: number;
+  readonly tax_amount: number;
+  readonly tax_label: string | null;
+  readonly total_amount: number;
+  readonly pricing_rules: readonly string[];
+  readonly pricing_rule_label: string | null;
+  readonly pricing_rule_apply_on: string | null;
+  readonly uom: string;
+}
+
+/**
+ * The `data` payload of `get_item`.
+ *
+ * **Source-verified only.** Every field comes from `yob_storefront/api/catalog.py`;
+ * no successful `get_item` response has ever been observed, because the bench's
+ * storefront user lacks Frappe role permission on the `Item` doctype. The two failure
+ * paths (404 `item_not_found`, 422 `validation_failed`) *are* wire-verified.
+ *
+ * Two traps carried over from the source:
+ *
+ * - the slug field is **`custom_slug`** here, but `slug` in `get_category`'s item rows
+ * - the unit field is **`uom`** here, but `stock_uom` in those rows
+ *
+ * `qty` echoes the requested quantity, defaulting to 1.
+ */
+export interface ItemDetailDto {
+  /** Frappe item code, e.g. `YOB-BOLT-M10`. */
+  readonly name: string;
+  readonly item_name: string;
+  readonly image: string | null;
+  readonly item_group: string;
+  readonly custom_slug: string;
+  readonly qty: number;
+
+  readonly base_price: number;
+  readonly rate: number;
+  readonly discount_percentage: number;
+  readonly discount_amount: number;
+
+  readonly net_amount: number;
+  readonly tax_amount: number;
+  readonly tax_label: string | null;
+  readonly total_amount: number;
+
+  readonly uom: string;
+
+  /** Duplicative detail; the UI reads the top-level fields instead. */
+  readonly pricing: ItemPricingDto;
+
+  readonly pricing_rule_label: string | null;
+  readonly pricing_rule_apply_on: string | null;
+
+  /** Human-readable offer labels, already sorted by the backend. Strings, not objects. */
+  readonly available_rules: readonly string[];
+}
+
+/**
  * What a category card needs, regardless of which endpoint produced it.
  *
  * This is the one place mapping earns its keep in this domain: `get_categories` rows

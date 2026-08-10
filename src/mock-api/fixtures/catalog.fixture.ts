@@ -1,5 +1,6 @@
 import type {
   CatalogItemDto,
+  ItemDetailDto,
   CategoryDetailDto,
   CategoryListItemDto,
   CategoryPayloadDto,
@@ -172,9 +173,10 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
     rate: 432,
     discount_percentage: 10,
     discount_amount: 48,
+    // The one item carrying tax, so the detail page's breakdown has something to show.
     net_amount: 432,
-    tax_amount: 0,
-    total_amount: 432,
+    tax_amount: 77.76,
+    total_amount: 509.76,
     pricing_rule_label: 'YOB Demo Bulk Discount',
   },
 ];
@@ -248,3 +250,81 @@ export function mockChildCategories(parentSlug: string): readonly CategoryListIt
     parent_category: parentSlug,
   }));
 }
+
+/* ------------------------------------------------------------------ item detail */
+
+/**
+ * `get_item` fixtures, derived from the listing items above.
+ *
+ * Built from the same rows so clicking a listed item shows matching numbers - a
+ * mismatch there would be a bug the mock invented rather than one worth finding.
+ *
+ * The detail shape is genuinely different from a listing row, and the differences are
+ * reproduced faithfully: `custom_slug` not `slug`, `uom` not `stock_uom`, plus `qty`,
+ * `item_group`, `tax_label`, `available_rules` and the duplicative nested `pricing`.
+ */
+const ITEM_GROUP = 'Fasteners';
+
+const OFFERS_BY_SLUG: Readonly<Record<string, readonly string[]>> = {
+  'hex-bolt-m10-50': ['10% off on 50 or more', 'Free delivery over 5,000'],
+  'through-bolt-anchor-m12-120': ['10% off on 5 boxes or more'],
+};
+
+function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
+  // Only the anchor item carries tax in these fixtures.
+  const taxLabel = listing.tax_amount > 0 ? 'GST 18%' : null;
+
+  return {
+    name: listing.name,
+    item_name: listing.item_name,
+    image: listing.image,
+    item_group: ITEM_GROUP,
+    custom_slug: listing.slug,
+    qty: 1,
+
+    base_price: listing.base_price,
+    rate: listing.rate,
+    discount_percentage: listing.discount_percentage,
+    discount_amount: listing.discount_amount,
+
+    net_amount: listing.net_amount,
+    tax_amount: listing.tax_amount,
+    tax_label: taxLabel,
+    total_amount: listing.total_amount,
+
+    uom: listing.stock_uom,
+
+    pricing: {
+      item: {
+        name: listing.name,
+        item_name: listing.item_name,
+        item_group: ITEM_GROUP,
+        image: listing.image,
+        stock_uom: listing.stock_uom,
+      },
+      selling_price_list: 'Standard Selling',
+      qty: 1,
+      base_price: listing.base_price,
+      rate: listing.rate,
+      discount_percentage: listing.discount_percentage,
+      discount_amount: listing.discount_amount,
+      total_discount: listing.discount_amount,
+      net_amount: listing.net_amount,
+      tax_amount: listing.tax_amount,
+      tax_label: taxLabel,
+      total_amount: listing.total_amount,
+      pricing_rules: listing.pricing_rule_label === null ? [] : ['YOB-PRULE-0001'],
+      pricing_rule_label: listing.pricing_rule_label,
+      pricing_rule_apply_on: listing.pricing_rule_label === null ? null : 'Item Code',
+      uom: listing.stock_uom,
+    },
+
+    pricing_rule_label: listing.pricing_rule_label,
+    pricing_rule_apply_on: listing.pricing_rule_label === null ? null : 'Item Code',
+    available_rules: OFFERS_BY_SLUG[listing.slug] ?? [],
+  };
+}
+
+/** Every item the mock can serve in detail, keyed by its slug. */
+export const MOCK_ITEM_DETAILS_BY_SLUG: Readonly<Record<string, ItemDetailDto>> =
+  Object.fromEntries(FASTENER_ITEMS.map((listing) => [listing.slug, toItemDetail(listing)]));

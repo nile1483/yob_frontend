@@ -40,9 +40,10 @@ export class AuthApi {
    * Read the current session.
    *
    * Not guest-allowed: without a session Frappe answers a raw 403 `PermissionError`,
-   * which the network layer normalises to `client_session_required`. That is the
-   * signal for "guest", and it is `SessionStore.restore()` that interprets it -
-   * deliberately not the network layer, which must keep treating 403 as a failure.
+   * which the network layer normalises to the neutral `client_permission_denied`.
+   * Reading that as "guest" is `SessionStore.restore()`'s job, because it is only true
+   * *for this call* - the identical response from a catalog endpoint means an
+   * authenticated user was refused a doctype.
    */
   getSessionContext(): Observable<YobResponse<SessionContextDto>> {
     return this.api.get<SessionContextDto>(GET_SESSION_CONTEXT, {

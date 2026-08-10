@@ -65,7 +65,7 @@ function classify(status, json, text) {
   if (json?.message?.errors?.length) return { kind: 'yob', code: json.message.errors[0].code };
   if (typeof json?.exc_type === 'string') {
     if (status === 403 && json.exc_type === 'PermissionError')
-      return { kind: 'frappe', code: 'client_session_required' };
+      return { kind: 'frappe', code: 'client_permission_denied' };
     if (status === 400 && json.exc_type === 'CSRFTokenError')
       return { kind: 'frappe', code: 'client_csrf_token_invalid' };
     return { kind: 'frappe', code: 'client_unexpected_failure' };
@@ -96,7 +96,7 @@ console.log('\n== 3. Raw Frappe 403 PermissionError (no session) ==');
 {
   const r = await call('yob_storefront.api.catalog.get_categories');
   const c = classify(r.status, r.json, r.text);
-  check('403 -> kind=frappe client_session_required', r.status === 403 && c.kind === 'frappe' && c.code === 'client_session_required', `${r.status} ${JSON.stringify(c)}`);
+  check('403 -> kind=frappe client_permission_denied', r.status === 403 && c.kind === 'frappe' && c.code === 'client_permission_denied', `${r.status} ${JSON.stringify(c)}`);
   check('body really is raw Frappe, not the YOB envelope', r.json?.message === undefined && typeof r.json?.exc_type === 'string');
   check('body really does contain a traceback the client must discard', typeof r.json?.exc === 'string' && r.json.exc.includes('Traceback'));
 }
@@ -105,7 +105,7 @@ console.log('\n== 3b. Guest session restore (SessionStore.restore before sign-in
 {
   const r = await call('yob_auth.api.auth.get_session_context', { query: { application: APP } });
   const c = classify(r.status, r.json, r.text);
-  check('guest get_session_context -> client_session_required (store maps to guest)', r.status === 403 && c.code === 'client_session_required', `${r.status} ${JSON.stringify(c)}`);
+  check('guest get_session_context -> client_permission_denied (store maps to guest)', r.status === 403 && c.code === 'client_permission_denied', `${r.status} ${JSON.stringify(c)}`);
 }
 
 console.log('\n== 4. Success envelope: data + notice + meta ==');
@@ -193,7 +193,7 @@ console.log('\n== 7. Session lifecycle (Phase 3) ==');
   // After sign-out the same sid must no longer resolve: restore -> guest again.
   const r = await call('yob_auth.api.auth.get_session_context', { query: { application: APP }, headers: auth });
   const c = classify(r.status, r.json, r.text);
-  check('post-logout restore -> client_session_required (guest)', r.status === 403 && c.code === 'client_session_required', `${r.status} ${JSON.stringify(c)}`);
+  check('post-logout restore -> client_permission_denied (guest)', r.status === 403 && c.code === 'client_permission_denied', `${r.status} ${JSON.stringify(c)}`);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

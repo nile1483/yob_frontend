@@ -1,5 +1,6 @@
 import { CurrencyPipe } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { CATALOG_CURRENCY } from '../catalog.currency';
 import type { CatalogItemDto } from '../contracts/catalog.types';
@@ -23,11 +24,12 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
  */
 @Component({
   selector: 'app-item-card',
-  imports: [CurrencyPipe],
+  imports: [CurrencyPipe, RouterLink],
   host: { class: 'contents' },
   template: `
     <article
-      class="flex h-full flex-col gap-3 rounded-lg border border-slate-200 p-4"
+      class="relative flex h-full flex-col gap-3 rounded-lg border border-slate-200 p-4
+             transition-colors focus-within:border-slate-400 hover:border-slate-400"
       data-testid="item-card"
     >
       @if (item().image; as image) {
@@ -36,7 +38,17 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
         <div class="aspect-square w-full rounded-md bg-slate-100" aria-hidden="true"></div>
       }
 
-      <h3 class="text-base font-medium break-words text-slate-900">{{ item().item_name }}</h3>
+      <h3 class="text-base font-medium break-words text-slate-900">
+        <!-- Stretched link: the anchor is the only interactive element, but its
+             ::after covers the card so the whole tile is clickable. A future
+             add-to-cart button must sit above it with relative z-10. -->
+        <a
+          [routerLink]="['/catalog', 'item', item().slug]"
+          class="after:absolute after:inset-0 after:content-['']"
+          data-testid="item-link"
+          >{{ item().item_name }}</a
+        >
+      </h3>
 
       <p class="text-xs text-slate-500 break-words">
         <span class="sr-only" i18n="@@catalog.item.code">Item code</span>

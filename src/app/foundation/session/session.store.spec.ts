@@ -115,7 +115,7 @@ describe('SessionStore', () => {
       expect(Object.keys(session.context() ?? {})).not.toContain('csrf_token');
     });
 
-    it('treats the normalized session-required 403 as a confirmed guest', () => {
+    it('reads a permission denial on this call as a confirmed guest', () => {
       const resolved = restoreWith((req) =>
         req.flush(RAW_FRAPPE_403, { status: 403, statusText: 'Forbidden' }),
       );
@@ -126,6 +126,20 @@ describe('SessionStore', () => {
       expect(session.isResolved()).toBe(true);
       // A confirmed guest is an answer, not a failure.
       expect(session.restoreError()).toBeNull();
+    });
+
+    it('derives guest from the operation, not from the error code alone', () => {
+      // The network layer reports the neutral `client_permission_denied`, which on a
+      // business endpoint means "authenticated but not allowed". It means guest only
+      // because the call was `get_session_context`, which is not guest-allowed - the
+      // interpretation lives here, not in the transport layer.
+      const resolved = restoreWith((req) =>
+        req.flush(RAW_FRAPPE_403, { status: 403, statusText: 'Forbidden' }),
+      );
+
+      expect(resolved()).toBe('guest');
+      // And the transport layer never claimed to know: it said permission denied.
+      expect(RAW_FRAPPE_403.exc_type).toBe('PermissionError');
     });
 
     it('clears stale context and CSRF when a previous session turns out to be gone', () => {
@@ -464,7 +478,7 @@ describe('SessionStore', () => {
       expect(csrf.current()).toBeNull();
     });
 
-    it('still clears local state when the server session has already expired', () => {
+    it('still clears local state when logout is refused, meaning the session is gone', () => {
       let completed = false;
       let error: unknown;
       session.signOut().subscribe({ next: () => (completed = true), error: (e) => (error = e) });

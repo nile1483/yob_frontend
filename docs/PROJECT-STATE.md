@@ -104,9 +104,9 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
 - Session lifecycle is `unknown | restoring | guest | authenticated`, never a boolean.
   An unexpected restore failure leaves `unknown` plus a populated `restoreError`, so
   it stays distinguishable from a confirmed `guest`.
-- Only the normalised `client_session_required` counts as guest during restore. A 500,
-  an outage, or `application_access_denied` must not sign a user out - all three are
-  covered by tests.
+- A permission denial counts as guest during restore **contextually only** - see the
+  Phase 9.5 correction below. A 500, an outage, or `application_access_denied` must
+  not sign a user out; all three are covered by tests.
 - The login payload is identical to `get_session_context`, so login establishes the
   session directly with **no follow-up context call**. Wire-verified.
 - `logout` is now **wire-verified** (previously source-only): it returns
@@ -175,6 +175,78 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
   arrives with each domain's phase.
 - The app root renders only `<router-outlet />`; the Angular scaffold placeholder is
   gone and `app.spec.ts` was updated to assert the new contract.
+
+## CONFIRMED - Permission-error semantics corrected (Phase 9.5, 2026-08-10)
+
+Real backend evidence disproved a Phase 2 assumption.
+
+**Was wrong:** the network layer mapped every raw Frappe 403 `PermissionError` to
+`client_session_required`, i.e. it concluded "not signed in" from HTTP status plus
+`exc_type`. The bench returns that same response to a *fully authenticated* user who
+lacks Frappe role permission on the `Item` doctype, so browsing a refused catalog page
+would have been read as a lost session.
+
+**Now:** the network layer emits the neutral **`client_permission_denied`** and draws
+no conclusion about the session. `YobApiError.isSessionFailure` was removed - the
+question cannot be answered from the failure alone.
+
+**Session meaning moved to `SessionStore`**, which reads a permission denial as guest
+in exactly two places, because there the *operation* supplies what the response
+cannot: `restore()` (being refused `get_session_context`, which is not guest-allowed,
+answers "who am I?") and `signOut()` (being refused `logout` means the session is
+already gone). Chosen over `AuthApi` because the meaning is contextual to the
+operation, and `SessionStore` already owns every session-state decision - `AuthApi`
+stays a thin typed transport.
+
+Unchanged: explicit YOB envelope codes pass through untouched, including
+`application_access_denied` at 403. No error strings are matched, and
+`_server_messages` is still discarded.
+
+`client_session_required` no longer exists. Nothing emitted it after the correction,
+and a code whose name asserts session state from a signal that cannot establish it is
+the bug, not a useful abstraction.
+
+## CONFIRMED - Item detail (Phase 9, 2026-08-10)
+
+- Route `/catalog/item/:itemSlug`, inside the catalog domain. **Order is load-bearing**:
+  it sits above `:categorySlug`, which would otherwise swallow `item`. Cost: `item` is
+  reserved as a category slug. Both orderings are covered by tests.
+- Item cards navigate via a **stretched link** - one anchor, whole-tile target. A
+  future add-to-cart button must sit above it with `relative z-10`.
+- `CatalogApi.getItem(slug)` was added to the existing service; no `ItemApi`, no new
+  HTTP or state abstraction. Page-local `rxResource`, same as Phase 8.
+- Pricing displayed, never derived, including the tax breakdown (net / tax / total are
+  all backend figures). The breakdown is shown only when tax actually applies.
+- No quantity control: the request sends no `qty`, so the backend prices for 1.
+  Quantity arrives with add-to-cart, where changing it has a purpose.
+
+### `get_item` contract status
+
+| Path | Status |
+| --- | --- |
+| unknown slug -> 404 `item_not_found`, field=slug | **wire-verified** (new) |
+| blank slug -> 422 `validation_failed`, field=slug | **wire-verified** (new) |
+| success payload | **source-verified only** |
+
+The success payload has still never been observed. Two field-name traps carried from
+source: the slug is **`custom_slug`** (not `slug`) and the unit is **`uom`** (not
+`stock_uom`) - both differ from the item rows inside `get_category`.
+
+### Backend Item permission - STILL BLOCKED
+
+Re-checked at the start of Phase 9 and unchanged: the storefront user has no Frappe
+role permission on the `Item` doctype, so any category containing items answers
+`403 application_access_denied` (`_error_message: "No permission for Item"`). No real
+item can be fetched, and nothing was changed in the backend to work around it.
+
+Note `get_item` has **no try/except** in `catalog.py`, so a real item would likely
+fail as a *raw Frappe 403* rather than the YOB envelope - which the network layer
+normalises to `client_permission_denied`. The page treats everything except
+`item_not_found` as a generic error, so that path is safe; a unit test pins it.
+
+Verified in a real browser at `http://storefront.local:4200`: the real 404 renders the
+not-found state, the Item-permission refusal renders the safe generic error, nothing
+leaks, and there are no JS errors.
 
 ## CONFIRMED - Catalog vertical slice (Phase 8, 2026-08-10)
 

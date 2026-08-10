@@ -395,8 +395,19 @@ domains/catalog/
   parts/item-card.ts
   pages/catalog-page.ts        /catalog
   pages/category-page.ts       /catalog/:categorySlug
+  pages/item-page.ts           /catalog/item/:itemSlug
   catalog.routes.ts            lazy, one entry per page
 ```
+
+Adding item detail in Phase 9 needed **no new architecture**: one method on the
+existing `CatalogApi`, one page with the same `rxResource` shape, one route. If a new
+page ever seems to need a repository, a store or an HTTP wrapper to show one record,
+that is a signal to simplify rather than to build.
+
+**Route ordering carries meaning.** `item/:itemSlug` must precede `:categorySlug`, or
+a single dynamic segment swallows `item`. The static segment removes the ambiguity at
+the cost of reserving `item` as a category slug - cheaper than nesting items under a
+category the item API does not take. Both orderings are covered by tests.
 
 There is no `state/` folder, deliberately - see below. Do not create one to match a
 template.

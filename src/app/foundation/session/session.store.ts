@@ -80,9 +80,17 @@ export class SessionStore {
    * is a deliberate exception to the usual "do not swallow failures" rule, and it is
    * why the resolved status is returned to the caller.
    *
-   * Only `client_session_required` - the normalised form of Frappe's raw 403 for an
-   * unauthenticated call - counts as guest. A 500, a network outage, a timeout or an
-   * `application_access_denied` must stay distinguishable: treating those as "not
+   * A permission denial here - and only here - means guest.
+   *
+   * `get_session_context` is not guest-allowed, so Frappe answers a raw 403
+   * `PermissionError` when there is no session. The network layer reports that as the
+   * neutral `client_permission_denied`, because on an arbitrary endpoint the same
+   * response can equally mean an authenticated user was refused a doctype. The
+   * session meaning comes from *which call was made*, not from the response: asking
+   * "who am I?" and being told "you may not know" answers the question.
+   *
+   * That inference is confined to this method. A 500, a network outage, a timeout or
+   * an `application_access_denied` must stay distinguishable - treating those as "not
    * signed in" would silently sign users out whenever the backend hiccuped.
    *
    * Bounded by {@link SESSION_RESTORE_TIMEOUT_MS}. On expiry the in-flight request is
@@ -111,7 +119,8 @@ export class SessionStore {
       catchError((failure: unknown) => {
         const error = normalizeYobFailure(failure);
 
-        if (error.code === YOB_CLIENT_ERROR_CODES.sessionRequired) {
+        // Contextual, not generic: see the note above.
+        if (error.code === YOB_CLIENT_ERROR_CODES.permissionDenied) {
           this.becomeGuest();
           return of<SessionStatus>('guest');
         }
@@ -145,9 +154,13 @@ export class SessionStore {
   /**
    * Sign out.
    *
-   * If the server session has already gone (`client_session_required`), the local
-   * state still becomes guest: the user asked to leave and the session is provably
-   * gone, so refusing would trap them in a dead authenticated state.
+   * If `logout` is refused with a permission denial, the local state still becomes
+   * guest. `logout` is a secure endpoint, so being told we may not call it means the
+   * session we were trying to end is already gone - the user asked to leave, and they
+   * have. Refusing would trap them in a dead authenticated state.
+   *
+   * Again this reading is tied to the operation. The same code from a catalog call
+   * says nothing about the session and must never reach here.
    *
    * Any other failure - 500, offline, a stale CSRF token - propagates and leaves the
    * local state untouched. Clearing it there would tell the user they are signed out
@@ -161,7 +174,8 @@ export class SessionStore {
       catchError((failure: unknown) => {
         const error = normalizeYobFailure(failure);
 
-        if (error.code === YOB_CLIENT_ERROR_CODES.sessionRequired) {
+        // Contextual, not generic: see the note above.
+        if (error.code === YOB_CLIENT_ERROR_CODES.permissionDenied) {
           this.becomeGuest();
           return of(undefined);
         }

@@ -1,5 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { CATALOG_CURRENCY } from '../catalog.currency';
 import type { CatalogItemDto } from '../contracts/catalog.types';
@@ -35,7 +36,7 @@ class Host {
 describe('ItemCard', () => {
   async function render(dto: CatalogItemDto = item()) {
     TestBed.configureTestingModule({
-      providers: [{ provide: CATALOG_CURRENCY, useValue: 'INR' }],
+      providers: [provideRouter([]), { provide: CATALOG_CURRENCY, useValue: 'INR' }],
     });
     const fixture = TestBed.createComponent(Host);
     fixture.componentInstance.value.set(dto);
@@ -123,7 +124,7 @@ describe('ItemCard', () => {
     it('uses the injected currency rather than a hardcoded symbol', async () => {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
-        providers: [{ provide: CATALOG_CURRENCY, useValue: 'USD' }],
+        providers: [provideRouter([]), { provide: CATALOG_CURRENCY, useValue: 'USD' }],
       });
       const fixture = TestBed.createComponent(Host);
       await fixture.whenStable();
@@ -158,5 +159,35 @@ describe('ItemCard', () => {
   it('uses a heading for the item name so a listing has structure', async () => {
     const view = await render();
     expect(view.element.querySelector('h3')?.textContent).toContain('Hex Bolt M10 x 50mm');
+  });
+
+  describe('navigation', () => {
+    it('links the item to its detail route', async () => {
+      const view = await render();
+      const link = view.testId('item-link') as HTMLAnchorElement;
+
+      expect(link.tagName).toBe('A');
+      expect(link.getAttribute('href')).toBe('/catalog/item/hex-bolt-m10-50');
+    });
+
+    it('links using the item slug, not the item code', async () => {
+      // `slug` is the routable identifier; `name` is the Frappe item code.
+      const view = await render(item({ slug: 'flat-washer-m10', name: 'YOB-WASH-M10' }));
+
+      expect(view.testId('item-link')?.getAttribute('href')).toBe('/catalog/item/flat-washer-m10');
+    });
+
+    it('keeps the link inside the heading so a listing keeps its outline', async () => {
+      const view = await render();
+      expect(view.element.querySelector('h3 a[data-testid="item-link"]')).not.toBeNull();
+    });
+
+    it('has exactly one interactive element, so the tile is unambiguous', async () => {
+      const view = await render();
+
+      // The stretched link covers the card; a future add-to-cart button will need to
+      // sit above it rather than beside it.
+      expect(view.element.querySelectorAll('a, button')).toHaveLength(1);
+    });
   });
 });

@@ -80,7 +80,7 @@ describe('mockApiInterceptor', () => {
 
       http.expectNone((r) => r.url === `/api/method/${SESSION_CONTEXT}`);
       // Served in memory: guest, so the raw Frappe 403.
-      expect(error?.code).toBe('client_session_required');
+      expect(error?.code).toBe('client_permission_denied');
     });
 
     it('leaves non-RPC requests to the backend', () => {
@@ -207,7 +207,7 @@ describe('mockApiInterceptor', () => {
         expect(error).toBeUndefined();
 
         vi.advanceTimersByTime(1);
-        expect(error?.code).toBe('client_session_required');
+        expect(error?.code).toBe('client_permission_denied');
       });
     });
   });
