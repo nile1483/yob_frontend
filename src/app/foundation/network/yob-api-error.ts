@@ -24,6 +24,13 @@ export type YobErrorKind = 'yob' | 'frappe' | 'transport' | 'unexpected';
 export const YOB_CLIENT_ERROR_CODES = {
   /** The request never reached the server. */
   networkUnavailable: 'client_network_unavailable',
+  /**
+   * The server accepted the connection but did not answer within the caller's bound.
+   *
+   * Distinct from `networkUnavailable` on purpose: a hang usually means the edge or
+   * backend is wedged, not that the client is offline.
+   */
+  requestTimeout: 'client_request_timeout',
   /** A response arrived but could not be understood (non-JSON, or a broken envelope). */
   unreadableResponse: 'client_unreadable_response',
   /** Frappe refused an unauthenticated call to a secure endpoint (403 PermissionError). */

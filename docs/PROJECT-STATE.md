@@ -115,6 +115,12 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
 - Nothing is persisted: no `sid`, no CSRF token, no user data in localStorage or
   sessionStorage. State after a refresh comes solely from `get_session_context`,
   called from `provideAppInitializer` before the first render.
+- Restoration is bounded at 10 s (`SESSION_RESTORE_TIMEOUT_MS`) so a hung backend
+  degrades to a visible error rather than a permanently blank page. A timeout lands in
+  the same unresolved state as any other unexpected failure (`unknown` +
+  `restoreError`, code `client_request_timeout`) and is explicitly not guest; retry is
+  just another `restore()` call. Only restoration is bounded, because only it blocks
+  bootstrap.
 - CSRF lifecycle belongs to the session: the token goes to `CsrfTokenStore` on
   login/restore and is cleared on guest/logout. `SessionContext` is
   `Omit<SessionContextDto, 'csrf_token'>`, so keeping a second copy is a type error.

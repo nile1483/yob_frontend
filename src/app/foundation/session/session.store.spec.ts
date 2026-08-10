@@ -7,7 +7,7 @@ import { CsrfTokenStore } from '../network/csrf-token.store';
 import { yobCsrfInterceptor } from '../network/csrf.interceptor';
 import { YOB_CLIENT_ERROR_CODES, YobApiError } from '../network/yob-api-error';
 import { YOB_API_CONFIG, type YobApiConfig } from '../network/yob-api.config';
-import { SessionStore } from './session.store';
+import { SESSION_RESTORE_TIMEOUT_MS, SessionStore } from './session.store';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 
@@ -217,6 +217,118 @@ describe('SessionStore', () => {
       expect(session.restoreError()).not.toBeNull();
 
       restoreWith((req) => req.flush({ message: { data: authenticatedPayload() } }));
+      expect(session.restoreError()).toBeNull();
+    });
+  });
+
+  describe('restore timeout', () => {
+    // `provideAppInitializer` waits for restore() to COMPLETE. These tests therefore
+    // assert completion, not just emission: a stream that emits but never completes
+    // would still leave the application blank.
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    /** Start a restore, confirm the request went out, then never answer it. */
+    function hangingRestore() {
+      let resolved: string | undefined;
+      let completed = false;
+      session.restore().subscribe({
+        next: (status) => (resolved = status),
+        complete: () => (completed = true),
+      });
+
+      // Asserting the request exists also removes it from the controller's open list,
+      // so an abandoned request cannot mask a later expectation.
+      http.expectOne((r) => r.url === SESSION_CONTEXT);
+
+      expect(session.status()).toBe('restoring');
+      expect(completed).toBe(false);
+
+      return { resolved: () => resolved, completed: () => completed };
+    }
+
+    it('completes bootstrap instead of hanging forever when the backend never answers', () => {
+      const restore = hangingRestore();
+
+      vi.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+
+      expect(restore.completed()).toBe(true);
+      expect(restore.resolved()).toBe('unknown');
+    });
+
+    it('does not treat a timeout as a guest session', () => {
+      const restore = hangingRestore();
+
+      vi.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+
+      expect(restore.resolved()).toBe('unknown');
+      expect(session.status()).toBe('unknown');
+      expect(session.isGuest()).toBe(false);
+      expect(session.isAuthenticated()).toBe(false);
+      expect(session.isResolved()).toBe(false);
+      expect(session.restoreError()?.code).toBe(YOB_CLIENT_ERROR_CODES.requestTimeout);
+      expect(session.restoreError()?.kind).toBe('transport');
+    });
+
+    it('stays pending right up to the bound, so a slow-but-working backend still wins', () => {
+      const restore = hangingRestore();
+
+      vi.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS - 1);
+      expect(restore.completed()).toBe(false);
+      expect(session.status()).toBe('restoring');
+
+      vi.advanceTimersByTime(1);
+      expect(restore.completed()).toBe(true);
+    });
+
+    it('can retry after a timeout and establish an authenticated session', () => {
+      const first = hangingRestore();
+      vi.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS);
+      expect(first.resolved()).toBe('unknown');
+      expect(session.restoreError()).not.toBeNull();
+
+      let retried: string | undefined;
+      session.restore().subscribe((status) => (retried = status));
+      http
+        .expectOne((r) => r.url === SESSION_CONTEXT)
+        .flush({ message: { data: authenticatedPayload() } });
+
+      expect(retried).toBe('authenticated');
+      expect(session.status()).toBe('authenticated');
+      expect(session.user()?.name).toBe('storefront@yob.test');
+      expect(csrf.current()).toBe('csrf-from-backend');
+      // The stale timeout error must not linger once the question is answered.
+      expect(session.restoreError()).toBeNull();
+    });
+
+    it('leaves a normal restore that answers in time completely unaffected', () => {
+      let resolved: string | undefined;
+      session.restore().subscribe((status) => (resolved = status));
+
+      http
+        .expectOne((r) => r.url === SESSION_CONTEXT)
+        .flush({ message: { data: authenticatedPayload() } });
+
+      // No timer ever fires; advancing past the bound must change nothing.
+      vi.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS * 2);
+
+      expect(resolved).toBe('authenticated');
+      expect(session.status()).toBe('authenticated');
+      expect(session.restoreError()).toBeNull();
+    });
+
+    it('leaves a guest restore that answers in time completely unaffected', () => {
+      let resolved: string | undefined;
+      session.restore().subscribe((status) => (resolved = status));
+
+      http
+        .expectOne((r) => r.url === SESSION_CONTEXT)
+        .flush(RAW_FRAPPE_403, { status: 403, statusText: 'Forbidden' });
+
+      vi.advanceTimersByTime(SESSION_RESTORE_TIMEOUT_MS * 2);
+
+      expect(resolved).toBe('guest');
+      expect(session.status()).toBe('guest');
       expect(session.restoreError()).toBeNull();
     });
   });

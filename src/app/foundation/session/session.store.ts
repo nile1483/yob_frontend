@@ -1,11 +1,29 @@
 import { Service, computed, inject, signal } from '@angular/core';
-import { type Observable, catchError, map, of, tap, throwError } from 'rxjs';
+import { type Observable, catchError, map, of, tap, throwError, timeout } from 'rxjs';
 
 import { AuthApi } from '../auth/auth.api';
 import type { SessionContextDto, PasswordCredentials } from '../auth/auth.types';
 import { CsrfTokenStore } from '../network/csrf-token.store';
-import { YOB_CLIENT_ERROR_CODES, YobApiError, normalizeYobFailure } from '../network/yob-api-error';
+import {
+  YOB_CLIENT_ERROR_CODES,
+  YobApiError,
+  clientError,
+  normalizeYobFailure,
+} from '../network/yob-api-error';
 import type { SessionContext, SessionStatus } from './session.types';
+
+/**
+ * How long session restoration waits before giving up.
+ *
+ * Restore runs inside the app initializer, so a request that never answers would
+ * leave the application permanently blank - a hung backend must degrade to a visible
+ * error, not a white screen. Bounded here rather than in the network client because
+ * this is a property of bootstrapping, not of HTTP: ordinary calls happen behind a
+ * rendered UI that can show its own pending state.
+ *
+ * Exported so tests can advance exactly this far. It is a constant, not a setting.
+ */
+export const SESSION_RESTORE_TIMEOUT_MS = 10_000;
 
 /**
  * The single source of truth for who is signed in.
@@ -63,15 +81,31 @@ export class SessionStore {
    * why the resolved status is returned to the caller.
    *
    * Only `client_session_required` - the normalised form of Frappe's raw 403 for an
-   * unauthenticated call - counts as guest. A 500, a network outage or an
+   * unauthenticated call - counts as guest. A 500, a network outage, a timeout or an
    * `application_access_denied` must stay distinguishable: treating those as "not
    * signed in" would silently sign users out whenever the backend hiccuped.
+   *
+   * Bounded by {@link SESSION_RESTORE_TIMEOUT_MS}. On expiry the in-flight request is
+   * cancelled and the outcome is the same unresolved state as any other unexpected
+   * failure, so calling `restore()` again is a clean retry.
    */
   restore(): Observable<SessionStatus> {
     this.statusSignal.set('restoring');
     this.restoreErrorSignal.set(null);
 
     return this.auth.getSessionContext().pipe(
+      timeout({
+        each: SESSION_RESTORE_TIMEOUT_MS,
+        with: () =>
+          throwError(() =>
+            clientError({
+              kind: 'transport',
+              httpStatus: 0,
+              code: YOB_CLIENT_ERROR_CODES.requestTimeout,
+              detail: 'The server did not respond in time. Please try again.',
+            }),
+          ),
+      }),
       tap((response) => this.establish(response.data)),
       map((): SessionStatus => 'authenticated'),
       catchError((failure: unknown) => {

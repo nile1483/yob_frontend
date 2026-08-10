@@ -230,6 +230,13 @@ owns the state. Behaviour worth knowing before building on it:
 - Logout clears local state on success and on `client_session_required`; any other
   failure propagates with local state untouched.
 - Nothing is persisted. `provideAppInitializer` calls `restore()` before first render.
+- Restore is bounded by `SESSION_RESTORE_TIMEOUT_MS` (10 s). Because it blocks
+  bootstrap, a backend that accepts the connection and then never answers would
+  otherwise leave the page permanently blank. On expiry the request is cancelled and
+  the outcome is `unknown` + `restoreError` with code `client_request_timeout` -
+  never guest - so `restore()` can simply be called again to retry. Only restoration
+  is bounded; ordinary calls happen behind a rendered UI that shows its own pending
+  state, so the network client stays untimed.
 
 ## 6. Central Network API - IMPLEMENTED (Phase 2)
 
@@ -314,6 +321,7 @@ collide with the backend registry, so a reader always knows the code was inferre
 
 ```text
 client_network_unavailable   status 0 - offline, DNS, connection refused, proxy down
+client_request_timeout       connection accepted but no answer within the caller's bound
 client_unreadable_response   non-JSON body (edge 421) or a broken envelope
 client_session_required      403 + exc_type PermissionError
 client_csrf_token_invalid    400 + exc_type CSRFTokenError
