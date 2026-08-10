@@ -156,11 +156,31 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
   validation errors and empty results are reached by making the mock behave normally,
   which tests the contract instead of the switch.
 
-### Deliberately deferred from Phase 3
+## CONFIRMED - Routing and shells (Phase 5, 2026-08-10)
 
-- **The secure route guard.** Build plan Phase 3 lists it, but it cannot be wired
-  without route branches (Phase 5) and a sign-in route to redirect to (Phase 7).
-  `SessionStore.isAuthenticated` / `isResolved` are the hooks it will use.
+- Two route branches at `path: ''`, each with its own shell: public (unguarded) and
+  secure (`secureRouteGuard`). Order in `app.routes.ts` is load-bearing - see
+  `docs/ARCHITECTURE.md` section 19a.
+- The guard deferred from Phase 3 now exists. It reads `SessionStore` signals and makes
+  no HTTP call; a mutation test confirms six routing tests genuinely depend on it.
+- An unresolved session (`restoreError` set) redirects to `/session-unavailable`, never
+  to `/login`. A backend outage must not be presented as a credentials problem.
+- Return URLs are validated by `sanitizeReturnUrl`; only local application paths are
+  accepted. Every future consumer, including the real sign-in page, must use it.
+- Domain routes are lazy (`loadChildren` per domain, `loadComponent` per page) and each
+  produces its own chunk - verified in the production build output.
+- Access control lives at the route branch. No page may repeat a login check.
+- Placeholder pages exist for `/login`, `/terms`, `/catalog`, `/account`,
+  `/session-unavailable` and not-found. They are structural proof only; the real UI
+  arrives with each domain's phase.
+- The app root renders only `<router-outlet />`; the Angular scaffold placeholder is
+  gone and `app.spec.ts` was updated to assert the new contract.
+
+### Deliberately deferred from Phase 3 - now RESOLVED
+
+- **The secure route guard.** Deferred in Phase 3 because it needed route branches and
+  a sign-in route to redirect to. Delivered in Phase 5 as
+  `foundation/session/session.guard.ts`.
 
 ## ASSUMPTIONS TO VERIFY EARLY
 

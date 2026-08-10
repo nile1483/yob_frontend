@@ -532,6 +532,96 @@ Bad abstraction triggers:
 - "this could be configurable"
 - "a template framework usually has this"
 
+## 19a. Routing and shells (Phase 5)
+
+### The route tree
+
+```text
+/                        redirect -> /catalog
+
+PUBLIC   PublicShell, no guard
+  /login                 domains/access
+  /terms                 domains/content
+  /session-unavailable   domains/content
+
+SECURE   SecureShell, secureRouteGuard
+  /catalog               domains/catalog
+  /account               domains/account
+
+**                       not-found, rendered inside PublicShell
+```
+
+Both branches sit at `path: ''`, which is what lets each own a shell without
+prefixing URLs. The router tries them in order and backtracks when no child matches,
+so **order carries meaning**:
+
+1. the root redirect is `pathMatch: 'full'`, so it claims only the empty URL
+2. public precedes secure, so `/login` can never be swallowed by the guard
+3. not-found is last - a `**` child inside an earlier shell would match every URL and
+   the secure branch would never be reached
+
+### Conventions future domains must follow
+
+- A domain owns a `<domain>.routes.ts` exporting `UPPER_SNAKE_ROUTES`, and is attached
+  with `loadChildren`. Adding a business area is one entry in `app.routes.ts`; removing
+  one in a copied client is deleting that entry.
+- Pages are attached with `loadComponent` so each is its own chunk.
+- **Access control belongs to the branch, never to a page.** No page repeats a login
+  check; putting one there creates a second answer to a question the guard already
+  settled.
+- Routed views live in `domains/<name>/pages/`. Do not create `state/`, `data/` or
+  `parts/` until there is something to put in them.
+
+### Guard
+
+`secureRouteGuard` reads `SessionStore` and issues no HTTP request. The app
+initializer resolved the session before the first navigation, and re-asking per route
+change would put a round trip in front of every click while creating a competing
+source of truth.
+
+It branches three ways, because the session status is not a boolean:
+
+| Status | Result |
+| --- | --- |
+| `authenticated` | allow |
+| `guest` | `/login?returnUrl=<original>` |
+| anything else | `/session-unavailable` |
+
+The third case is the important one. An unresolved session means a backend outage, a
+timeout, or `application_access_denied` from a misconfigured proxy - the user's
+credentials are fine, so sending them to sign in would be a lie, would not help, and
+would invite a loop when the next restore fails identically.
+
+`/login` and `/session-unavailable` are the only paths the guard names. Both are
+structural, both public, so neither redirect can re-enter the guard.
+
+### Return URLs
+
+`sanitizeReturnUrl` (`foundation/session/return-url.ts`) accepts only local
+application paths. The parameter is attacker-supplied - anyone can hand out
+`…/login?returnUrl=https://phish.example` - so absolute URLs, protocol-relative `//`
+and `/\` forms, embedded schemes, backslashes and control characters are all rejected.
+A rejected value becomes `null`, which callers treat as "no destination requested" and
+replace with their own default, so a hostile link degrades to an ordinary sign-in.
+
+Anything that consumes a return URL must pass it through this function, including the
+real sign-in page when it lands.
+
+### Shells
+
+`shells/public/public-shell.ts` and `shells/secure/secure-shell.ts` provide structure
+and nothing else. The secure shell composes brand, `SecureNav`, an account area,
+routed content and footer; moving navigation is relocating an element in that
+template. There is no `navigationPosition`, `headerVariant` or `sidebarEnabled`, and
+adding one would be the wrong fix - **the markup is the configuration surface**, and
+it is meant to be edited directly in a copied client project.
+
+`SecureNav` is a separate part so it can be moved or replaced without touching the
+rest of the shell. Its links are literal; a copied client that does not need one
+deletes the anchor rather than toggling a setting.
+
+The shells read `SessionStore` only to display who is signed in.
+
 ## 20. Mock API (Phase 4)
 
 `src/mock-api/` serves Frappe RPC calls from memory so the frontend can be developed
