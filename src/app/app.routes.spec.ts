@@ -160,12 +160,15 @@ describe('application routes', () => {
       expect(returned).toBe('/account?tab=addresses');
     });
 
-    it('surfaces the return URL to the sign-in page', async () => {
+    it('lands on a working sign-in page with the destination intact', async () => {
       restore();
       const harness = await RouterTestingHarness.create();
       await harness.navigateByUrl('/catalog');
 
-      expect(harness.routeNativeElement?.textContent).toContain('/catalog');
+      // The real sign-in form renders (it does not display the raw path - what it
+      // does with the parameter is covered in login-page.spec.ts).
+      expect(harness.routeNativeElement?.querySelector('form')).not.toBeNull();
+      expect(router.parseUrl(router.url).queryParamMap.get('returnUrl')).toBe('/catalog');
     });
 
     it('discards an attacker-supplied external return URL on the sign-in page', async () => {

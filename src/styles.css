@@ -1,3 +1,16 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global styles. Keep this file small - almost every visual decision belongs in the
+   template it affects, where a designer can find it. */
 
 @import 'tailwindcss';
+
+@layer base {
+  /* One consistent, always-visible keyboard focus indicator.
+     Global because it is an accessibility floor for the whole application, not a
+     per-component choice: browsers style focus inconsistently, and any component that
+     forgot its own focus ring would silently become unusable by keyboard.
+     `:focus-visible` keeps it off mouse clicks. */
+  :focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+}

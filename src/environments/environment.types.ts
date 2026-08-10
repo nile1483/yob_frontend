@@ -1,4 +1,5 @@
 import type { HttpInterceptorFn } from '@angular/common/http';
+import type { Routes } from '@angular/router';
 
 import type { YobApiConfig } from '../app/foundation/network/yob-api.config';
 
@@ -33,4 +34,16 @@ export interface AppEnvironment {
    * one bad flag away from serving fake data to real users.
    */
   readonly httpInterceptors: readonly HttpInterceptorFn[];
+
+  /**
+   * Extra routes this environment contributes.
+   *
+   * Empty in production. Development and mock builds add the design gallery, a page
+   * that exists only so the visual primitives can be exercised in a real browser
+   * before any screen uses them. It is routed from here, and not from
+   * `app.routes.ts`, for the same reason the mock API is: the production environment
+   * file never imports it, so it cannot reach a production bundle - it is absent
+   * rather than merely unreachable.
+   */
+  readonly devRoutes: Routes;
 }

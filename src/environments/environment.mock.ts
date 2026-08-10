@@ -22,4 +22,11 @@ export const environment: AppEnvironment = {
     application: 'STOREFRONT',
   },
   httpInterceptors: [mockApiInterceptor],
+  devRoutes: [
+    {
+      path: '__design',
+      loadComponent: () => import('../dev/design-gallery').then((m) => m.DesignGallery),
+      title: 'Design gallery',
+    },
+  ],
 };

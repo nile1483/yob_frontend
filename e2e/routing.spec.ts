@@ -47,8 +47,9 @@ test.describe('secure route branch', () => {
 
     await expect(page).toHaveURL('/login?returnUrl=%2Fcatalog');
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-    // The destination survived the redirect and is shown to the user.
-    await expect(page.getByText('/catalog')).toBeVisible();
+    // The destination survived the redirect. What the page does with it - return
+    // there after signing in - is covered in login.spec.ts.
+    expect(new URL(page.url()).searchParams.get('returnUrl')).toBe('/catalog');
   });
 
   test('preserves a deeper URL with its query string', async ({ page }) => {

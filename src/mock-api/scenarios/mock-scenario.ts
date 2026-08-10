@@ -37,6 +37,19 @@ export class MockApiScenario {
    */
   readonly latencyMs = signal(0);
 
+  constructor() {
+    // Dev affordance: `?mockLatency=600` on any URL makes slow responses reachable in
+    // a real browser, which is otherwise impossible - the mock answers in memory, so
+    // there is no request for a test to intercept and stall. Needed to exercise
+    // pending states such as a submit button that must block a second click.
+    //
+    // Mock-only by construction: this whole folder is absent from production builds.
+    const requested = Number(new URLSearchParams(globalThis.location?.search ?? '').get('mockLatency'));
+    if (Number.isFinite(requested) && requested > 0) {
+      this.latencyMs.set(requested);
+    }
+  }
+
   reset(): void {
     this.scenario.set('normal');
     this.latencyMs.set(0);

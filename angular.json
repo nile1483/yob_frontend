@@ -25,9 +25,8 @@
                 "input": "public"
               }
             ],
-            "styles": [
-              "src/styles.css"
-            ]
+            "styles": ["src/styles.css"],
+            "polyfills": ["@angular/localize/init"]
           },
           "configurations": {
             "production": {
@@ -74,9 +73,7 @@
           "builder": "@angular/build:dev-server",
           "options": {
             "proxyConfig": "proxy.conf.json",
-            "allowedHosts": [
-              "storefront.local"
-            ]
+            "allowedHosts": ["storefront.local"]
           },
           "configurations": {
             "production": {

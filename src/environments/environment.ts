@@ -16,4 +16,5 @@ export const environment: AppEnvironment = {
     application: 'STOREFRONT',
   },
   httpInterceptors: [],
+  devRoutes: [],
 };

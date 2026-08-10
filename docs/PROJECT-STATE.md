@@ -176,6 +176,93 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
 - The app root renders only `<router-outlet />`; the Angular scaffold placeholder is
   gone and `app.spec.ts` was updated to assert the new contract.
 
+## CONFIRMED - Login page (Phase 7, 2026-08-10)
+
+- `domains/access/pages/login-page.ts` is the first real user journey: guest -> sign in
+  -> `SessionStore` authenticated -> sanitized return URL or `/catalog` -> SecureShell.
+- The page calls **only** `SessionStore.signInWithPassword`. No `HttpClient`, no
+  `AuthApi`, no `YobApiClient`, no knowledge of Frappe, CSRF or the `application` code.
+  It behaves identically against the mock and the real backend.
+- Built on **Signal Forms** (`@angular/forms/signals`), verified `@publicApi 22.0` -
+  stable, not preview. `submit()` supplies validation, touch-on-submit and the
+  `submitting` state, so duplicate-submit prevention is the framework's, not a flag of
+  ours. Note: Signal Forms manages the `name` attribute; setting it manually is an
+  NG8022 compile error.
+- Validation is `required` on username and password only. No email rule - the backend
+  takes a username/identifier, not a guaranteed email.
+- Error mapping lives in `domains/access/login-error-message.ts`, keyed on `code`
+  alone. Backend `detail` is never echoed. `invalid_credentials` is deliberately vague
+  so the form cannot be used to test whether an account exists. No rate-limit countdown
+  - the backend supplies no retry duration.
+- `@angular/localize` installed via `ng add`. All user-facing text carries explicit
+  i18n ids. **Rule: new user-facing text is localization-ready from first
+  implementation.** No language switcher, no runtime translation service.
+- Return URLs use the existing `sanitizeReturnUrl` everywhere - guard, sign-in page and
+  the already-authenticated redirect. No second mechanism.
+- The Phase 5 secure-shell browser gap is **closed**: sign-in now reaches SecureShell
+  in a real browser, verified at all three viewports for overflow, nav wrapping,
+  routed content and client-side navigation.
+
+### Known limitation - mock server session and page reload
+
+`MockServerSession` is in-memory, so a full page load restarts it and the mock forgets
+the user. Browser tests that need an authenticated session across a document load are
+therefore not possible; the already-authenticated case is covered via Back navigation
+(client-side popstate) and by unit tests. Making the mock survive a reload would mean
+writing auth state into browser storage, and the assertions that nothing does that are
+worth more. Restore-after-reload is covered by `mock-api.session.spec.ts` and, against
+the real backend, by `scripts/live-smoke.mjs`.
+
+## CONFIRMED - UI foundation strategy (Phase 6.5, 2026-08-10)
+
+- **UI implementation decision order is now policy**: native HTML -> Angular Aria ->
+  Angular CDK -> Tailwind -> small YOB `design`/`widgets` abstraction -> third-party
+  library only when justified. Recorded in `docs/ARCHITECTURE.md` 6z.
+- Never hand-write keyboard navigation, focus trapping, ARIA interaction patterns or
+  popup positioning. Check Angular Aria/CDK first - especially for autocomplete,
+  combobox, select/listbox, menu, tabs, accordion, tree, grid, dialog, overlay.
+- Aria/CDK are implementation tools **underneath** `design/`, `widgets/` and
+  `domains/`. Pages must not couple directly to low-level Aria/CDK APIs where a
+  reusable widget belongs.
+- `@angular/aria` and `@angular/cdk` are **not installed, deliberately**. Both are
+  22.1.1 and compatible with our Angular 22.1.1; Aria takes CDK as a peer dependency.
+  Nothing built so far needs them. Approved as first-choice tools, to be installed
+  with the first real requirement.
+- **Angular Material is not the YOB visual system** and must not become the default
+  component architecture. Case-by-case evaluation for a single complex control only,
+  with written justification.
+- No broad UI suite (PrimeNG or similar). Criteria for evaluating any third-party
+  library are recorded in `docs/ARCHITECTURE.md` 6z.
+- Button refactored from `<app-button>` wrapper to `button[yob-button]`, an
+  attribute-selector component on the native element. `display: contents` is gone;
+  native `type`, `form`, `name`, `value` and implicit form submission all work
+  directly. `type` is no longer an input, so the **native default applies** - a bare
+  `<button yob-button>` inside a form submits it.
+- `field` reviewed and intentionally retained, including its `querySelector`. Its
+  single-control contract is now documented in the source.
+
+## CONFIRMED - Design foundation (Phase 6, 2026-08-10)
+
+- `src/app/design/` holds exactly five primitives: `button`, `field`, `alert`,
+  `spinner`, `empty-state`. None knows about auth, catalog, cart, orders, Frappe or
+  HTTP, and none holds business state.
+- **One button treatment.** No `variant`, `size`, `colour` or `width` inputs. Restyling
+  means editing the Tailwind classes; a second treatment gets added when a real screen
+  needs one, not before. The same rule applies to every primitive.
+- `field` wraps the projected native control in its `<label>` for implicit association,
+  and sets `aria-describedby` / `aria-invalid` on it. The control stays native, so
+  `formControlName`, Signal Forms and validators work unchanged - there is no
+  `ControlValueAccessor` and no form framework underneath.
+- `alert`'s `tone` drives the ARIA role (`alert` for errors, `status` otherwise), which
+  is why it is an input rather than a styling knob.
+- `src/styles.css` gained one global rule: a `:focus-visible` outline, as an
+  accessibility floor for the whole application.
+- `/__design` is a development-only gallery routed via `AppEnvironment.devRoutes`.
+  Production supplies `[]` and never imports it - verified absent from the production
+  bundle. Browser-verified at all three viewports.
+- Deliberately not built: theme/token config, notification service, card/badge/dialog/
+  drawer/pagination/skeleton, design barrel file. See `docs/ARCHITECTURE.md` 6a.
+
 ## CONFIRMED - Playwright E2E baseline (2026-08-10)
 
 - `npm run e2e` runs Chromium at three viewports (390x844, 768x1024, 1440x900) and

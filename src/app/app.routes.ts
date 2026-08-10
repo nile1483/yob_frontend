@@ -1,5 +1,6 @@
 import type { Routes } from '@angular/router';
 
+import { environment } from '../environments/environment';
 import { DEFAULT_AUTHENTICATED_PATH } from './foundation/session/return-url';
 import { secureRouteGuard } from './foundation/session/session.guard';
 import { PublicShell } from './shells/public/public-shell';
@@ -76,6 +77,9 @@ export const routes: Routes = [
       },
     ],
   },
+
+  // Empty in production. See AppEnvironment.devRoutes.
+  ...environment.devRoutes,
 
   // ------------------------------------------------------------- not found
   {

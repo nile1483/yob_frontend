@@ -121,6 +121,28 @@ The application is localization-ready, but there is no runtime language switch r
 Use one configured locale/language per copied client project.
 Keep date, number, and currency formatting locale-aware.
 
+#### The rule (Phase 7)
+
+**All new user-facing text must be localization-ready from its first implementation.**
+Retrofitting translation across a grown application is far more work than marking
+strings as they are written, and the strings are about to multiply.
+
+`@angular/localize` is installed (via `ng add`, which wired the polyfill in
+`angular.json` and the type reference in `src/main.ts`). Angular's compile-time i18n is
+sufficient precisely because the language is chosen per copied project, not at runtime.
+
+- Template text: an `i18n` attribute, with an explicit id -
+  `<h1 i18n="@@login.heading">Sign in</h1>`. Attributes use `i18n-<attr>`, for example
+  `i18n-label="@@login.username.label"`.
+- TypeScript strings: `$localize` with the same id convention -
+  ``$localize`:@@login.error.offline:We could not reach the server.` ``
+- Ids are explicit and dotted (`login.error.rateLimited`) so a message can be reworded
+  without orphaning its translation.
+
+Do **not** add a language switcher, a runtime translation service, a locale
+configuration system, or multiple translated builds. None of those are required, and
+none are needed to keep text translatable.
+
 ## 5. Shells
 
 `shells/` contains the page structure around routed content.
@@ -195,6 +217,171 @@ A design item:
 Tailwind is an implementation tool. Reusable design items prevent repeated complex markup and interaction behavior.
 
 Do not prematurely create a full design system. Build design items when a real screen/widget needs them.
+
+### 6z. UI implementation decision order
+
+**Before building any complex reusable UI interaction from scratch, check Angular Aria
+and the Angular CDK first.** Work down this list and stop at the first step that
+solves the problem:
+
+1. **Native HTML.** `<button>`, `<label>`, `<select>`, `<dialog>`, `<details>`,
+   `<input type="…">`. Free keyboard handling, free screen-reader semantics, free
+   browser and platform behaviour, nothing to maintain.
+2. **Angular Aria** (`@angular/aria`) for rich accessible interaction patterns -
+   **currently treated as developer preview**, see 6y. Headless directives
+   implementing WAI-ARIA patterns - keyboard interaction, ARIA attributes, focus
+   management, typeahead - with no styling of their own. That last point is why it
+   suits this project: we keep the HTML and the Tailwind.
+3. **Angular CDK** (`@angular/cdk`) for behaviour infrastructure: overlay and
+   positioning, focus trap and `FocusMonitor`, portals, `Dialog`, drag and drop,
+   virtual scrolling, `LiveAnnouncer`, layout/breakpoint observers.
+4. **Tailwind/CSS** for appearance and responsive behaviour. Always ours.
+5. **A YOB `design/` element or `widgets/` item** wrapping the above in a small
+   application-facing API, so pages stay readable.
+6. **A third-party library**, evaluated case by case, only when the steps above are
+   genuinely insufficient.
+
+Do **not** hand-write keyboard navigation, roving tabindex, focus trapping, ARIA
+interaction patterns, or popup positioning. Those are the parts everyone gets subtly
+wrong, and they are exactly what Aria and the CDK already solve. Reach for them for:
+
+```text
+autocomplete   combobox   select / listbox   menu / menubar   toolbar
+tabs           accordion  tree               grid
+dialog         overlay    focus trapping     keyboard navigation
+```
+
+#### Layering
+
+Aria and the CDK are **implementation tools underneath our layers**, not a replacement
+for them. Pages and domains should not couple directly to low-level Aria/CDK APIs
+where a reusable widget belongs:
+
+```text
+Customer Search widget -> Angular Aria combobox/autocomplete -> CDK overlay -> customer API -> Tailwind
+Country Select widget  -> Angular Aria listbox/select -> Tailwind
+Account menu           -> Angular Aria menu -> Tailwind
+Dialog                 -> CDK dialog/overlay/focus trap -> our HTML + Tailwind
+```
+
+`design/` stays generic presentation, `widgets/` stays reusable business-aware UI, and
+`domains/` stays business areas. Aria and CDK live inside those, not beside them.
+
+#### Angular Material
+
+**Not adopted as the YOB visual system, and it must not become the default component
+architecture.** It ships its own styling and theming, which competes directly with
+Tailwind and with the "edit the markup" customisation model this project is built on.
+
+It may be evaluated **case by case** for a single complex control where the mature
+implementation clearly saves substantial work and still permits our styling. That is a
+per-control decision with a written justification, never a blanket dependency.
+
+#### Other libraries
+
+No broad UI suite (PrimeNG, and the like). Do not add a dependency because it contains
+many components. Evaluate one only when all of these hold:
+
+- native HTML plus Angular Aria/CDK are genuinely insufficient
+- it supports the installed Angular version
+- it is actively maintained
+- its licence is acceptable
+- it does not obstruct direct Tailwind/CSS customisation
+- it materially reduces implementation and maintenance effort
+
+### 6y. Aria/CDK dependency status
+
+Neither is installed, deliberately.
+
+| Package | Latest | Peer requirements | Compatible with Angular 22.1.1 |
+| --- | --- | --- | --- |
+| `@angular/aria` | 22.1.1 | `@angular/cdk@22.1.1`, `@angular/core ^22 \|\| ^23` | Yes |
+| `@angular/cdk` | 22.1.1 | `@angular/core ^22 \|\| ^23` | Yes |
+
+Verified against the npm registry and angular.dev during the Phase 6.5 review. Note
+that `@angular/aria` takes `@angular/cdk` as a peer dependency, so adopting Aria means
+adding both.
+
+#### Angular Aria is treated as developer preview
+
+angular.dev labels it "New" and states no stability guarantee. Until that changes, it
+is held to developer-preview rules:
+
+- **Check it** whenever a complex accessible interaction is needed - it is still the
+  first thing to reach for ahead of hand-writing one.
+- **Re-check its current stability** immediately before the first actual production
+  use, not just at design time. A preview API can change shape between releases.
+- **Isolate it behind a YOB `design/` or `widgets/` abstraction.** If Aria churns, the
+  blast radius must be one primitive, not every page that used it.
+- **Domains must not depend on Aria implementation details** - no Aria types, tokens
+  or directives leaking into a page or a domain service where a widget belongs.
+- **Angular CDK is not under the same caution.** Its primitives (overlay, focus trap,
+  portals, dialog, `LiveAnnouncer`) are long-stable and may be used directly where
+  they solve the requirement, still preferring a small YOB wrapper for reuse.
+- **Neither is installed yet.** Phase 7 does not need them.
+
+Nothing built so far needs either: `button`, `field`, `alert`, `spinner` and
+`empty-state` are native HTML plus Tailwind, with no overlay, focus trapping, popup
+positioning or custom keyboard behaviour between them. They are recorded here as the
+**approved first-choice tools**, to be installed with the first real requirement -
+autocomplete, select, menu, dialog, overlay or similar - and not before. Installing
+them now would add two unused dependencies and a version-alignment obligation for no
+benefit.
+
+### 6a. What exists today (Phase 6)
+
+```text
+design/
+  button/        styles a native <button> via `yob-button`; disabled + loading
+  field/         label + projected native control + hint + error
+  alert/         inline message; tone drives the ARIA role
+  spinner/       loading indicator, announced or decorative
+  empty-state/   layout for "nothing here"; all wording projected
+```
+
+Each knows nothing about authentication, catalog, cart, orders, Frappe or HTTP, and
+none of them holds business state.
+
+**Deliberately not built**, and the reason each would be a mistake today:
+
+| Not created | Why |
+| --- | --- |
+| `variant` / `size` / `colour` / `width` inputs on button | one treatment covers every screen that exists; a matrix every client half-uses is harder to restyle than the classes themselves |
+| A `<app-button>` wrapper element | `button[yob-button]` styles the real element, so native attributes, form submission and keyboard behaviour need no forwarding - and no `display: contents` workaround |
+| A theme or token TypeScript config | Tailwind already is the theme layer; a second one to keep in sync buys nothing |
+| `ControlValueAccessor` on `field` | it would hide Angular's form APIs behind an abstraction with no purpose - the projected control stays native |
+| A notification/toast service | `alert` renders where it is placed; queues, timeouts and positioning are a different component and are not needed yet |
+| Card, badge, dialog, drawer, pagination, skeleton | nothing needs them; build each when a real screen does |
+| A barrel `index.ts` | direct imports keep the dependency visible |
+
+The rule for adding one: a real screen needs it now. Not "the login page might".
+
+### 6b. Field accessibility
+
+`field` puts the projected control **inside** the `<label>`, so the two are associated
+implicitly - no `id`/`for` pair for a caller to get wrong, and nothing to remember.
+
+It also sets `aria-describedby` and `aria-invalid` on the projected control by finding
+it in the DOM. That is the only DOM reaching in `design/`, and it exists because the
+alternative is asking every caller to wire message ids by hand, which is the step
+people forget. Error text additionally carries `role="alert"` so it is announced when
+it appears rather than only when the control is next focused.
+
+### 6c. Global CSS
+
+`src/styles.css` holds one rule beyond the Tailwind import: a `:focus-visible`
+outline. It is global because it is an accessibility floor for the whole application -
+browsers style focus inconsistently, and any component that forgot its own ring would
+silently become unusable by keyboard. Almost everything else belongs in the template
+it affects, where a designer can find it.
+
+### 6d. Browser verification
+
+`/__design` is a development-only gallery (`src/dev/design-gallery.ts`), contributed
+through `AppEnvironment.devRoutes`. Production supplies `[]` and never imports it, so
+it is absent from a production bundle rather than merely unreachable - the same
+mechanism that keeps the mock API out. `e2e/design.spec.ts` drives it at all three
+viewports.
 
 ## 7. Widgets
 
