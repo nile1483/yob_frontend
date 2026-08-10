@@ -1,0 +1,554 @@
+{
+  "captured_at": "2026-08-10",
+  "environment": {
+    "browser_facing_origin": "http://storefront.local:8080",
+    "edge_proxy": "nginx (~/yob-edge/nginx.conf), vhost storefront.local -> 127.0.0.1:8000",
+    "frappe_site": "yob.localhost",
+    "application_code": "STOREFRONT",
+    "data_state": "empty catalog, no orders, no addresses, no contacts, empty draft cart"
+  },
+
+  "envelope": {
+    "outer_wrapper": "message",
+    "outer_wrapper_always_present_on_yob_endpoints": true,
+    "success_inner_keys": ["data", "notice?", "meta?"],
+    "error_inner_keys": ["errors[].code", "errors[].detail", "errors[].field?", "errors[].details?"],
+    "notes": [
+      "`data` is always emitted on success and may be an object, an array or null.",
+      "`notice` and `meta` are omitted entirely when empty - do not expect them.",
+      "`errors` is always a list and is never returned together with `data`.",
+      "There is no `success` flag. Branch on HTTP status, then on errors[0].code.",
+      "Frappe may add its own keys NEXT TO `message` at the top level (login adds `home_page` and `full_name`). Ignore unknown top-level siblings."
+    ]
+  },
+
+  "auth": {
+    "login_with_password": {
+      "verified": "wire",
+      "method": "POST",
+      "path": "/api/method/yob_auth.api.auth.login_with_password",
+      "request": { "application": "STOREFRONT", "username": "storefront@yob.test", "password": "<REDACTED>" },
+      "status": 200,
+      "response": {
+        "message": {
+          "data": {
+            "authenticated": true,
+            "authentication_method": "password",
+            "user": {
+              "name": "storefront@yob.test",
+              "full_name": "Storefront",
+              "user_image": null,
+              "email": "storefront@yob.test",
+              "mobile_no": null
+            },
+            "context": {
+              "application": "STOREFRONT",
+              "profile_doctype": "Customer",
+              "profile_name": "Shayona Test Buyer"
+            },
+            "csrf_token": "<REDACTED>"
+          },
+          "notice": "Login successful."
+        },
+        "home_page": "/desk",
+        "full_name": "Storefront"
+      },
+      "set_cookie": [
+        "sid=<REDACTED>; Expires=<+7d>; Max-Age=612000; HttpOnly; Path=/; SameSite=Lax",
+        "system_user=no; Path=/; SameSite=Lax",
+        "full_name=Storefront; Path=/; SameSite=Lax",
+        "user_id=storefront%40yob.test; Path=/; SameSite=Lax",
+        "user_lang=en; Path=/; SameSite=Lax"
+      ],
+      "notes": [
+        "`application` is REQUIRED. Omitting it answers 422 validation_failed / field=application.",
+        "`sid` has no Domain and no Secure attribute; it is host-scoped and HttpOnly, so the SPA can neither read nor needs to store it.",
+        "Rate limit: 10 password attempts per 300 s keyed on username, counted BEFORE authentication. Successful logins consume the budget. Exceeding it answers 429 rate_limit_exceeded, which is easy to mistake for a bad password."
+      ]
+    },
+
+    "get_session_context": {
+      "verified": "wire",
+      "method": "GET",
+      "path": "/api/method/yob_auth.api.auth.get_session_context",
+      "query": { "application": "STOREFRONT" },
+      "status": 200,
+      "response": {
+        "message": {
+          "data": {
+            "authenticated": true,
+            "authentication_method": "session",
+            "user": {
+              "name": "storefront@yob.test",
+              "full_name": "Storefront",
+              "user_image": null,
+              "email": "storefront@yob.test",
+              "mobile_no": null
+            },
+            "context": {
+              "application": "STOREFRONT",
+              "profile_doctype": "Customer",
+              "profile_name": "Shayona Test Buyer"
+            },
+            "csrf_token": "<REDACTED>"
+          }
+        }
+      },
+      "notes": [
+        "Identical `data` payload to login, with authentication_method='session'.",
+        "No `notice` key on this endpoint - proof that `notice` is genuinely optional.",
+        "`application` is REQUIRED here too.",
+        "NOT guest-allowed. Restoring a session as a guest returns the RAW Frappe 403 body (see errors.raw_frappe_unauthenticated), NOT a YOB error envelope. Session restore must treat that shape as 'guest', not as a transport fault."
+      ]
+    },
+
+    "logout": {
+      "verified": "source",
+      "method": "POST",
+      "path": "/api/method/yob_auth.api.auth.logout",
+      "request": {},
+      "status": 200,
+      "response": { "message": { "data": { "authenticated": false }, "notice": "Logout successful." } },
+      "notes": ["Requires session + X-Frappe-CSRF-Token."]
+    },
+
+    "request_otp": {
+      "verified": "source",
+      "method": "POST",
+      "path": "/api/method/yob_auth.api.auth.request_otp",
+      "request": { "application": "STOREFRONT", "identifier": "<email or mobile>", "method": "<login method>" },
+      "notes": [
+        "All three fields are REQUIRED; a blank one answers 422 validation_failed with `field` naming it.",
+        "The backend pops `message` out of the OTP result and returns it as the envelope `notice`, precisely so the client cannot infer whether the account exists. Do not branch on it.",
+        "The remaining `data` keys were not observed - OTP is not exercisable on this bench. Capture before building the OTP UI."
+      ]
+    },
+
+    "login_with_otp": {
+      "verified": "source",
+      "method": "POST",
+      "path": "/api/method/yob_auth.api.auth.login_with_otp",
+      "request": { "challenge_id": "<from request_otp>", "otp": "<code>" },
+      "notes": [
+        "On success returns the SAME `data` payload as login_with_password, with authentication_method set to the OTP method.",
+        "Does NOT take `application` - the application is recovered from the challenge.",
+        "Failure codes: otp_invalid (401), rate_limit_exceeded (429), validation_failed (422)."
+      ]
+    }
+  },
+
+  "storefront": {
+    "get_config": {
+      "verified": "wire",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.cms.get_config",
+      "status": 200,
+      "response": {
+        "message": {
+          "data": {
+            "company": "Shayona Technology",
+            "store_name": "YOB Store",
+            "store_domain": "storefront.local",
+            "store_logo": null,
+            "default_warehouse": "Stores - ST",
+            "default_currency": "INR",
+            "default_price_list": "Standard Selling",
+            "default_terms_page": null,
+            "default_privacy_page": null,
+            "allow_guest_purchase": 0,
+            "allowed_payment_modes": []
+          },
+          "notice": "Store config loaded"
+        }
+      },
+      "notes": [
+        "Authenticated. Confirmed unusable for bootstrapping public sign-in.",
+        "Booleans arrive as 0/1 integers, not JSON booleans."
+      ]
+    },
+
+    "get_categories": {
+      "verified": "wire",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.catalog.get_categories",
+      "query": { "parent_slug": "optional" },
+      "status": 200,
+      "response": { "message": { "data": [], "notice": "Categories loaded", "meta": { "count": 0 } } },
+      "item_fields_source_verified": [
+        "name", "category_name", "slug", "thumbnail", "banner",
+        "display_order", "meta_title", "meta_description", "parent_category"
+      ],
+      "notes": [
+        "Empty on this bench; the field list above comes from catalog.get_categories.",
+        "No parent_slug -> top-level categories only (parent_category IS NULL). With parent_slug -> that category's children.",
+        "An unknown parent_slug answers 200 with data=[] and notice='No categories found', NOT 404.",
+        "`thumbnail`/`banner` are returned as raw stored paths, NOT absolute URLs (the get_url() calls are commented out in the backend)."
+      ]
+    },
+
+    "get_category": {
+      "verified": "source",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.catalog.get_category",
+      "query": { "slug": "required", "qty": "optional, default 1" },
+      "success_shape": {
+        "message": {
+          "data": {
+            "category": {
+              "name": "", "category_name": "", "slug": "", "thumbnail": null, "banner": null,
+              "meta_title": null, "meta_description": null, "description": null,
+              "is_group": 0, "parent_category": null
+            },
+            "subcategories": [
+              { "name": "", "category_name": "", "slug": "", "thumbnail": null, "display_order": 0, "is_group": 0 }
+            ],
+            "items": [
+              {
+                "name": "", "item_name": "", "slug": "", "stock_uom": "", "image": null,
+                "base_price": 0, "rate": 0, "discount_percentage": 0, "discount_amount": 0,
+                "net_amount": 0, "tax_amount": 0, "total_amount": 0, "pricing_rule_label": null
+              }
+            ]
+          },
+          "notice": "Category loaded",
+          "meta": { "subcategory_count": 0, "item_count": 0 }
+        }
+      },
+      "notes": [
+        "A group category returns `subcategories` populated and `items` empty; a leaf category the reverse. Both keys are always present.",
+        "`qty` is passed straight into the pricing engine per item, so item prices are quantity-sensitive and must be re-fetched when qty changes.",
+        "Missing slug -> 422 validation_failed / field=slug. Unknown slug -> 404 category_not_found / field=slug (wire-verified)."
+      ]
+    },
+
+    "get_item": {
+      "verified": "source",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.catalog.get_item",
+      "query": { "slug": "required", "qty": "optional, default 1" },
+      "success_shape": {
+        "message": {
+          "data": {
+            "name": "", "item_name": "", "image": null, "item_group": "",
+            "custom_slug": "", "qty": 1.0,
+            "base_price": 0, "rate": 0, "discount_percentage": 0, "discount_amount": 0,
+            "net_amount": 0, "tax_amount": 0, "tax_label": null, "total_amount": 0,
+            "uom": "",
+            "pricing": {
+              "item": { "name": "", "item_name": "", "item_group": "", "image": null, "stock_uom": "" },
+              "selling_price_list": "", "qty": 1,
+              "base_price": 0, "rate": 0,
+              "discount_percentage": 0, "discount_amount": 0, "total_discount": 0,
+              "net_amount": 0, "tax_amount": 0, "tax_label": null, "total_amount": 0,
+              "pricing_rules": [], "pricing_rule_label": null, "pricing_rule_apply_on": null,
+              "uom": ""
+            },
+            "pricing_rule_label": null,
+            "pricing_rule_apply_on": null,
+            "available_rules": []
+          },
+          "notice": "Item loaded"
+        }
+      },
+      "notes": [
+        "Resolves the OpenAPI defect where the documented 200 example held an internal_server_error body.",
+        "The item slug field is named `custom_slug` here but `slug` in get_category's item rows. Do not assume one name across both endpoints.",
+        "`pricing` duplicates most top-level pricing fields and adds `item`, `selling_price_list`, `total_discount`, `pricing_rules`. Prefer the top-level fields; do not recompute anything.",
+        "`available_rules` is a sorted list of human-readable offer label STRINGS, not objects.",
+        "No `meta` on this endpoint.",
+        "RISK: get_item's try/except is commented out in catalog.py, so an unexpected backend fault escapes as a raw Frappe 500 instead of the YOB envelope."
+      ]
+    },
+
+    "get_cart": {
+      "verified": "wire",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.cart.get_cart",
+      "status": 200,
+      "response": {
+        "message": {
+          "data": {
+            "cart": {
+              "name": "CART-2026-08-0001",
+              "company": "Shayona Technology",
+              "customer": "Shayona Test Buyer",
+              "order_type": "Shopping Cart",
+              "company_address": null,
+              "user": "storefront@yob.test",
+              "currency": "INR",
+              "selling_price_list": "Standard Selling",
+              "contact_person": null,
+              "billing_address": null,
+              "is_shippable": 0,
+              "shipping_address": null,
+              "total_quantity": 0,
+              "net_total": 0.0,
+              "tax_total": 0.0,
+              "grand_total": 0.0,
+              "coupon_code": null,
+              "coupon_discount": 0.0,
+              "total_discount": 0.0,
+              "sales_order": null,
+              "ordered_on": "2026-08-10 12:46:40.207423",
+              "status": "Draft",
+              "checkout_by": "storefront@yob.test",
+              "items": []
+            },
+            "contact": null,
+            "billing_address": null,
+            "shipping_address": null,
+            "cart_updated": false,
+            "removed_items": [],
+            "price_updated_items": []
+          },
+          "notice": "Cart loaded"
+        }
+      },
+      "notes": [
+        "Reconciliation fields cart_updated / removed_items / price_updated_items are present on a plain load, not only after a mutation.",
+        "The line-item shape inside cart.items was not observed (empty cart) - capture before building the cart domain.",
+        "`ordered_on` is a naive 'YYYY-MM-DD HH:MM:SS.ffffff' string with no timezone marker."
+      ]
+    },
+
+    "get_orders": {
+      "verified": "wire",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.order.get_orders",
+      "status": 200,
+      "response": { "message": { "data": [], "notice": "Orders fetched successfully", "meta": { "count": 0 } } },
+      "row_fields_documented": ["name", "transaction_date", "delivery_date", "status", "grand_total"]
+    },
+
+    "get_order_details": {
+      "verified": "source",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.order.get_order_details",
+      "query": { "order_id": "required" },
+      "data_keys": [
+        "name", "customer", "status", "transaction_date", "delivery_date", "currency",
+        "original_total", "discount", "subtotal", "net_total", "tax", "grand_total", "rounded_total",
+        "contact_person", "contact_email", "contact_mobile",
+        "billing_address_name", "shipping_address_name", "payment_terms_template"
+      ],
+      "notes": [
+        "`original_total` and `discount` are computed server-side from the order lines - do not recompute.",
+        "Orders not owned by the caller answer identically to non-existent ones (404 order_not_found), deliberately.",
+        "The remaining keys (items, payment logs) were not fully enumerated; capture a real order before typing the detail DTO."
+      ]
+    },
+
+    "get_addresses": {
+      "verified": "wire",
+      "status": 200,
+      "response": { "message": { "data": [], "notice": "Addresses loaded", "meta": { "count": 0 } } }
+    },
+
+    "get_contacts": {
+      "verified": "wire",
+      "status": 200,
+      "response": { "message": { "data": [], "notice": "Contacts loaded", "meta": { "count": 0 } } }
+    },
+
+    "get_payment_methods": {
+      "verified": "wire",
+      "status": 200,
+      "response": { "message": { "data": [], "notice": "No payment methods available", "meta": { "count": 0 } } },
+      "notes": ["The notice varies with the outcome; it is display text, never a branch condition."]
+    },
+
+    "add_address": {
+      "verified": "source",
+      "method": "POST",
+      "path": "/api/method/yob_storefront.api.address.add_address",
+      "request_fields": [
+        "address_title", "address_type", "address_line1", "address_line2",
+        "city", "state", "country", "pincode",
+        "email", "phone", "fax",
+        "is_primary_address", "is_shipping_address", "disabled",
+        "tax_category", "gstin", "gst_category", "gst_state", "gst_state_number"
+      ],
+      "notes": [
+        "Resolves the empty request body in the OpenAPI/Postman source.",
+        "`address_type` defaults to 'Billing' when absent.",
+        "`is_primary_address`, `is_shipping_address` and `disabled` are coerced with cint() - send 0/1.",
+        "`email` maps to the backend field email_id.",
+        "update_address takes the same fields plus a required `name`.",
+        "Field NAMES are now known; allowed VALUES for address_type / gst_category / tax_category are not. Verify before shipping a write form."
+      ]
+    },
+
+    "update_contact": {
+      "verified": "source",
+      "method": "POST",
+      "path": "/api/method/yob_storefront.api.address.update_contact",
+      "request_fields": ["name", "salutation", "first_name", "last_name", "designation", "company", "gender", "email", "phone"],
+      "notes": [
+        "`name` is required and identifies the contact.",
+        "`company` maps to the backend field company_name.",
+        "Only `first_name` is treated as non-blankable; the others accept null to clear."
+      ]
+    },
+
+    "proceed_to_payment": {
+      "verified": "source",
+      "method": "POST",
+      "path": "/api/method/yob_storefront.api.checkout.proceed_to_payment",
+      "request": {},
+      "success_shape": {
+        "message": {
+          "data": { "payment_url": "/payment/<REDACTED>", "payment_request": "PREQ-…", "token": "<REDACTED>" },
+          "notice": "Proceed to payment"
+        }
+      },
+      "status": "201 when a Payment Request is created, 200 when an open one is reused",
+      "notes": [
+        "`payment_url` is a RELATIVE SPA path '/payment/<token>' - the public payment route must own that path.",
+        "The checkout token expires 1 hour after issue.",
+        "Ordered precondition failures, all 422 unless noted: cart_not_found (404), cart_empty, contact_required (field=contact_person), billing_address_required (field=billing_address), shipping_address_required (field=shipping_address, only when the cart is shippable).",
+        "cart_empty was wire-verified; the success path was not triggered (it would create a real Payment Request)."
+      ]
+    }
+  },
+
+  "errors": {
+    "validation_failed_missing_application": {
+      "verified": "wire",
+      "example_call": "POST login_with_password with {}",
+      "status": 422,
+      "response": { "message": { "errors": [ { "code": "validation_failed", "detail": "Application is required.", "field": "application" } ] } }
+    },
+
+    "category_not_found": {
+      "verified": "wire",
+      "example_call": "GET get_category?slug=does-not-exist",
+      "status": 404,
+      "response": { "message": { "errors": [ { "code": "category_not_found", "detail": "Category not found.", "field": "slug" } ] } }
+    },
+
+    "order_not_found": {
+      "verified": "wire",
+      "example_call": "GET get_order_details?order_id=NOPE-0000",
+      "status": 404,
+      "response": { "message": { "errors": [ { "code": "order_not_found", "detail": "Order not found.", "field": "order_id" } ] } }
+    },
+
+    "checkout_token_invalid": {
+      "verified": "wire",
+      "example_call": "GET get_checkout_data?token=not-a-real-token (unauthenticated, public endpoint)",
+      "status": 404,
+      "response": { "message": { "errors": [ { "code": "checkout_token_invalid", "detail": "This checkout link is not valid.", "field": "token" } ] } },
+      "notes": ["Confirms the public payment endpoints really are guest-callable and really do use the YOB envelope."]
+    },
+
+    "cart_empty": {
+      "verified": "wire",
+      "example_call": "POST proceed_to_payment with an empty cart",
+      "status": 422,
+      "response": { "message": { "errors": [ { "code": "cart_empty", "detail": "The cart is empty." } ] } },
+      "notes": ["Note the absent `field` key - `field` is optional on every error."]
+    },
+
+    "application_access_denied": {
+      "verified": "wire",
+      "example_call": "GET get_categories with a valid sid but BYPASSING the edge proxy (direct to 127.0.0.1:8000, so no X-YOB-Original-Host)",
+      "status": 403,
+      "response": { "message": { "errors": [ { "code": "application_access_denied", "detail": "This application is not allowed from the current domain" } ] } },
+      "notes": [
+        "This is what a misconfigured dev proxy looks like: a valid session that still gets 403. It is NOT a session-expiry signal and must not trigger a logout.",
+        "Same code and status when logging in with an unknown `application` value."
+      ]
+    },
+
+    "raw_frappe_unauthenticated": {
+      "verified": "wire",
+      "example_call": "GET get_categories (or get_session_context) with no session",
+      "status": 403,
+      "response": {
+        "exception": "frappe.exceptions.PermissionError: <details><summary>You are not permitted to access this resource. Login to access</summary>Function <strong>yob_storefront.api.catalog.get_categories</strong> is not whitelisted.</details>",
+        "exc_type": "PermissionError",
+        "exc": "<TRUNCATED - full python traceback as a JSON-encoded string>",
+        "_server_messages": "<TRUNCATED - JSON-encoded list of message objects>"
+      },
+      "notes": [
+        "NOT the YOB envelope: there is no `message` wrapper and no `errors` array.",
+        "The wording 'is not whitelisted' is Frappe's generic text for 'whitelisted but not guest-allowed'. It does not mean the endpoint is missing.",
+        "The network layer must normalise this shape too. Branch on exc_type='PermissionError' + HTTP 403, never on the HTML-bearing detail text.",
+        "The response body contains a full server traceback. Never surface it to users and never log it verbatim."
+      ]
+    },
+
+    "raw_frappe_csrf_missing": {
+      "verified": "wire",
+      "example_call": "POST clear_cart with a valid sid but no X-Frappe-CSRF-Token",
+      "status": 400,
+      "response": {
+        "exception": "frappe.exceptions.CSRFTokenError: Invalid Request",
+        "exc_type": "CSRFTokenError",
+        "exc": "<TRUNCATED - full python traceback as a JSON-encoded string>",
+        "_server_messages": "<TRUNCATED>"
+      },
+      "notes": [
+        "Also NOT the YOB envelope. Frappe rejects the request in init_request, before the endpoint runs.",
+        "400 + exc_type='CSRFTokenError' is the signal that the in-memory CSRF token is missing or stale; the correct recovery is to re-run get_session_context, not to log the user out."
+      ]
+    },
+
+    "internal_server_error": {
+      "verified": "source",
+      "status": 500,
+      "response": {
+        "message": {
+          "errors": [
+            {
+              "code": "internal_server_error",
+              "detail": "Something went wrong. Please try again.",
+              "details": { "correlation_id": "0246f04aea554d10" }
+            }
+          ]
+        }
+      },
+      "notes": [
+        "Produced by the yob_api boundary decorator. `details.correlation_id` links the client failure to the server Error Log and is worth surfacing in support UI.",
+        "The `details` object is the only documented use of the optional errors[].details key."
+      ]
+    },
+
+    "edge_misdirected_host": {
+      "verified": "wire",
+      "example_call": "any request to :8080 with a Host other than storefront.local / erp.local",
+      "status": 421,
+      "response": "<html> nginx 421 Misdirected Request - NOT JSON",
+      "notes": ["A non-JSON error body is reachable. The network layer must not assume every failure parses as JSON."]
+    }
+  },
+
+  "stable_error_codes": {
+    "platform": ["validation_failed", "authentication_required", "rate_limit_exceeded", "internal_server_error"],
+    "auth": ["invalid_credentials", "application_access_denied", "login_method_disabled", "otp_invalid"],
+    "catalog": ["category_not_found", "item_not_found"],
+    "cart": ["cart_not_found", "cart_empty", "quantity_invalid"],
+    "contacts_addresses": [
+      "contact_not_found", "contact_invalid", "contact_required",
+      "address_not_found",
+      "billing_address_invalid", "billing_address_required",
+      "shipping_address_invalid", "shipping_address_required",
+      "shipping_not_applicable"
+    ],
+    "coupons": [
+      "coupon_code_required", "coupon_invalid", "coupon_not_active", "coupon_expired",
+      "coupon_usage_limit_reached", "coupon_not_applicable",
+      "coupon_minimum_not_met", "coupon_maximum_exceeded", "coupon_not_applied"
+    ],
+    "orders": ["order_not_found"],
+    "checkout_payment": [
+      "checkout_token_invalid", "checkout_token_expired", "customer_not_found",
+      "payment_method_unsupported", "payment_provider_not_configured",
+      "payment_already_processed", "payment_signature_invalid",
+      "payment_verification_failed", "payment_not_captured",
+      "payment_amount_mismatch", "payment_currency_mismatch", "payment_reference_invalid"
+    ],
+    "source": "yob_core/api/errors.py, yob_auth/api/response.py, yob_storefront/api/response.py",
+    "notes": ["Complete registry, far larger than the four codes named in the OpenAPI examples. These strings are a stable part of the contract."]
+  }
+}
