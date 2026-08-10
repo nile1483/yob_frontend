@@ -15,6 +15,9 @@ export const environment: AppEnvironment = {
     methodBasePath: '/api/method/',
     application: 'STOREFRONT',
   },
+  locale: {
+    defaultCurrency: 'INR',
+  },
   httpInterceptors: [],
   devRoutes: [],
 };

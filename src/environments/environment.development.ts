@@ -27,6 +27,9 @@ export const environment: AppEnvironment = {
     methodBasePath: '/api/method/',
     application: 'STOREFRONT',
   },
+  locale: {
+    defaultCurrency: 'INR',
+  },
   httpInterceptors: USE_MOCK_API ? [mockApiInterceptor] : [],
   devRoutes: [
     {

@@ -168,8 +168,9 @@ describe('mockApiInterceptor', () => {
 
     it('fails loudly for an RPC method with no handler', () => {
       let error: YobApiError | undefined;
+      // Deliberately an endpoint no phase has mocked yet.
       api
-        .get('yob_storefront.api.catalog.get_categories')
+        .get('yob_storefront.api.cart.get_cart')
         .subscribe({ error: (e: YobApiError) => (error = e) });
 
       expect(error?.httpStatus).toBe(501);

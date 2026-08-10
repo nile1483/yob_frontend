@@ -1,5 +1,6 @@
 import type { MockHandlerRegistry } from '../core/mock-handler';
 import { AUTH_HANDLERS } from './auth.handlers';
+import { CATALOG_HANDLERS } from './catalog.handlers';
 
 /**
  * Every RPC method the mock API can answer, keyed by Frappe method name.
@@ -11,4 +12,5 @@ import { AUTH_HANDLERS } from './auth.handlers';
  */
 export const MOCK_HANDLERS: MockHandlerRegistry = {
   ...AUTH_HANDLERS,
+  ...CATALOG_HANDLERS,
 };

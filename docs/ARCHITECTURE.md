@@ -383,6 +383,56 @@ it is absent from a production bundle rather than merely unreachable - the same
 mechanism that keeps the mock API out. `e2e/design.spec.ts` drives it at all three
 viewports.
 
+### 6r. Catalog: the reference domain
+
+`domains/catalog/` is the worked example. Copy its shape when adding a domain.
+
+```text
+domains/catalog/
+  contracts/catalog.types.ts   API DTOs + the one mapped model
+  data/catalog.api.ts          RPC calls over YobApiClient
+  parts/category-card.ts       catalog-specific reusable UI
+  parts/item-card.ts
+  pages/catalog-page.ts        /catalog
+  pages/category-page.ts       /catalog/:categorySlug
+  catalog.routes.ts            lazy, one entry per page
+```
+
+There is no `state/` folder, deliberately - see below. Do not create one to match a
+template.
+
+**Contracts.** DTOs keep backend field names, including snake_case and `0`/`1` check
+fields. Shapes that differ on the wire are typed separately even when they look
+similar: a `get_categories` row and a `get_category` subcategory row are not the same
+object, and merging them into an optimistic union is how a template ends up rendering
+`undefined`.
+
+**Mapping only where it pays.** `CategoryLink` exists because one card renders both
+category shapes - without it the card takes a union and picks fields defensively.
+Items get no model at all: `CatalogItemDto` is already what the card needs, and a
+model that only renamed fields would be ceremony. Map when it removes a real problem.
+
+**Data.** One small service per domain over `YobApiClient`. No `HttpClient`, no
+envelope handling, no mock awareness, no pricing arithmetic. Endpoint-shaped methods,
+not a generic repository.
+
+**State: page-local, no store.** Both pages hold their data in an `rxResource`. Nothing
+else reads catalog data, it is entirely route-derived, and a store would immediately
+owe a cache-invalidation policy for a problem that does not exist. `rxResource` gives
+loading, error and value as signals and disposes with the page. The trigger for
+promoting to a store is two real consumers of the same data - not "domains usually
+have stores".
+
+**Every state is handled.** Loading, populated, empty, not-found and failed are each a
+distinct branch. Not-found branches on the stable `category_not_found` code, never on
+the 404 status alone, so it stays distinct from a generic failure. No backend wording
+ever reaches the screen.
+
+**Pricing is displayed, never derived.** Backend numbers only. The single piece of
+logic is comparing `rate` with `base_price` to decide whether to decorate a discount -
+a comparison of two backend values, not a calculation. Currency goes through
+`CurrencyPipe` with an injected code, never string concatenation.
+
 ## 7. Widgets
 
 `widgets/` contains reusable functional UI that can be used across unrelated pages/domains.

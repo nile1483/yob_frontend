@@ -176,6 +176,54 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
 - The app root renders only `<router-outlet />`; the Angular scaffold placeholder is
   gone and `app.spec.ts` was updated to assert the new contract.
 
+## CONFIRMED - Catalog vertical slice (Phase 8, 2026-08-10)
+
+- `domains/catalog/` is the reference domain - structure and rationale in
+  `docs/ARCHITECTURE.md` 6r. Route `/catalog` and `/catalog/:categorySlug`, both lazy.
+- **State: page-local `rxResource`, no store.** Documented decision; the trigger for a
+  store is two real consumers of the same data.
+- Pricing is displayed, never derived. Currency comes from `CATALOG_CURRENCY`
+  (environment `locale.defaultCurrency`, currently `INR`) through `CurrencyPipe`,
+  because **the catalog endpoints return no currency field**.
+  `get_config.default_currency` should supersede it in the store-context phase.
+- `withComponentInputBinding()` is now enabled, so route params bind to signal inputs.
+
+### Newly wire-verified against the real bench
+
+The bench is **no longer empty** - it now holds an `Apparel` category with a
+`Mens T Shirt` subcategory. This upgrades `get_category` from source-verified to
+**wire-verified**, and the observed shape matches the DTOs exactly (`category`,
+`subcategories`, `items`, `meta.subcategory_count`, `meta.item_count`).
+`thumbnail`/`banner` were null on real rows.
+
+### Real-backend findings that matter
+
+- **The backend enforces an Origin allow-list** (`Application.allowed_origins`).
+  A browser on `http://localhost:4200` is rejected with `application_access_denied`
+  ("not allowed from the current origin"); any `storefront.local` origin is accepted.
+  So real-backend browser work **must** use `http://storefront.local:4200`, which
+  needs the hosts entry noted in `docs/API-CONTRACT.md` 10b. Node/curl callers are
+  unaffected because they send no `Origin`, which is why the live smoke never caught it.
+- **A leaf category with items currently answers `403 application_access_denied`**:
+  the storefront user has no Frappe role permission on the `Item` doctype
+  (`_error_message: "No permission for Item"`). This is a bench permission gap, not a
+  frontend fault. The UI renders its safe generic error state and leaks nothing.
+  **`CatalogItemDto` therefore remains source-verified only** - no real item has ever
+  been observed on the wire.
+- That response also carried `_server_messages` and `_error_message` beside `message`;
+  the network layer ignored both and normalised correctly.
+
+### Media paths - decision
+
+`thumbnail`, `banner` and `image` are Frappe `Attach Image` fields and the backend's
+`get_url()` calls are commented out, so raw stored values are returned - normally
+root-relative (`/files/…`), which resolve same-origin and are already proxied. **No
+normalization helper was added**: a root-relative path is directly usable as `src`.
+All Phase 8 fixtures use `null` images because no non-null value has ever been
+observed, and inventing one would point at a file that does not exist. Components
+handle both branches and are unit-tested for each. Open: whether a full absolute URL
+can ever be stored.
+
 ## CONFIRMED - Login page (Phase 7, 2026-08-10)
 
 - `domains/access/pages/login-page.ts` is the first real user journey: guest -> sign in

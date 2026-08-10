@@ -14,9 +14,11 @@ import { Service, signal } from '@angular/core';
  * What is left genuinely needs a knob:
  *
  * - `server-error` a fault no correct request can trigger
+ * - `empty`        a populated fixture cannot also be the empty one, and swapping
+ *                  fixtures per test would need a second set of them
  * - latency        a slow network, which is orthogonal to the reply itself
  */
-export type MockScenario = 'normal' | 'server-error';
+export type MockScenario = 'normal' | 'empty' | 'server-error';
 
 /**
  * Runtime knobs for the mock API.
@@ -44,14 +46,35 @@ export class MockApiScenario {
     // pending states such as a submit button that must block a second click.
     //
     // Mock-only by construction: this whole folder is absent from production builds.
-    const requested = Number(new URLSearchParams(globalThis.location?.search ?? '').get('mockLatency'));
+    const query = new URLSearchParams(globalThis.location?.search ?? '');
+
+    const requested = Number(query.get('mockLatency'));
     if (Number.isFinite(requested) && requested > 0) {
       this.latencyMs.set(requested);
     }
+
+    // `?mockScenario=empty` / `=server-error` for browser tests of those states.
+    const scenario = query.get('mockScenario');
+    if (scenario === 'empty' || scenario === 'server-error') {
+      this.scenario.set(scenario);
+      this.sparesAuth.set(true);
+    }
   }
+
+  /**
+   * Whether the active scenario should spare the `yob_auth` endpoints.
+   *
+   * Set only when the scenario came from the URL. A browser test has to sign in
+   * before it can reach the feature it wants to watch fail, and a `server-error` that
+   * also broke `login_with_password` could never be used for anything past the
+   * sign-in page. Tests that set the scenario programmatically keep it global,
+   * because they can choose the moment.
+   */
+  readonly sparesAuth = signal(false);
 
   reset(): void {
     this.scenario.set('normal');
     this.latencyMs.set(0);
+    this.sparesAuth.set(false);
   }
 }

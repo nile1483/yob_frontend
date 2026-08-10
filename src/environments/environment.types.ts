@@ -24,6 +24,18 @@ export interface AppEnvironment {
   readonly api: YobApiConfig;
 
   /**
+   * Locale defaults for this copied client project.
+   *
+   * There is no runtime language or currency switch; a project ships with one. The
+   * currency lives here because the catalog endpoints return prices as bare numbers
+   * with no currency field - see `CATALOG_CURRENCY`. `get_config.default_currency` is
+   * the authoritative source and should supersede this once store context is loaded.
+   */
+  readonly locale: {
+    readonly defaultCurrency: string;
+  };
+
+  /**
    * Extra HTTP interceptors this environment contributes, appended after the
    * application's own.
    *

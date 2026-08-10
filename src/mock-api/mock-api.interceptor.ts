@@ -50,9 +50,21 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
   const session = inject(MockServerSession);
   const scenario = inject(MockApiScenario);
 
+  // A URL-set scenario spares the auth endpoints, so a browser test can still sign in
+  // before reaching the feature whose failure it is testing. See MockApiScenario.
+  const sparesAuth = scenario.sparesAuth() && rpcMethod.startsWith('yob_auth.');
+  const active = sparesAuth ? 'normal' : scenario.scenario();
+
   const reply = resolve(
-    { rpcMethod, request: req, params: mergedParams(req, queryIndex), session, application },
-    scenario.scenario(),
+    {
+      rpcMethod,
+      request: req,
+      params: mergedParams(req, queryIndex),
+      session,
+      application,
+      scenario: active,
+    },
+    active,
   );
   const latencyMs = scenario.latencyMs();
 

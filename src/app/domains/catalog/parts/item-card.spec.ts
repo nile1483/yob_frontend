@@ -1,0 +1,162 @@
+import { Component, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+
+import { CATALOG_CURRENCY } from '../catalog.currency';
+import type { CatalogItemDto } from '../contracts/catalog.types';
+import { ItemCard } from './item-card';
+
+function item(overrides: Partial<CatalogItemDto> = {}): CatalogItemDto {
+  return {
+    name: 'YOB-BOLT-M10',
+    item_name: 'Hex Bolt M10 x 50mm',
+    slug: 'hex-bolt-m10-50',
+    stock_uom: 'Nos',
+    image: null,
+    base_price: 12.5,
+    rate: 11.25,
+    discount_percentage: 10,
+    discount_amount: 1.25,
+    net_amount: 11.25,
+    tax_amount: 0,
+    total_amount: 11.25,
+    pricing_rule_label: 'YOB Demo Bulk Discount',
+    ...overrides,
+  };
+}
+
+@Component({
+  imports: [ItemCard],
+  template: `<app-item-card [item]="value()" />`,
+})
+class Host {
+  readonly value = signal<CatalogItemDto>(item());
+}
+
+describe('ItemCard', () => {
+  async function render(dto: CatalogItemDto = item()) {
+    TestBed.configureTestingModule({
+      providers: [{ provide: CATALOG_CURRENCY, useValue: 'INR' }],
+    });
+    const fixture = TestBed.createComponent(Host);
+    fixture.componentInstance.value.set(dto);
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    return {
+      fixture,
+      element,
+      text: () => element.textContent ?? '',
+      testId: (id: string) => element.querySelector(`[data-testid="${id}"]`),
+    };
+  }
+
+  it('shows the item name and code', async () => {
+    const view = await render();
+    expect(view.text()).toContain('Hex Bolt M10 x 50mm');
+    expect(view.text()).toContain('YOB-BOLT-M10');
+  });
+
+  it('shows the unit of measure the backend reported', async () => {
+    const view = await render();
+    expect(view.testId('item-uom')?.textContent).toContain('Nos');
+  });
+
+  describe('pricing', () => {
+    it('renders the backend rate as localized currency, not concatenated text', async () => {
+      const view = await render();
+      const rate = view.testId('item-rate')?.textContent ?? '';
+
+      // Formatted through CurrencyPipe: a symbol and grouped decimals, never "INR11.25".
+      expect(rate).toContain('11.25');
+      expect(rate).toMatch(/[₹]/);
+      expect(rate).not.toContain('INR11.25');
+    });
+
+    it('shows the struck-through base price when discounted', async () => {
+      const view = await render();
+
+      expect(view.testId('item-base-price')?.textContent).toContain('12.50');
+      expect(view.testId('item-base-price')?.tagName).toBe('S');
+    });
+
+    it('shows the backend discount percentage', async () => {
+      const view = await render();
+      expect(view.testId('item-discount')?.textContent).toContain('10');
+    });
+
+    it('never derives a discount figure of its own', async () => {
+      // base_price - rate would be 1.25 here too, but the card must show the
+      // backend's discount_percentage, not a number it worked out.
+      const view = await render(item({ discount_percentage: 7, base_price: 20, rate: 11.25 }));
+
+      expect(view.testId('item-discount')?.textContent).toContain('7');
+      expect(view.testId('item-discount')?.textContent).not.toContain('43');
+    });
+
+    it('hides discount decoration when there is no discount', async () => {
+      const view = await render(
+        item({ base_price: 1.2, rate: 1.2, discount_percentage: 0, discount_amount: 0 }),
+      );
+
+      expect(view.testId('item-base-price')).toBeNull();
+      expect(view.testId('item-discount')).toBeNull();
+      expect(view.testId('item-rate')?.textContent).toContain('1.20');
+    });
+
+    it('does not advertise a 0% discount when a rule matched but changed nothing', async () => {
+      const view = await render(
+        item({ base_price: 12.5, rate: 12.5, discount_percentage: 0, pricing_rule_label: 'Rule' }),
+      );
+
+      expect(view.testId('item-discount')).toBeNull();
+    });
+
+    it('shows the pricing rule label when the backend supplies one', async () => {
+      const view = await render();
+      expect(view.testId('item-pricing-rule')?.textContent).toContain('YOB Demo Bulk Discount');
+    });
+
+    it('renders nothing for a missing pricing rule label', async () => {
+      const view = await render(item({ pricing_rule_label: null }));
+      expect(view.testId('item-pricing-rule')).toBeNull();
+    });
+
+    it('uses the injected currency rather than a hardcoded symbol', async () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [{ provide: CATALOG_CURRENCY, useValue: 'USD' }],
+      });
+      const fixture = TestBed.createComponent(Host);
+      await fixture.whenStable();
+
+      const rate =
+        (fixture.nativeElement as HTMLElement).querySelector('[data-testid="item-rate"]')
+          ?.textContent ?? '';
+      expect(rate).toContain('$');
+      expect(rate).not.toContain('₹');
+    });
+  });
+
+  describe('image', () => {
+    it('renders a decorative placeholder when there is no image', async () => {
+      const view = await render(item({ image: null }));
+
+      expect(view.element.querySelector('img')).toBeNull();
+      expect(view.element.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    });
+
+    it('renders the path the backend supplied, with the item name as alt text', async () => {
+      // Root-relative is what a Frappe Attach Image field stores; it resolves
+      // same-origin, so no rewriting is needed.
+      const view = await render(item({ image: '/files/hex-bolt-m10.png' }));
+      const img = view.element.querySelector('img');
+
+      expect(img?.getAttribute('src')).toBe('/files/hex-bolt-m10.png');
+      expect(img?.getAttribute('alt')).toBe('Hex Bolt M10 x 50mm');
+    });
+  });
+
+  it('uses a heading for the item name so a listing has structure', async () => {
+    const view = await render();
+    expect(view.element.querySelector('h3')?.textContent).toContain('Hex Bolt M10 x 50mm');
+  });
+});

@@ -4,7 +4,7 @@ import {
   provideAppInitializer,
   provideBrowserGlobalErrorListeners
 } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
 
 import { environment } from '../environments/environment';
 import { SessionStore } from './foundation/session/session.store';
@@ -14,7 +14,9 @@ import { routes } from './app.routes';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
+    // Route parameters bind straight to signal inputs, so pages read `:categorySlug`
+    // as an input rather than subscribing to paramMap.
+    provideRouter(routes, withComponentInputBinding()),
     // `environment.httpInterceptors` is empty in production. In development it carries
     // the mock API interceptor when mock mode is on - the only place the application
     // is aware such a thing exists.

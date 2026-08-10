@@ -1,5 +1,6 @@
 import type { HttpParams, HttpRequest } from '@angular/common/http';
 
+import type { MockScenario } from '../scenarios/mock-scenario';
 import type { MockReply } from './mock-reply';
 import type { MockServerSession } from './mock-server-session';
 
@@ -27,6 +28,13 @@ export interface MockContext {
   readonly session: MockServerSession;
   /** The configured application code, so handlers never name one themselves. */
   readonly application: string;
+  /**
+   * The active scenario.
+   *
+   * `server-error` is handled centrally before dispatch; handlers only see the rest.
+   * A handler that has no empty variant can simply ignore it.
+   */
+  readonly scenario: MockScenario;
 }
 
 export type MockHandler = (context: MockContext) => MockReply;
