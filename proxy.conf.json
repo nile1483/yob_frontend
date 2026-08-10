@@ -1,0 +1,50 @@
+// Angular development proxy for the local YOB edge.
+//
+//   browser -> http://storefront.local:4200        (Angular dev server)
+//           -> /api                                 (this proxy)
+//           -> http://127.0.0.1:8080                (nginx edge, ~/yob-edge/nginx.conf)
+//              vhost storefront.local, which adds X-YOB-Original-Host
+//           -> http://127.0.0.1:8000                (Frappe, site yob.localhost)
+//
+// WHY THE TARGET IS AN IP BUT THE HOST HEADER IS A NAME
+//
+// The edge selects its vhost purely from the Host header. Its default server
+// answers `421 Misdirected Request` for anything else, so `Host: storefront.local`
+// is mandatory. The name itself, however, resolves nowhere inside WSL - there is no
+// /etc/hosts entry - so `"target": "http://storefront.local:8080"` fails to connect.
+// Targeting 127.0.0.1 and asserting the Host header explicitly satisfies both.
+//
+// WHY NOT `changeOrigin`
+//
+// `changeOrigin: true` overwrites the outgoing Host with the TARGET's host, and it
+// does so AFTER `headers` is applied - so it would replace `storefront.local` with
+// `127.0.0.1:8080` and every request would come back 421. It must stay off.
+//
+// DO NOT ADD `X-YOB-Original-Host` HERE. The edge is the only component trusted to
+// assert it; setting it client-side is exactly the spoof its config defends against.
+//
+// If this proxy is ever pointed straight at Frappe on :8000, requests bypass the edge
+// and answer `403 application_access_denied` even with a valid session.
+{
+  "/api": {
+    "target": "http://127.0.0.1:8080",
+    "changeOrigin": false,
+    "secure": false,
+    "headers": {
+      "Host": "storefront.local"
+    }
+  },
+
+  // Frappe returns file references as raw stored paths (`/files/...`) rather than
+  // absolute URLs, so item/category images only resolve in development if the same
+  // origin also serves them. Remove this entry if the backend starts emitting
+  // absolute URLs.
+  "/files": {
+    "target": "http://127.0.0.1:8080",
+    "changeOrigin": false,
+    "secure": false,
+    "headers": {
+      "Host": "storefront.local"
+    }
+  }
+}

@@ -214,55 +214,98 @@ re-decided server-side on every request, so the client must never gate on them.
 
 `logout` returns `{"data": {"authenticated": false}, "notice": "Logout successful."}`.
 
-## 6. Central Network API
+## 6. Central Network API - IMPLEMENTED (Phase 2)
 
-Implement one small Frappe-aware network helper in `foundation/network`.
-
-Conceptual responsibility:
+`src/app/foundation/network/`:
 
 ```text
-YobApiClient
-  get<T>(method, query?)
-  post<TResponse, TBody>(method, body?)
+yob-api.types.ts     transport contracts: YobResponse<T>, YobErrorItem, query/body types
+yob-api-error.ts     YobApiError, client error codes, normalizeYobFailure()
+yob-api-client.ts    YobApiClient - URL building, message unwrapping, failure mapping
+yob-api.config.ts    YobApiConfig, YOB_API_CONFIG token, provideYobNetwork()
+csrf-token.store.ts  CsrfTokenStore - in-memory only
+csrf.interceptor.ts  yobCsrfInterceptor
 ```
 
-Where `method` is the Frappe method name, for example:
+Surface:
 
-```text
-yob_storefront.api.catalog.get_categories
+```ts
+get<T>(method: YobMethod, params?: YobQueryParams): Observable<YobResponse<T>>
+post<T>(method: YobMethod, body?: YobRequestBody): Observable<YobResponse<T>>
 ```
 
-and the helper constructs:
+Both resolve to `{data, notice?, meta?}` - Frappe's outer `message` is removed inside
+the client, so **no domain code ever touches `message`**. Callers that only need the
+payload use `.pipe(map(r => r.data))`.
 
-```text
-/api/method/yob_storefront.api.catalog.get_categories
-```
+Implementation decisions worth knowing:
 
-It should:
-
-1. build the method URL
-2. call Angular HttpClient
-3. unwrap verified Frappe `message`
-4. return the typed YOB success payload
-5. normalize HTTP/YOB failures into a typed `YobApiError`
-6. preserve error `code`, `detail`, `field`, and extra details when present
+- A method name must match `^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$`. An invalid name throws
+  synchronously - it is a programming mistake, not a runtime API condition - which
+  also stops a path segment or query string being smuggled in as a "method".
+- The client observes the full `HttpResponse` so the real status is available for both
+  success and the 2xx-with-`errors` anomaly below.
+- `null`/`undefined` query params are dropped, so optional values can be passed
+  straight through.
+- `post` defaults its body to `{}`; several documented mutations take no arguments.
+- **An `errors` array wins over a 2xx status.** The OpenAPI `get_item` 200 example is
+  an error envelope, so status alone is not trusted.
+- The single `as T` on `message.data` is the only cast in the transport layer. Runtime
+  validation of domain payloads belongs to the domains.
+- `withCredentials` is deliberately **not** set. The RPC path is relative, so requests
+  are same-origin and the HttpOnly `sid` rides along automatically; enabling it would
+  buy nothing now and would silently start sending credentials cross-origin if the
+  base path ever became absolute. The client never reads or writes `document.cookie`.
 
 Do not create a giant business `ApiService` containing every endpoint.
 Each domain should own small focused API files that use the common network helper.
 
-## 7. Error Shape
-
-Use a normalized frontend error concept similar to:
+## 7. Error Shape - IMPLEMENTED (Phase 2)
 
 ```text
-YobApiError
-- httpStatus
-- code
-- detail
-- field?
-- details?
-- original?
+YobApiError extends Error
+- kind          'yob' | 'frappe' | 'transport' | 'unexpected'
+- httpStatus    number (0 when the request never completed)
+- code          string  - first error's code, stable, safe to branch on
+- detail        string  - first error's text, safe to display
+- field?        string
+- details?      Record<string, unknown>   - e.g. {correlation_id}
+- errors        readonly YobErrorItem[]   - every error, not just the first
+- frappeExcType?  string  - Frappe's exception class, on raw Frappe failures
+- method?       string  - the RPC method, for diagnostics
+- isSessionFailure  getter
 ```
+
+Two deliberate departures from the original sketch:
+
+- **No `original?` field.** Raw Frappe failures carry a full server traceback in `exc`
+  and `_server_messages`; keeping a reference would put it one careless
+  `console.error(err)` away from leaking. Nothing from the raw body is copied onto the
+  error - not the traceback, not the HTML-bearing `exception` string. The intended
+  debugging path is the server Error Log, which `details.correlation_id` links to.
+- **`errors` is a list.** `errors_response()` can return several, and a form needs all
+  of them. `code`/`detail`/`field` remain conveniences for `errors[0]`.
+
+`kind` exists so infrastructure (retry, session recovery, logging) can distinguish a
+backend refusal from a broken connection without string-matching codes. Pages should
+still branch on `code`.
+
+### 7a. Client-synthesised codes
+
+Failures the backend does not describe get a code prefixed `client_`, which can never
+collide with the backend registry, so a reader always knows the code was inferred:
+
+```text
+client_network_unavailable   status 0 - offline, DNS, connection refused, proxy down
+client_unreadable_response   non-JSON body (edge 421) or a broken envelope
+client_session_required      403 + exc_type PermissionError
+client_csrf_token_invalid    400 + exc_type CSRFTokenError
+client_unexpected_failure    any other Frappe exception, or an unclassifiable failure
+```
+
+`client_session_required` and `client_csrf_token_invalid` are intentionally distinct:
+the first means sign in again, the second means refresh the CSRF token from
+`get_session_context` while leaving the session alone.
 
 The full stable code registry is recorded in
 `reference/api/live/verified-responses.json` under `stable_error_codes`, sourced from
@@ -661,22 +704,58 @@ user-space nginx plus a local Frappe bench:
 ~/yob-edge/smoke.sh       backend smoke test for this exact setup
 ```
 
-Constraints this places on the Angular dev proxy (Phase 2):
+### 10a. Implemented dev proxy - VERIFIED WORKING
 
-- The proxy target must be `http://storefront.local:8080`, and the request must
-  arrive at nginx with `Host: storefront.local`. Any other Host answers `421`.
-  In Angular's proxy config that means **not** rewriting the host header
-  (`changeOrigin` must leave the value nginx matches on).
-- Bypassing the edge - pointing the proxy straight at `127.0.0.1:8000` - produces
-  `403 application_access_denied` even with a perfectly valid session, because
-  `X-YOB-Original-Host` is absent. That is the failure mode to expect from a
-  misconfigured proxy.
-- **`storefront.local` does not resolve inside WSL and has no `/etc/hosts` entry.**
-  A hosts entry is required on the machine running the browser, and on WSL for any
-  tooling that resolves the name (`curl --resolve` works for scripts).
-- The `sid` cookie is host-scoped with no `Domain`, so the SPA origin and the API
-  origin must match. Serving the dev server on `storefront.local:4200` and proxying
-  `/api` keeps that true.
+`proxy.conf.json`, wired into `angular.json` under `serve.options.proxyConfig`.
+
+```json
+"/api": {
+  "target": "http://127.0.0.1:8080",
+  "changeOrigin": false,
+  "secure": false,
+  "headers": { "Host": "storefront.local" }
+}
+```
+
+The three decisions that make it work, none of them obvious:
+
+- **Target is an IP, Host is a name.** The edge selects its vhost purely from the
+  Host header and answers `421` for anything else, so `Host: storefront.local` is
+  mandatory - but that name resolves nowhere inside WSL, so targeting it directly
+  fails to connect. Targeting `127.0.0.1:8080` and asserting the Host explicitly
+  satisfies both constraints at once.
+- **`changeOrigin` must stay off.** It overwrites the outgoing Host with the
+  *target's* host, and http-proxy applies it *after* `headers`, so enabling it would
+  silently replace `storefront.local` with `127.0.0.1:8080` and every call would
+  return `421`.
+- **Never set `X-YOB-Original-Host` in the proxy.** The edge is the only component
+  trusted to assert it; setting it client-side is exactly the spoof its config
+  defends against. Pointing the proxy straight at Frappe on `:8000` to "simplify"
+  produces `403 application_access_denied` on every authenticated call.
+
+`/files` is proxied on the same terms because the API returns image references as raw
+stored paths rather than absolute URLs (see section 8, catalog).
+
+Verified through the running dev server: `ping` 200, public YOB endpoints returning
+the correct envelope and status, login succeeding with `Set-Cookie: sid` passed
+through unmodified, and an authenticated `get_config` returning 200 - which only
+happens if the edge saw the storefront vhost and added `X-YOB-Original-Host`.
+
+### 10b. Hosts entry still required for `storefront.local:4200`
+
+`storefront.local` resolves nowhere. Serving on `localhost:4200` works today because
+the proxy no longer depends on name resolution, but to browse the SPA *as*
+`storefront.local` - which is what makes the host-scoped `sid` cookie behave exactly
+as in production - add to the hosts file of the machine running the browser
+(`C:\Windows\System32\drivers\etc\hosts` on Windows, `/etc/hosts` on Linux):
+
+```text
+127.0.0.1  storefront.local
+```
+
+`serve.options.allowedHosts` already lists `storefront.local`; without it Vite answers
+"Blocked request" for any host it does not recognise. It is a deliberate allow-list of
+one, not `true` - an unlisted host is still refused.
 
 Do not solve a proxy/DNS problem by adding trusted backend headers in Angular.
 
@@ -773,3 +852,19 @@ and mock fixtures.**
 
 Credentials for the local environment live in `~/yob-edge/smoke.sh` and are
 deliberately not stored in this repository.
+
+### 13a. Re-verifying against the live edge
+
+`scripts/live-smoke.mjs` drives the same relative `/api/method/...` URLs the client
+builds, through the dev proxy and the edge, and asserts that every wire shape the
+normalizer branches on still occurs - success envelope with `data`/`notice`/`meta`,
+YOB 422/404 errors, raw Frappe 403 and 400, the CSRF header being accepted, and the
+non-JSON 421. It takes the password from the environment and stores nothing.
+
+```bash
+npx ng serve & YOB_SMOKE_PASSWORD='…' node scripts/live-smoke.mjs
+```
+
+It never addresses Frappe on `:8000`. Run it after any change to the network
+foundation, the proxy, or the edge configuration. Remember the 10-attempts/300 s login
+rate limit: the script logs in once.

@@ -75,16 +75,42 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
 - Bypassing that edge yields 403 `application_access_denied` even with a valid
   session, because `X-YOB-Original-Host` is absent.
 
+## CONFIRMED - Network foundation (Phase 2, 2026-08-10)
+
+- `foundation/network` owns all Frappe plumbing. Domains call
+  `YobApiClient.get/post(method, …)` and receive `{data, notice?, meta?}`; the outer
+  `message` wrapper never leaves the transport layer.
+- Every failure normalises to one `YobApiError` carrying `kind`, `httpStatus`, `code`,
+  `detail`, `field?`, `details?`, the full `errors[]`, and `frappeExcType?`.
+- The Frappe traceback is discarded rather than retained - there is no `original`
+  field. See `docs/API-CONTRACT.md` section 7.
+- Codes the client synthesises are prefixed `client_` so they can never be confused
+  with backend codes.
+- `sid` is untouched: no cookie access, no storage, no `withCredentials`. Same-origin
+  relative URLs let the browser attach it.
+- CSRF lives in `CsrfTokenStore`, in memory only, never persisted. The interceptor
+  adds `X-Frappe-CSRF-Token` only for non-GET requests under the RPC base path when a
+  token exists. The session domain will own set/clear in Phase 3.
+- Application-level technical configuration lives in `src/environments/`, injected via
+  `YOB_API_CONFIG`. `application: 'STOREFRONT'` is declared there and is not consumed
+  anywhere yet - the auth endpoints that need it arrive in Phase 3.
+- Verified live through the edge with `scripts/live-smoke.mjs`: 23 checks, all shapes
+  the normalizer depends on confirmed on the wire.
+
 ## ASSUMPTIONS TO VERIFY EARLY
 
 - Angular built-in localization is sufficient because there is no runtime language switch.
 - Angular signals are sufficient for initial state architecture; NgRx is not needed initially.
 
-Resolved: the `/api` dev proxy to `storefront.local:8080` is viable, and the
-host/cookie behaviour it must preserve is now documented in `docs/API-CONTRACT.md`
-§10. Remaining caveat: `storefront.local` currently resolves nowhere - **no
-`/etc/hosts` entry exists in WSL** - so a hosts entry is needed on the browser machine
-(and in WSL for tooling) before `http://storefront.local:4200` can be used.
+Resolved and implemented: the `/api` dev proxy works end to end, verified with a real
+session through the running dev server. It targets `http://127.0.0.1:8080` and
+asserts `Host: storefront.local` explicitly, because the edge selects its vhost from
+the Host header while that name resolves nowhere in WSL. `changeOrigin` must stay
+off - it would overwrite the Host after `headers` is applied. See
+`proxy.conf.json` and `docs/API-CONTRACT.md` §10a.
+
+Remaining caveat: browsing the SPA *as* `http://storefront.local:4200` still needs a
+hosts entry on the machine running the browser. `localhost:4200` works without one.
 
 ## OPEN API VERIFICATION ITEMS
 
