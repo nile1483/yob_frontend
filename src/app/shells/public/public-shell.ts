@@ -13,7 +13,7 @@ import { RouterLink, RouterOutlet } from '@angular/router';
   selector: 'app-public-shell',
   imports: [RouterLink, RouterOutlet],
   template: `
-    <div class="flex min-h-dvh flex-col bg-white text-slate-900">
+    <div data-testid="public-shell" class="flex min-h-dvh flex-col bg-white text-slate-900">
       <header class="border-b border-slate-200">
         <div class="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-4">
           <a routerLink="/" class="text-lg font-semibold tracking-tight">Your Order Book</a>

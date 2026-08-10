@@ -1,0 +1,11 @@
+/* Type-checking for the Playwright suite. The E2E tests run in Node, not the browser
+   bundle, so they are deliberately outside tsconfig.app.json. */
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "moduleResolution": "bundler",
+    "noEmit": true
+  },
+  "include": ["**/*.ts", "../playwright.config.ts"]
+}

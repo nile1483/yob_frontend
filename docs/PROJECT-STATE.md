@@ -176,6 +176,24 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
 - The app root renders only `<router-outlet />`; the Angular scaffold placeholder is
   gone and `app.spec.ts` was updated to assert the new contract.
 
+## CONFIRMED - Playwright E2E baseline (2026-08-10)
+
+- `npm run e2e` runs Chromium at three viewports (390x844, 768x1024, 1440x900) and
+  starts its own dev server; nothing needs to be running first.
+- E2E uses a dedicated **mock** serve target on port 4300
+  (`ng serve --configuration mock`, `src/environments/environment.mock.ts`) so the
+  session resolves deterministically without a Frappe bench. Ordinary `ng serve` on
+  4200 still points at the real edge and `scripts/live-smoke.mjs` is unchanged.
+- Browser-verified at all three viewports: public shell renders `/login`, `/terms`,
+  `/session-unavailable` and not-found; a guest hitting `/catalog` is redirected to
+  `/login?returnUrl=%2Fcatalog`; deep URLs keep their query string; external return
+  URLs are discarded; navigation is client-side; no horizontal overflow anywhere.
+- Locators are roles/text/`data-testid`. No Tailwind classes, and no screenshot
+  snapshots while the design is placeholder-level.
+- **Gap:** the secure shell and `SecureNav` are not browser-verified, because no UI can
+  authenticate yet. They are covered by unit tests via `RouterTestingHarness`. Add
+  browser coverage when the sign-in form lands in Phase 7.
+
 ### Deliberately deferred from Phase 3 - now RESOLVED
 
 - **The secure route guard.** Deferred in Phase 3 because it needed route branches and

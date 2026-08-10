@@ -46,3 +46,11 @@ Thumbs.db
 # Windows/NTFS alternate-data-stream artefacts created when files are copied
 # into WSL from a Windows download location.
 *:Zone.Identifier
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

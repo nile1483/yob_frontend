@@ -19,7 +19,7 @@ import { SecureNav } from './parts/secure-nav';
   selector: 'app-secure-shell',
   imports: [RouterLink, RouterOutlet, SecureNav],
   template: `
-    <div class="flex min-h-dvh flex-col bg-white text-slate-900">
+    <div data-testid="secure-shell" class="flex min-h-dvh flex-col bg-white text-slate-900">
       <header class="border-b border-slate-200">
         <div
           class="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-8 gap-y-3 px-4 py-4"

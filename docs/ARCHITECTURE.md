@@ -622,6 +622,59 @@ deletes the anchor rather than toggling a setting.
 
 The shells read `SessionStore` only to display who is signed in.
 
+## 19b. End-to-end testing (Playwright baseline)
+
+```text
+e2e/
+  routing.spec.ts     route branches, shell selection, guard redirect, SPA navigation
+  layout.spec.ts      horizontal overflow and structural usability per viewport
+  support/layout.ts   shared layout assertions
+  tsconfig.json       E2E runs in Node, deliberately outside tsconfig.app.json
+playwright.config.ts
+```
+
+Run with `npm run e2e`. Nothing needs to be started first - Playwright's `webServer`
+starts the dev server itself and shuts it down afterwards.
+
+### Chromium only, three viewports
+
+```text
+chromium-mobile    390 x 844
+chromium-tablet    768 x 1024
+chromium-desktop   1440 x 900
+```
+
+Every spec runs at all three, so a layout that breaks on a phone fails the suite
+rather than waiting to be noticed. These are **testing targets only**. The application
+has no breakpoint configuration and must not grow one; responsive behaviour belongs to
+whichever piece owns the visual behaviour.
+
+### E2E runs against the mock API
+
+`webServer` starts `npm run start:mock` on **port 4300** - `ng serve --configuration
+mock`, which swaps in `src/environments/environment.mock.ts`.
+
+Two reasons, both determinism. The session must resolve identically every run: against
+the real edge that requires a Frappe bench to be up, and when it is not, session
+restore fails and the app lands on `/session-unavailable` instead of the sign-in page.
+That is correct behaviour, but it is not what a guest-redirect test is asking about.
+The separate port also means a hand-started `ng serve` on 4200, pointed at the real
+backend, can never be silently reused by `reuseExistingServer`.
+
+Real-backend verification is a different job, and stays with
+`scripts/live-smoke.mjs`.
+
+### Conventions
+
+- **Locators are roles, text and `data-testid`.** Never a Tailwind class: every class
+  in the shells is expected to change during the styling phase, and a suite keyed to
+  them would have to be rewritten alongside.
+- **No screenshot snapshot assertions.** The design is placeholder-level, so snapshots
+  would be pure maintenance. Capture screenshots ad hoc for inspection instead.
+- Assertion helpers live in `e2e/support/`. `expectNoHorizontalOverflow` compares
+  `documentElement.scrollWidth` against the viewport, which catches overflow whatever
+  causes it - a fixed width, an unwrapped row, a long unbroken string.
+
 ## 20. Mock API (Phase 4)
 
 `src/mock-api/` serves Frappe RPC calls from memory so the frontend can be developed
