@@ -15,7 +15,10 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    provideYobNetwork(environment.api),
+    // `environment.httpInterceptors` is empty in production. In development it carries
+    // the mock API interceptor when mock mode is on - the only place the application
+    // is aware such a thing exists.
+    provideYobNetwork(environment.api, environment.httpInterceptors),
     // Resolve the session before the first render so nothing has to cope with a
     // half-known state. `restore()` never errors, so a backend outage delays boot but
     // does not break it - the failure surfaces as `SessionStore.restoreError`.

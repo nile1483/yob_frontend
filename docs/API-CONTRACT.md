@@ -830,6 +830,30 @@ missing-CSRF (400 `CSRFTokenError`) scenarios are exactly the ones where the
 application's error handling is most likely to be wrong, so a mock that only ever
 returns the tidy envelope would hide the bug it exists to catch.
 
+### 11a. Implemented (Phase 4)
+
+`src/mock-api/` - see `docs/ARCHITECTURE.md` section 20 for structure, the enable
+switch, and the rule that domain code never branches on mock mode.
+
+Auth handlers reproduce the verified contract rather than a convenient
+approximation:
+
+- `get_session_context` requires `application` (422 `validation_failed` without it)
+  and answers the **raw Frappe 403** when there is no session, so `SessionStore`
+  resolves guest through exactly the path it uses against Frappe.
+- `login_with_password` is public and needs no CSRF token, matching the backend.
+  Wrong credentials give `invalid_credentials` at 401; a blank field gives
+  `validation_failed` at 422 with the offending `field`.
+- `logout` requires a CSRF token that matches the one issued at login, so
+  `CsrfTokenStore` and `yobCsrfInterceptor` are genuinely exercised. A missing or
+  stale token produces the raw Frappe 400 `CSRFTokenError`.
+
+There is no mock `sid` cookie. Frappe issues one to recognise a browser across
+requests; a mock serving a single browser has nothing to recognise, and the frontend
+never reads that cookie either way because it is HttpOnly. Session identity lives in
+`MockServerSession`, behind the interceptor, so the application still learns who it is
+only by asking.
+
 ## 12. Do Not Auto-Generate a Full Client Yet
 
 The current OpenAPI document is excellent as an endpoint/security/reference inventory, but it is not yet strongly typed enough for high-quality automatic TypeScript client generation:

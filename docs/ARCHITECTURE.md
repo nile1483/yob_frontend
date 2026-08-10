@@ -532,7 +532,95 @@ Bad abstraction triggers:
 - "this could be configurable"
 - "a template framework usually has this"
 
-## 20. Architecture Success Criteria
+## 20. Mock API (Phase 4)
+
+`src/mock-api/` serves Frappe RPC calls from memory so the frontend can be developed
+without the YOB backend.
+
+```text
+src/mock-api/
+  mock-api.interceptor.ts      matching, dispatch, latency, HTTP event construction
+  core/
+    mock-handler.ts            MockContext + MockHandler contracts
+    mock-reply.ts              envelope builders (success / YOB error / raw Frappe)
+    mock-server-session.ts     the mock server's session state
+  handlers/
+    mock-handlers.ts           registry, keyed by Frappe method name
+    auth.handlers.ts           get_session_context, login_with_password, logout
+  fixtures/
+    session.fixture.ts         development-only user and credentials
+  scenarios/
+    mock-scenario.ts           server-error switch and latency
+```
+
+### The one rule
+
+**Domain code must never branch on mock mode.** No `if (environment.mockApi)` in a
+page, a data file or a service; no `MockCatalogService`; no mock-only pages. The mock
+replaces the *server*, not the application:
+
+```text
+page -> domain data -> YobApiClient -> HttpClient -> yobCsrfInterceptor
+                                                  -> mockApiInterceptor OR the network
+```
+
+Everything above the interceptor is the production code path, so mock mode exercises
+the real unwrapping, the real error normalisation and the real CSRF interceptor. A
+mock that returned an already-unwrapped `YobResponse` would defeat the entire
+arrangement; handlers therefore always emit the wire shape,
+`{message: {data, notice?, meta?}}`.
+
+### Enabling and disabling
+
+One switch, in `src/environments/environment.development.ts`:
+
+```ts
+const USE_MOCK_API = false;   // true -> in-memory mock, false -> real edge on :8080
+```
+
+Production cannot be switched on at all. `environment.ts` does not import
+`src/mock-api`, and `fileReplacements` swaps the whole file, so the mock layer is
+*absent* from a production bundle rather than merely disabled. A runtime
+`if (mockApi)` would have left handlers and fixtures shipping to real users, one bad
+flag away from serving fake data. `AppEnvironment.httpInterceptors` exists purely to
+carry that guarantee.
+
+The development bundle does contain the mock layer even when the flag is off, because
+the development environment file imports it either way. That is dev-only weight and
+does not affect production.
+
+### Adding a handler
+
+Add `<domain>.handlers.ts` under `handlers/`, export a registry object keyed by the
+full Frappe method name, and spread it into `MOCK_HANDLERS`. An unregistered method
+answers HTTP 501 `mock_handler_not_implemented` rather than falling through to the
+network - a session that is half mock and half live is far harder to debug than a
+clear stop.
+
+Handlers are plain functions taking a `MockContext`. They receive the request, merged
+query parameters, the mock session and the configured application code, so they need
+no DI and can be unit-tested directly.
+
+### Fixtures
+
+Fixtures mirror the API DTOs exactly, snake_case included, and are validated against
+`reference/api/live/verified-responses.json`. Do not convert them into
+frontend-friendly models: a fixture in a different shape than the backend serves means
+the mock tests a contract nobody ships. DTO mapping, where a domain genuinely needs
+it, belongs in that domain's data layer.
+
+Credentials are obviously fake and use the reserved `.invalid` TLD. Never put a
+credential that works against a real system in this repository.
+
+### Scenarios
+
+`MockApiScenario` carries a `server-error` switch and a `latencyMs` value. It is
+deliberately not a scenario engine: guest, validation errors and empty collections are
+all reachable by making the mock behave normally - do not sign in, send the wrong
+password, return an empty fixture - and reaching them that way tests the contract
+rather than testing the switch. Latency applies to failures as well as successes.
+
+## 21. Architecture Success Criteria
 
 The architecture is successful when:
 

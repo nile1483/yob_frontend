@@ -1,22 +1,19 @@
-import type { YobApiConfig } from '../app/foundation/network/yob-api.config';
+import type { AppEnvironment } from './environment.types';
 
 /**
  * Production environment values.
  *
- * Technical configuration only - API paths, application code, and later the mock-API
- * flag. Visual and page-level choices are source edits in a copied client project,
- * not settings.
- *
- * `environment.development.ts` replaces this file in development builds
- * (see `fileReplacements` in angular.json).
+ * This file deliberately imports nothing from `src/mock-api`. `fileReplacements`
+ * swaps the whole file for `environment.development.ts` in development builds, so the
+ * mock layer is simply not part of a production bundle - it cannot be enabled by a
+ * misread flag, only by editing this file.
  */
-export const environment: {
-  readonly production: boolean;
-  readonly api: YobApiConfig;
-} = {
+export const environment: AppEnvironment = {
   production: true,
+  mockApi: false,
   api: {
     methodBasePath: '/api/method/',
     application: 'STOREFRONT',
   },
+  httpInterceptors: [],
 };

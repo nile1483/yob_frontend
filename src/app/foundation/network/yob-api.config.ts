@@ -1,4 +1,4 @@
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideHttpClient, withInterceptors, type HttpInterceptorFn } from '@angular/common/http';
 import {
   InjectionToken,
   makeEnvironmentProviders,
@@ -42,10 +42,18 @@ export const YOB_API_CONFIG = new InjectionToken<YobApiConfig>('YOB_API_CONFIG')
  *
  * `withFetch()` is deliberately not enabled - the XHR backend is the default and
  * nothing here needs the fetch backend yet.
+ *
+ * `extraInterceptors` are appended after the CSRF interceptor, so anything standing in
+ * for the server - the development mock API, for instance - sees the request exactly
+ * as the real backend would, CSRF header included. The network layer knows nothing
+ * about what those interceptors do.
  */
-export function provideYobNetwork(config: YobApiConfig): EnvironmentProviders {
+export function provideYobNetwork(
+  config: YobApiConfig,
+  extraInterceptors: readonly HttpInterceptorFn[] = [],
+): EnvironmentProviders {
   return makeEnvironmentProviders([
     { provide: YOB_API_CONFIG, useValue: config },
-    provideHttpClient(withInterceptors([yobCsrfInterceptor])),
+    provideHttpClient(withInterceptors([yobCsrfInterceptor, ...extraInterceptors])),
   ]);
 }

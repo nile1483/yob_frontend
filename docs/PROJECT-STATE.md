@@ -131,6 +131,31 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
   `unknown` data because its success payload is still unverified). No OTP state or
   workflow.
 
+## CONFIRMED - Mock API foundation (Phase 4, 2026-08-10)
+
+- `src/mock-api/` intercepts at the server boundary via `mockApiInterceptor`. Every
+  layer above it - `YobApiClient`, `yobCsrfInterceptor`, `SessionStore` - is the
+  production one, so mock mode exercises real unwrapping, error normalisation and CSRF.
+- **No domain code branches on mock mode.** Verified: nothing under `src/app/`
+  references `src/mock-api`, and the only real import of the mock layer anywhere is in
+  `environment.development.ts`.
+- Handlers emit the wire shape `{message:{data, notice?, meta?}}`, never a
+  pre-unwrapped `YobResponse`.
+- Mock mode is one switch (`USE_MOCK_API` in the development environment file),
+  defaulting to `false` so `ng serve` and `scripts/live-smoke.mjs` keep using the real
+  edge.
+- **Production cannot enable the mock.** `environment.ts` does not import
+  `src/mock-api`, so the layer is absent from a production bundle, not merely disabled.
+  Proven by building with the dev flag on and confirming the production bundle still
+  contains no mock fixture markers. The development bundle does carry the mock layer
+  even when the flag is off - dev-only weight, no production effect.
+- Auth handlers reproduce verified behaviour including the raw Frappe 403 for guests
+  and a real CSRF check on logout; there is no mock `sid` cookie and nothing is
+  persisted to browser storage.
+- Scenario support is deliberately two knobs (`server-error`, `latencyMs`). Guest,
+  validation errors and empty results are reached by making the mock behave normally,
+  which tests the contract instead of the switch.
+
 ### Deliberately deferred from Phase 3
 
 - **The secure route guard.** Build plan Phase 3 lists it, but it cannot be wired
