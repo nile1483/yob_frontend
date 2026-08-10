@@ -12,6 +12,7 @@ import { type Observable, of, switchMap, throwError, timer } from 'rxjs';
 import { YOB_API_CONFIG } from '../app/foundation/network/yob-api.config';
 import type { MockContext } from './core/mock-handler';
 import { type MockReply, mockYobError } from './core/mock-reply';
+import { MockServerCart } from './core/mock-server-cart';
 import { MockServerSession } from './core/mock-server-session';
 import { MOCK_HANDLERS } from './handlers/mock-handlers';
 import { MockApiScenario } from './scenarios/mock-scenario';
@@ -48,6 +49,7 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
 
   const rpcMethod = path.slice(methodBasePath.length);
   const session = inject(MockServerSession);
+  const cart = inject(MockServerCart);
   const scenario = inject(MockApiScenario);
 
   // A URL-set scenario spares the auth endpoints, so a browser test can still sign in
@@ -61,6 +63,7 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
       request: req,
       params: mergedParams(req, queryIndex),
       session,
+      cart,
       application,
       scenario: active,
     },

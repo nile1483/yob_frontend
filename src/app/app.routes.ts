@@ -72,6 +72,10 @@ export const routes: Routes = [
         loadChildren: () => import('./domains/catalog/catalog.routes').then((m) => m.CATALOG_ROUTES),
       },
       {
+        path: 'cart',
+        loadChildren: () => import('./domains/cart/cart.routes').then((m) => m.CART_ROUTES),
+      },
+      {
         path: 'account',
         loadChildren: () => import('./domains/account/account.routes').then((m) => m.ACCOUNT_ROUTES),
       },

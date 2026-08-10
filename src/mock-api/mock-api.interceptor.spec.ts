@@ -170,7 +170,7 @@ describe('mockApiInterceptor', () => {
       let error: YobApiError | undefined;
       // Deliberately an endpoint no phase has mocked yet.
       api
-        .get('yob_storefront.api.cart.get_cart')
+        .get('yob_storefront.api.order.get_orders')
         .subscribe({ error: (e: YobApiError) => (error = e) });
 
       expect(error?.httpStatus).toBe(501);

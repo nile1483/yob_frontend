@@ -98,7 +98,13 @@ console.log('\n== 3. Raw Frappe 403 PermissionError (no session) ==');
   const c = classify(r.status, r.json, r.text);
   check('403 -> kind=frappe client_permission_denied', r.status === 403 && c.kind === 'frappe' && c.code === 'client_permission_denied', `${r.status} ${JSON.stringify(c)}`);
   check('body really is raw Frappe, not the YOB envelope', r.json?.message === undefined && typeof r.json?.exc_type === 'string');
-  check('body really does contain a traceback the client must discard', typeof r.json?.exc === 'string' && r.json.exc.includes('Traceback'));
+  // `exc` (the traceback) and `exception` only appear when the bench runs with
+  // developer_mode on. With it off the body narrows to {exc_type, _server_messages}.
+  // Classification must survive both, which is why it keys on exc_type and status
+  // rather than on any message text - assert the shape, not the debug extras.
+  check('classification keys on exc_type, which is present either way', typeof r.json?.exc_type === 'string');
+  check('any traceback present is a field the client must discard, never surface',
+    r.json?.exc === undefined || typeof r.json.exc === 'string');
 }
 
 console.log('\n== 3b. Guest session restore (SessionStore.restore before sign-in) ==');

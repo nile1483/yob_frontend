@@ -30,6 +30,15 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
         </li>
         <li>
           <a
+            routerLink="/cart"
+            routerLinkActive="font-semibold text-slate-900"
+            class="text-slate-600 underline-offset-4 hover:underline focus-visible:underline"
+            i18n="@@nav.cart"
+            >Cart</a
+          >
+        </li>
+        <li>
+          <a
             routerLink="/account"
             routerLinkActive="font-semibold text-slate-900"
             class="text-slate-600 underline-offset-4 hover:underline focus-visible:underline"

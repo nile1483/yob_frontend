@@ -444,6 +444,37 @@ logic is comparing `rate` with `base_price` to decide whether to decorate a disc
 a comparison of two backend values, not a calculation. Currency goes through
 `CurrencyPipe` with an injected code, never string concatenation.
 
+### 6s. When a domain earns a store
+
+Catalog and Cart answer this differently on purpose, and the difference is the rule:
+
+| Domain | State | Why |
+| --- | --- | --- |
+| Catalog | page-local `rxResource` | One page reads it, and it is derived entirely from the route. A store would owe a cache-invalidation policy for a problem that does not exist. |
+| Cart | shared `CartStore` | **Two consumers must agree.** Item detail writes it, the cart page reads it, and after an add the cart page must not show a stale total. |
+
+The trigger is *two real consumers of one truth*, not "this domain feels important".
+Adding a store before that point buys a synchronisation problem and nothing else.
+
+`CartStore` holds the latest server payload and replaces it wholesale. It never
+computes a total, never increments a quantity, and never predicts what a mutation did.
+
+### 6t. Server-authoritative mutation: read after write
+
+`add_to_cart` replies with the bare cart document. `get_cart` replies with the
+canonical payload - the same cart **plus** `currency`'s companions: `cart_updated`,
+`removed_items`, `price_updated_items`, and the resolved contact and addresses.
+
+So every cart mutation is **mutation then canonical read**, and the store ingests the
+read. Adopting the mutation reply would leave it holding a partial, differently-shaped
+truth and would silently lose reconciliation. When a future endpoint's reply *is* the
+canonical shape, it can be ingested directly - the rule is "ingest the authoritative
+shape", not "always call twice".
+
+`add_to_cart` is **set semantics**: it assigns the quantity for an existing line rather
+than adding to it, so it doubles as the quantity-update endpoint. Pinned by tests in
+the store, the mock and the browser suite.
+
 ## 7. Widgets
 
 `widgets/` contains reusable functional UI that can be used across unrelated pages/domains.

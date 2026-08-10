@@ -2,6 +2,7 @@ import type { HttpParams, HttpRequest } from '@angular/common/http';
 
 import type { MockScenario } from '../scenarios/mock-scenario';
 import type { MockReply } from './mock-reply';
+import type { MockServerCart } from './mock-server-cart';
 import type { MockServerSession } from './mock-server-session';
 
 /**
@@ -26,6 +27,8 @@ export interface MockContext {
   readonly params: HttpParams;
   /** The mock server's session state. */
   readonly session: MockServerSession;
+  /** The mock server's cart. Owned by the session - logout empties it. */
+  readonly cart: MockServerCart;
   /** The configured application code, so handlers never name one themselves. */
   readonly application: string;
   /**

@@ -206,6 +206,118 @@ Unchanged: explicit YOB envelope codes pass through untouched, including
 and a code whose name asserts session state from a signal that cannot establish it is
 the bug, not a useful abstraction.
 
+## DEFERRED BACKEND CONTRACT CHANGE - Cart line identity and per-line expiry
+
+The product owner has confirmed a future Cart model. It is **not** being built yet, and
+the frontend and mock deliberately continue to follow the current production backend
+until the backend contract actually changes.
+
+### Future desired behaviour (not implemented anywhere)
+
+- every Add creates an independent `Cart Item` row, duplicates of one `item_code` allowed
+- row identity is the backend child-row identifier (Frappe `name`) - never invented client-side
+- quantity is immutable once a line exists
+- removal targets a single line by that identifier
+- expiry is evaluated per line
+
+### Backend changes that requirement will need
+
+1. `add_to_cart` must append rather than look up by `item_code` and assign `quantity`.
+2. **`sync_sales_order_to_cart` must stop keying by item code.** It builds
+   `{row.item_code: row for row in cart.items}`, so with duplicates only the last row is
+   priced and earlier ones keep stale figures. This is the blocking defect - fixing
+   `add_to_cart` alone would ship silently mispriced lines.
+3. `build_cart_response` must emit each row's `name`. `as_dict(no_default_fields=True)`
+   strips `name`, `creation`, `modified` and `idx` from child rows, so lines currently
+   reach the client with no identity at all.
+4. `remove_from_cart` must target that identifier; today it filters on `item_code` and
+   would delete every duplicate at once.
+5. `removed_items` / `price_updated_items` report item codes, which stop identifying a
+   line once duplicates exist.
+6. `Cart Item` has **no** size, theme, variant, configuration or note field, so two rows
+   of one item would differ only by quantity - the stated rationale implies such a field.
+
+### Expiry, if it becomes per line
+
+Today it is whole-cart: `YOB Store Settings.cart_expiry` (Int, **hours**) against the
+parent `cart.modified`; expiry clears every line; evaluated lazily inside `get_cart`,
+`add_to_cart`, `remove_from_cart`, `clear_cart` and checkout, with no scheduler
+(`scheduler_events` is commented out). `Cart Item.item_expiry_date` exists but no code
+reads or writes it; it plus each row's `creation` would be the natural basis.
+
+### Current position
+
+**The frontend intentionally follows the current production backend**: one effective row
+per `item_code`, Add sets quantity, removal by `item_code`, whole-cart expiry. None of
+the deferred behaviour is implemented in Angular or in the mock, and it must not be
+until the backend ships it.
+
+## CONFIRMED - Cart removal, current contract (Phase 10.5, 2026-08-10)
+
+- `remove_from_cart(item_code)` implemented against the backend **as it exists today**.
+  Item-code removal is unambiguous only because Add keeps one effective row per code;
+  no line identifier is invented client-side.
+- Newly **wire-verified**: blank `item_code` answers 422 `validation_failed`; a code
+  that is not in the cart answers **200 with the bare cart document** - it filters
+  nothing out and does *not* 404. The mutation reply shape (bare cart, no
+  reconciliation) is therefore now wire-verified too, not just source-verified.
+- Removal follows the Phase 10 rule: mutate, then `get_cart`, and ingest **that**.
+  Nothing is removed optimistically, so a failure leaves the line exactly where it was.
+- The success acknowledgement and the removal error sit outside the cart's state
+  branches, so they survive the cart becoming empty - the same fix the reconciliation
+  notice needed.
+- **No cart quantity editing.** The backend's Add upsert is not exposed as a cart
+  editor: no input, no stepper, no inline update. Two tests assert the absence.
+- Whole-cart expiry is unchanged and remains entirely the backend's: no frontend
+  timestamps, countdowns or timers.
+
+## CONFIRMED - Cart vertical slice (Phase 10, 2026-08-10)
+
+### Verified cart contract
+
+Wire-verified this phase: `get_cart` payload (including `currency`); `add_to_cart`
+rejections - 422 `validation_failed` (no `item_code`), 422 `quantity_invalid`
+(`qty <= 0`), 404 `item_not_found`; `remove_from_cart` 422 `validation_failed`;
+**fractional quantities are accepted** (`qty: 2.5` passes validation).
+
+Source-verified: `add_to_cart` **sets** quantity (`existing.quantity = qty`) - it is an
+upsert, not an increment, and doubles as the quantity-update endpoint. This resolves
+the Phase 1 "quantity-update semantics unclear" item. Mutation replies are the bare
+cart document with **no** reconciliation fields. `removed_items` /
+`price_updated_items` are arrays of **item-code strings**. Cart line images are
+absolute URLs (`get_url()` is applied there, unlike catalog).
+
+The cart identifier is **`item_code`** - catalog `name`, never a slug.
+
+### Decisions
+
+- `CartStore` is shared because item detail and the cart page are two real consumers
+  of one truth. See `docs/ARCHITECTURE.md` 6s.
+- Every mutation is followed by `get_cart`, and **that** response is ingested - 6t.
+- Quantity honours only the verified rule: finite and `> 0`. No integer, step, maximum
+  or stock rule is invented. Non-finite input is rejected before any request.
+- Repricing is driven by the input's native `change` event, so typing cannot produce a
+  request per keystroke. No debounce or timers.
+- Reconciliation is reported as localized counts; the item codes stay in the store.
+- The cart page uses `cart.currency` (authoritative) rather than the environment
+  fallback.
+- `remove_from_cart` and cart-page quantity editing are **out of scope** for Phase 10
+  although their contracts are known.
+
+### Backend Item permission - STILL BLOCKED
+
+Re-checked at the start of Phase 10 and again after restoring the bench: unchanged. No
+real item is reachable, so a real add-to-cart cannot be performed. `get_cart` **is**
+reachable and was verified in a real browser (empty state, secure shell, no overflow).
+
+### New: the raw Frappe failure body narrows without developer_mode
+
+The restarted bench runs with `developer_mode` off, and the raw 403 body is then just
+`{exc_type, _server_messages}` - no `exception`, no `exc` traceback. Classification is
+unaffected because it keys on `exc_type` + status, which vindicates the Phase 2 choice
+not to parse the exception text. `scripts/live-smoke.mjs` no longer asserts the
+traceback's presence.
+
 ## CONFIRMED - Item detail (Phase 9, 2026-08-10)
 
 - Route `/catalog/item/:itemSlug`, inside the catalog domain. **Order is load-bearing**:

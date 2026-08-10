@@ -18,7 +18,14 @@ import { Service, signal } from '@angular/core';
  *                  fixtures per test would need a second set of them
  * - latency        a slow network, which is orthogonal to the reply itself
  */
-export type MockScenario = 'normal' | 'empty' | 'server-error';
+export type MockScenario =
+  | 'normal'
+  | 'empty'
+  | 'server-error'
+  /** get_cart reports repriced lines, so the reconciliation notice can be seen. */
+  | 'cart-repriced'
+  /** get_cart withdraws the cart's lines and reports them as removed. */
+  | 'cart-item-removed';
 
 /**
  * Runtime knobs for the mock API.
@@ -55,7 +62,12 @@ export class MockApiScenario {
 
     // `?mockScenario=empty` / `=server-error` for browser tests of those states.
     const scenario = query.get('mockScenario');
-    if (scenario === 'empty' || scenario === 'server-error') {
+    if (
+      scenario === 'empty' ||
+      scenario === 'server-error' ||
+      scenario === 'cart-repriced' ||
+      scenario === 'cart-item-removed'
+    ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);
     }

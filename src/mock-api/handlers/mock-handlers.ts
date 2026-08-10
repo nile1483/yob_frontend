@@ -1,5 +1,6 @@
 import type { MockHandlerRegistry } from '../core/mock-handler';
 import { AUTH_HANDLERS } from './auth.handlers';
+import { CART_HANDLERS } from './cart.handlers';
 import { CATALOG_HANDLERS } from './catalog.handlers';
 
 /**
@@ -13,4 +14,5 @@ import { CATALOG_HANDLERS } from './catalog.handlers';
 export const MOCK_HANDLERS: MockHandlerRegistry = {
   ...AUTH_HANDLERS,
   ...CATALOG_HANDLERS,
+  ...CART_HANDLERS,
 };

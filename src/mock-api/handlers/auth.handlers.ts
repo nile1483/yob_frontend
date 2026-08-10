@@ -79,6 +79,8 @@ const logout: MockHandler = (ctx) => {
   }
 
   ctx.session.signOut();
+  // The cart belongs to the session on the real backend, so it goes with it.
+  ctx.cart.reset();
   return mockSuccess({ authenticated: false }, { notice: 'Logout successful.' });
 };
 

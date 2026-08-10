@@ -1,13 +1,17 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 
 import { Alert } from '../../../design/alert/alert';
+import { Button } from '../../../design/button/button';
+import { Field } from '../../../design/field/field';
 import { EmptyState } from '../../../design/empty-state/empty-state';
 import { Spinner } from '../../../design/spinner/spinner';
 import { YobApiError } from '../../../foundation/network/yob-api-error';
+import { CartStore } from '../../cart/state/cart.store';
 import { CATALOG_CURRENCY } from '../catalog.currency';
+import type { ItemDetailDto } from '../contracts/catalog.types';
 import { CatalogApi } from '../data/catalog.api';
 
 /**
@@ -24,15 +28,24 @@ import { CatalogApi } from '../data/catalog.api';
  * to decide whether to decorate a discount, and even the percentage shown is the
  * backend's `discount_percentage` - not something computed from those two numbers.
  *
- * ## Quantity
+ * ## Quantity and repricing
  *
- * The request sends no quantity, so the backend prices for 1. There is no quantity
- * control because there is nothing to do with one yet; it arrives with add-to-cart,
- * where changing it has a purpose and a reason to re-price.
+ * The quantity feeds `get_item(slug, qty)`, so the backend reprices for the chosen
+ * quantity and the page displays whatever it returns. Repricing is driven by the
+ * input's native `change` event - fired on blur or Enter, not per keystroke - so
+ * typing "250" cannot produce three requests. No debounce, no timers, nothing to tune.
+ *
+ * Stale responses cannot win: the resource keys on the quantity, so changing it
+ * cancels the previous request outright. A test proves an older quantity's response
+ * cannot overwrite a newer one's pricing.
+ *
+ * The verified backend rule is the only rule enforced: a float greater than zero. No
+ * integer, step, maximum or stock constraint is invented, because the contract has
+ * none. Non-finite input is rejected before a request is made.
  */
 @Component({
   selector: 'app-item-page',
-  imports: [Alert, CurrencyPipe, EmptyState, RouterLink, Spinner],
+  imports: [Alert, Button, CurrencyPipe, EmptyState, Field, RouterLink, Spinner],
   template: `
     <nav aria-label="Breadcrumb" i18n-aria-label="@@item.breadcrumb.label">
       <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
@@ -40,7 +53,7 @@ import { CatalogApi } from '../data/catalog.api';
       >
     </nav>
 
-    @if (item.isLoading()) {
+    @if (item.isLoading() && detail() === undefined) {
       <div class="mt-8 flex justify-center" data-testid="item-loading">
         <app-spinner label="Loading item" i18n-label="@@item.loading" />
       </div>
@@ -66,7 +79,7 @@ import { CatalogApi } from '../data/catalog.api';
           <span i18n="@@item.error">We could not load this item. Please try again.</span>
         </app-alert>
       </div>
-    } @else if (item.value(); as detail) {
+    } @else if (detail(); as detail) {
       <article class="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2">
         <div>
           @if (detail.image; as image) {
@@ -103,6 +116,12 @@ import { CatalogApi } from '../data/catalog.api';
             <span class="text-3xl font-semibold text-slate-900" data-testid="item-rate">
               {{ detail.rate | currency: currency }}
             </span>
+
+            @if (isRepricing()) {
+              <span class="text-sm text-slate-500" data-testid="item-repricing">
+                <app-spinner label="Updating price" i18n-label="@@item.repricing" />
+              </span>
+            }
 
             @if (hasDiscount()) {
               <s class="text-base text-slate-500" data-testid="item-base-price">
@@ -155,6 +174,55 @@ import { CatalogApi } from '../data/catalog.api';
             </dl>
           }
 
+          <form class="flex flex-col gap-3" (submit)="addToCart($event, detail.name)">
+            <app-field
+              label="Quantity"
+              i18n-label="@@item.quantity.label"
+              [error]="quantityError()"
+            >
+              <input
+                type="number"
+                step="any"
+                inputmode="decimal"
+                [value]="quantity()"
+                (input)="onQuantityInput($event)"
+                (change)="onQuantityCommitted($event)"
+                data-testid="item-quantity"
+                class="w-32 rounded-md border border-slate-300 px-3 py-2 text-base sm:text-sm"
+              />
+            </app-field>
+
+            <div>
+              <button
+                yob-button
+                type="submit"
+                [loading]="cart.isAdding()"
+                [disabled]="!isQuantityValid()"
+                data-testid="add-to-cart"
+                i18n="@@item.addToCart"
+              >
+                Add to cart
+              </button>
+            </div>
+
+            @if (addedMessage()) {
+              <div data-testid="add-to-cart-success">
+                <app-alert tone="success">
+                  <span i18n="@@item.added">Added to your cart.</span>
+                  <a routerLink="/cart" class="underline underline-offset-4" i18n="@@item.viewCart"
+                    >View cart</a
+                  >
+                </app-alert>
+              </div>
+            }
+
+            @if (addErrorMessage(); as message) {
+              <div data-testid="add-to-cart-error">
+                <app-alert tone="error">{{ message }}</app-alert>
+              </div>
+            }
+          </form>
+
           @if (detail.available_rules.length > 0) {
             <section data-testid="item-offers">
               <h2 class="text-sm font-semibold" i18n="@@item.offers.heading">Available offers</h2>
@@ -181,10 +249,105 @@ export class ItemPage {
   /** Fallback when the backend supplies an amount but no label for it. */
   protected readonly defaultTaxLabel = $localize`:@@item.taxLabelFallback:Tax`;
 
+  protected readonly cart = inject(CartStore);
+
+  /** Live value, updated per keystroke. Drives validation and the add payload. */
+  protected readonly quantity = signal(1);
+
+  /**
+   * The quantity the backend has been asked to price for.
+   *
+   * Updated on `change` (blur/Enter) rather than `input`, which is what keeps
+   * repricing to one request per decision instead of one per digit.
+   */
+  private readonly pricedQuantity = signal(1);
+
+  protected readonly isQuantityValid = computed(() => isPositiveFinite(this.quantity()));
+
+  protected readonly quantityError = computed(() =>
+    this.quantityTouched() && !this.isQuantityValid()
+      ? $localize`:@@item.quantity.invalid:Enter a quantity greater than zero.`
+      : '',
+  );
+
+  private readonly quantityTouched = signal(false);
+  private readonly addedSignal = signal(false);
+
+  protected readonly addedMessage = this.addedSignal.asReadonly();
+
   protected readonly item = rxResource({
-    params: () => ({ slug: this.itemSlug() }),
-    stream: ({ params }) => this.api.getItem(params.slug),
+    params: () => ({ slug: this.itemSlug(), qty: this.pricedQuantity() }),
+    stream: ({ params }) => this.api.getItem(params.slug, params.qty),
   });
+
+  /**
+   * The item currently on screen.
+   *
+   * A resource clears its value while reloading, which for a quantity change would
+   * blank the page and unmount the very control the user is operating - losing their
+   * focus mid-edit. So the last loaded item is retained *for the same slug* and the
+   * reprice is shown inline instead.
+   *
+   * Keyed on the slug so it never leaks across items: navigating to a different item
+   * drops the previous one immediately rather than showing it under the new URL.
+   */
+  protected readonly detail = linkedSignal<
+    { slug: string; value: ItemDetailDto | undefined },
+    ItemDetailDto | undefined
+  >({
+    source: () => ({ slug: this.itemSlug(), value: this.item.value() }),
+    computation: (next, previous) =>
+      next.value ?? (previous?.source.slug === next.slug ? previous.value : undefined),
+  });
+
+  /** A reprice in flight over content that is already on screen. */
+  protected readonly isRepricing = computed(
+    () => this.item.isLoading() && this.detail() !== undefined,
+  );
+
+  protected readonly addErrorMessage = computed(() => {
+    const error = this.cart.addError();
+    if (error === null) {
+      return null;
+    }
+    switch (error.code) {
+      case 'quantity_invalid':
+        return $localize`:@@item.add.quantityInvalid:Enter a quantity greater than zero.`;
+      case 'item_not_found':
+        return $localize`:@@item.add.itemNotFound:This item is no longer available.`;
+      default:
+        return $localize`:@@item.add.failed:We could not add this item to your cart. Please try again.`;
+    }
+  });
+
+  protected onQuantityInput(event: Event): void {
+    this.quantityTouched.set(true);
+    this.addedSignal.set(false);
+    this.quantity.set(readNumber(event));
+  }
+
+  /** Reprice only for a quantity the backend would accept. */
+  protected onQuantityCommitted(event: Event): void {
+    const value = readNumber(event);
+    this.quantity.set(value);
+    if (isPositiveFinite(value)) {
+      this.pricedQuantity.set(value);
+    }
+  }
+
+  protected addToCart(event: Event, itemCode: string): void {
+    event.preventDefault();
+    this.quantityTouched.set(true);
+    this.addedSignal.set(false);
+
+    if (!this.isQuantityValid()) {
+      return;
+    }
+
+    // The cart store drops a second call while one is in flight, so a double click
+    // cannot produce two adds.
+    this.cart.add(itemCode, this.quantity()).subscribe(() => this.addedSignal.set(true));
+  }
 
   /**
    * A missing item is a destination, not a fault.
@@ -209,4 +372,14 @@ export class ItemPage {
     const detail = this.item.value();
     return detail !== undefined && (detail.tax_amount !== 0 || detail.tax_label !== null);
   });
+}
+
+/** The verified backend rule, and nothing more: a finite number greater than zero. */
+function isPositiveFinite(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
+
+/** `NaN` for a blank or unparseable field, which `isPositiveFinite` then rejects. */
+function readNumber(event: Event): number {
+  return Number((event.target as HTMLInputElement).value);
 }
