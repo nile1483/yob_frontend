@@ -1,0 +1,163 @@
+import { Service, computed, inject, signal } from '@angular/core';
+import { type Observable, catchError, map, of, tap, throwError } from 'rxjs';
+
+import { AuthApi } from '../auth/auth.api';
+import type { SessionContextDto, PasswordCredentials } from '../auth/auth.types';
+import { CsrfTokenStore } from '../network/csrf-token.store';
+import { YOB_CLIENT_ERROR_CODES, YobApiError, normalizeYobFailure } from '../network/yob-api-error';
+import type { SessionContext, SessionStatus } from './session.types';
+
+/**
+ * The single source of truth for who is signed in.
+ *
+ * Holds the session context in memory and nothing else. Specifically it does NOT
+ * touch localStorage or sessionStorage, and never reads or writes `sid`: that cookie
+ * is HttpOnly and host-scoped, so the browser owns it entirely. After a refresh the
+ * state is rebuilt by asking the backend, which is the only authority that can
+ * actually answer the question.
+ *
+ * The CSRF token is routed straight to `CsrfTokenStore` and is never held here - see
+ * `SessionContext`.
+ */
+@Service()
+export class SessionStore {
+  private readonly auth = inject(AuthApi);
+  private readonly csrf = inject(CsrfTokenStore);
+
+  private readonly statusSignal = signal<SessionStatus>('unknown');
+  private readonly contextSignal = signal<SessionContext | null>(null);
+  private readonly restoreErrorSignal = signal<YobApiError | null>(null);
+
+  readonly status = this.statusSignal.asReadonly();
+
+  /** The authenticated context, or `null` for guest/unknown. */
+  readonly context = this.contextSignal.asReadonly();
+
+  /**
+   * Why the last restore failed unexpectedly.
+   *
+   * Only set when the outcome was neither `authenticated` nor a legitimate `guest`.
+   * A confirmed guest is not an error and leaves this `null`.
+   */
+  readonly restoreError = this.restoreErrorSignal.asReadonly();
+
+  readonly isAuthenticated = computed(() => this.statusSignal() === 'authenticated');
+  readonly isGuest = computed(() => this.statusSignal() === 'guest');
+
+  /** Whether the session question has been answered either way. */
+  readonly isResolved = computed(() => this.isAuthenticated() || this.isGuest());
+
+  /** The signed-in user, or `null`. Derived - never a second copy of the truth. */
+  readonly user = computed(() => this.contextSignal()?.user ?? null);
+
+  /** The business profile this session acts as, for example a Customer. */
+  readonly profileName = computed(() => this.contextSignal()?.context.profile_name ?? null);
+
+  /**
+   * Ask the backend who we are. Safe to call on boot and after a refresh.
+   *
+   * Never errors its stream. It runs inside the app initializer, where a thrown error
+   * would break bootstrap, so an unexpected failure is surfaced as state
+   * (`status === 'unknown'` plus `restoreError`) rather than as a thrown value. That
+   * is a deliberate exception to the usual "do not swallow failures" rule, and it is
+   * why the resolved status is returned to the caller.
+   *
+   * Only `client_session_required` - the normalised form of Frappe's raw 403 for an
+   * unauthenticated call - counts as guest. A 500, a network outage or an
+   * `application_access_denied` must stay distinguishable: treating those as "not
+   * signed in" would silently sign users out whenever the backend hiccuped.
+   */
+  restore(): Observable<SessionStatus> {
+    this.statusSignal.set('restoring');
+    this.restoreErrorSignal.set(null);
+
+    return this.auth.getSessionContext().pipe(
+      tap((response) => this.establish(response.data)),
+      map((): SessionStatus => 'authenticated'),
+      catchError((failure: unknown) => {
+        const error = normalizeYobFailure(failure);
+
+        if (error.code === YOB_CLIENT_ERROR_CODES.sessionRequired) {
+          this.becomeGuest();
+          return of<SessionStatus>('guest');
+        }
+
+        this.clearContext();
+        this.statusSignal.set('unknown');
+        this.restoreErrorSignal.set(error);
+        return of<SessionStatus>('unknown');
+      }),
+    );
+  }
+
+  /**
+   * Sign in with a username and password.
+   *
+   * The login payload is the same shape `get_session_context` returns, so the session
+   * is established directly from it - no second round trip, and no invented fields.
+   * Frappe's own top-level `home_page` and `full_name` keys are ignored; the network
+   * layer never surfaces them.
+   *
+   * Failures propagate unchanged so the caller can distinguish `invalid_credentials`
+   * (401) from `rate_limit_exceeded` (429) from `application_access_denied` (403).
+   * A failed attempt never marks the session authenticated.
+   */
+  signInWithPassword(credentials: PasswordCredentials): Observable<SessionContext> {
+    return this.auth
+      .loginWithPassword(credentials)
+      .pipe(map((response) => this.establish(response.data)));
+  }
+
+  /**
+   * Sign out.
+   *
+   * If the server session has already gone (`client_session_required`), the local
+   * state still becomes guest: the user asked to leave and the session is provably
+   * gone, so refusing would trap them in a dead authenticated state.
+   *
+   * Any other failure - 500, offline, a stale CSRF token - propagates and leaves the
+   * local state untouched. Clearing it there would tell the user they are signed out
+   * while their server session is still alive, which is worse than a visible error
+   * they can retry.
+   */
+  signOut(): Observable<void> {
+    return this.auth.logout().pipe(
+      map(() => undefined),
+      tap(() => this.becomeGuest()),
+      catchError((failure: unknown) => {
+        const error = normalizeYobFailure(failure);
+
+        if (error.code === YOB_CLIENT_ERROR_CODES.sessionRequired) {
+          this.becomeGuest();
+          return of(undefined);
+        }
+
+        return throwError(() => error);
+      }),
+    );
+  }
+
+  /** Adopt an authenticated payload, routing the CSRF token to its own store. */
+  private establish(dto: SessionContextDto): SessionContext {
+    const { csrf_token, ...context } = dto;
+
+    this.csrf.set(csrf_token);
+    this.contextSignal.set(context);
+    this.restoreErrorSignal.set(null);
+    this.statusSignal.set('authenticated');
+
+    return context;
+  }
+
+  /** Confirmed no session: drop every trace of the previous one. */
+  private becomeGuest(): void {
+    this.clearContext();
+    this.restoreErrorSignal.set(null);
+    this.statusSignal.set('guest');
+  }
+
+  private clearContext(): void {
+    this.csrf.clear();
+    this.contextSignal.set(null);
+  }
+}

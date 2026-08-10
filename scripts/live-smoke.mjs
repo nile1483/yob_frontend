@@ -101,6 +101,13 @@ console.log('\n== 3. Raw Frappe 403 PermissionError (no session) ==');
   check('body really does contain a traceback the client must discard', typeof r.json?.exc === 'string' && r.json.exc.includes('Traceback'));
 }
 
+console.log('\n== 3b. Guest session restore (SessionStore.restore before sign-in) ==');
+{
+  const r = await call('yob_auth.api.auth.get_session_context', { query: { application: APP } });
+  const c = classify(r.status, r.json, r.text);
+  check('guest get_session_context -> client_session_required (store maps to guest)', r.status === 403 && c.code === 'client_session_required', `${r.status} ${JSON.stringify(c)}`);
+}
+
 console.log('\n== 4. Success envelope: data + notice + meta ==');
 const loginRes = await call('yob_auth.api.auth.login_with_password', {
   verb: 'POST',
@@ -160,6 +167,33 @@ console.log('\n== 6. Non-JSON edge failure (421) ==');
   try { json = JSON.parse(text); } catch { /* expected */ }
   const c = classify(res.status, json, text);
   check('edge 421 with a non-JSON body -> client_unreadable_response', res.status === 421 && json === null && c.code === 'client_unreadable_response', `status=${res.status}`);
+}
+
+console.log('\n== 7. Session lifecycle (Phase 3) ==');
+{
+  // Restore with a live session: the exact call SessionStore.restore() makes.
+  const r = await call('yob_auth.api.auth.get_session_context', { query: { application: APP }, headers: auth });
+  const env = unwrap(r.json);
+  check('authenticated get_session_context 200', r.status === 200, `status=${r.status}`);
+  check('authentication_method is session', env?.data?.authentication_method === 'session');
+  check('same payload shape as login (user + context + csrf_token)', typeof env?.data?.user?.name === 'string' && typeof env?.data?.context?.profile_name === 'string' && typeof env?.data?.csrf_token === 'string');
+  check('application echoed back matches the configured code', env?.data?.context?.application === APP);
+  check('roles/company withheld by the backend, so nothing can gate on them', env?.data?.context?.roles === undefined && env?.data?.context?.company === undefined);
+  check('no notice on this endpoint -> notice must stay optional', env?.notice === undefined);
+}
+{
+  // Sign out using the CSRF token exactly as yobCsrfInterceptor would send it.
+  const r = await call('yob_auth.api.auth.logout', { verb: 'POST', body: {}, headers: { ...auth, 'X-Frappe-CSRF-Token': csrf } });
+  const env = unwrap(r.json);
+  check('logout 200 with the CSRF header', r.status === 200, `status=${r.status} ${r.text.slice(0, 160)}`);
+  check('logout returns authenticated:false', env?.data?.authenticated === false);
+  check('logout notice matches the source-verified text', env?.notice === 'Logout successful.');
+}
+{
+  // After sign-out the same sid must no longer resolve: restore -> guest again.
+  const r = await call('yob_auth.api.auth.get_session_context', { query: { application: APP }, headers: auth });
+  const c = classify(r.status, r.json, r.text);
+  check('post-logout restore -> client_session_required (guest)', r.status === 403 && c.code === 'client_session_required', `${r.status} ${JSON.stringify(c)}`);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

@@ -212,7 +212,24 @@ Do not persist the CSRF token. A missing or stale token answers
 `roles` and `company` are deliberately withheld by the backend. Authorization is
 re-decided server-side on every request, so the client must never gate on them.
 
-`logout` returns `{"data": {"authenticated": false}, "notice": "Logout successful."}`.
+`logout` returns `{"data": {"authenticated": false}, "notice": "Logout successful."}` -
+wire-verified in Phase 3. Afterwards the same `sid` no longer resolves, so
+`get_session_context` answers the raw Frappe 403 again and session restore correctly
+reports guest.
+
+### 5b. Session foundation (Phase 3)
+
+`foundation/auth/auth.api.ts` wraps these endpoints; `foundation/session/session.store.ts`
+owns the state. Behaviour worth knowing before building on it:
+
+- Restore maps **only** `client_session_required` to guest. Every other failure leaves
+  the status `unknown` with `restoreError` set, so a backend outage or an
+  `application_access_denied` can never masquerade as "signed out".
+- Login establishes the session from its own response - the payload is byte-identical
+  in shape to `get_session_context`, so a second round trip would be waste.
+- Logout clears local state on success and on `client_session_required`; any other
+  failure propagates with local state untouched.
+- Nothing is persisted. `provideAppInitializer` calls `restore()` before first render.
 
 ## 6. Central Network API - IMPLEMENTED (Phase 2)
 

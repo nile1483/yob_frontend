@@ -97,6 +97,40 @@ Captured from the running local stack. Detail in `docs/API-CONTRACT.md` and
 - Verified live through the edge with `scripts/live-smoke.mjs`: 23 checks, all shapes
   the normalizer depends on confirmed on the wire.
 
+## CONFIRMED - Session and auth foundation (Phase 3, 2026-08-10)
+
+- `foundation/auth` owns the `yob_auth` RPC calls; `foundation/session` owns state.
+  Neither contains UI. Sign-in pages arrive later in the access domain.
+- Session lifecycle is `unknown | restoring | guest | authenticated`, never a boolean.
+  An unexpected restore failure leaves `unknown` plus a populated `restoreError`, so
+  it stays distinguishable from a confirmed `guest`.
+- Only the normalised `client_session_required` counts as guest during restore. A 500,
+  an outage, or `application_access_denied` must not sign a user out - all three are
+  covered by tests.
+- The login payload is identical to `get_session_context`, so login establishes the
+  session directly with **no follow-up context call**. Wire-verified.
+- `logout` is now **wire-verified** (previously source-only): it returns
+  `{authenticated:false}` with notice `Logout successful.`, and the same `sid`
+  afterwards answers the raw Frappe 403, so restore correctly reports guest.
+- Nothing is persisted: no `sid`, no CSRF token, no user data in localStorage or
+  sessionStorage. State after a refresh comes solely from `get_session_context`,
+  called from `provideAppInitializer` before the first render.
+- CSRF lifecycle belongs to the session: the token goes to `CsrfTokenStore` on
+  login/restore and is cleared on guest/logout. `SessionContext` is
+  `Omit<SessionContextDto, 'csrf_token'>`, so keeping a second copy is a type error.
+- Logout on a non-session failure (500, offline, stale CSRF) propagates and leaves
+  local state intact, rather than claiming the user is signed out while the server
+  session is still alive.
+- OTP exists at API level only (`loginWithOtp` fully typed; `requestOtp` returns
+  `unknown` data because its success payload is still unverified). No OTP state or
+  workflow.
+
+### Deliberately deferred from Phase 3
+
+- **The secure route guard.** Build plan Phase 3 lists it, but it cannot be wired
+  without route branches (Phase 5) and a sign-in route to redirect to (Phase 7).
+  `SessionStore.isAuthenticated` / `isResolved` are the hooks it will use.
+
 ## ASSUMPTIONS TO VERIFY EARLY
 
 - Angular built-in localization is sufficient because there is no runtime language switch.

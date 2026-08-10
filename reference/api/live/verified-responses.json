@@ -103,13 +103,16 @@
     },
 
     "logout": {
-      "verified": "source",
+      "verified": "wire",
       "method": "POST",
       "path": "/api/method/yob_auth.api.auth.logout",
       "request": {},
       "status": 200,
       "response": { "message": { "data": { "authenticated": false }, "notice": "Logout successful." } },
-      "notes": ["Requires session + X-Frappe-CSRF-Token."]
+      "notes": [
+        "Requires session + X-Frappe-CSRF-Token.",
+        "Wire-verified in Phase 3. After a successful logout the same sid no longer resolves: get_session_context answers the raw Frappe 403 again, so session restore correctly reports guest."
+      ]
     },
 
     "request_otp": {
