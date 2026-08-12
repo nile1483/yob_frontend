@@ -7,6 +7,21 @@ import type { CartDocDto, CartPayloadDto } from '../contracts/cart.types';
 const GET_CART = 'yob_storefront.api.cart.get_cart';
 const ADD_TO_CART = 'yob_storefront.api.cart.add_to_cart';
 const REMOVE_FROM_CART = 'yob_storefront.api.cart.remove_from_cart';
+const SET_CART_CONTACT = 'yob_storefront.api.cart.set_cart_contact';
+const SET_CART_BILLING_ADDRESS = 'yob_storefront.api.cart.set_cart_billing_address';
+const SET_CART_SHIPPING_ADDRESS = 'yob_storefront.api.cart.set_cart_shipping_address';
+
+/**
+ * What a `set_cart_*` endpoint actually replies with.
+ *
+ * An acknowledgement of the field it changed - **not** a cart. Wire-verified
+ * 2026-08-12; see the note on the setter methods below.
+ */
+export interface CartSelectionAckDto {
+  readonly contact_person?: string;
+  readonly billing_address?: string;
+  readonly shipping_address?: string;
+}
 
 /**
  * Cart network access.
@@ -70,6 +85,64 @@ export class CartApi {
   removeFromCart(itemCode: string): Observable<CartDocDto> {
     return this.api
       .post<CartDocDto>(REMOVE_FROM_CART, { item_code: itemCode })
+      .pipe(map((response) => response.data));
+  }
+
+  /**
+   * Set the cart's contact person.
+   *
+   * ## These setters do not return the cart
+   *
+   * Wire-verified 2026-08-12, and worth stating plainly because the opposite is easy
+   * to assume: `set_cart_contact` answers `{"contact_person": "…"}` and nothing else.
+   * Only `get_cart` calls `build_cart_response`, so only `get_cart` carries totals,
+   * lines, `is_shippable`, the resolved blocks and reconciliation.
+   *
+   * A selection can therefore reprice the cart without the reply showing it, which is
+   * why every setter is followed by the canonical read - the same rule as
+   * `addToCart`/`removeFromCart`, for the same reason.
+   *
+   * `contactName` is the Frappe Contact record `name`, never a display label.
+   *
+   * Wire-verified failures, both 422 with `field: "contact_person"`:
+   * `contact_required` when blank, `contact_invalid` when the record is not the
+   * customer's. A record that does not exist and one belonging to someone else answer
+   * identically - the backend refuses to confirm existence, and the UI must not undo
+   * that.
+   */
+  setContact(contactName: string): Observable<CartSelectionAckDto> {
+    return this.api
+      .post<CartSelectionAckDto>(SET_CART_CONTACT, { contact_person: contactName })
+      .pipe(map((response) => response.data));
+  }
+
+  /**
+   * Set the cart's billing address.
+   *
+   * The reply also echoes `shipping_address`, because the backend assigns billing to
+   * shipping when shipping is empty. That is the server's behaviour, wire-verified -
+   * the frontend neither predicts nor imitates it, it just re-reads the cart and shows
+   * what came back.
+   *
+   * Failures: 422 `billing_address_required` / `billing_address_invalid`.
+   */
+  setBillingAddress(addressName: string): Observable<CartSelectionAckDto> {
+    return this.api
+      .post<CartSelectionAckDto>(SET_CART_BILLING_ADDRESS, { billing_address: addressName })
+      .pipe(map((response) => response.data));
+  }
+
+  /**
+   * Set the cart's shipping address.
+   *
+   * Refused with 422 `shipping_not_applicable` when the cart is not shippable - the
+   * one failure here with no `field`, since no input is at fault.
+   *
+   * Otherwise: 422 `shipping_address_required` / `shipping_address_invalid`.
+   */
+  setShippingAddress(addressName: string): Observable<CartSelectionAckDto> {
+    return this.api
+      .post<CartSelectionAckDto>(SET_CART_SHIPPING_ADDRESS, { shipping_address: addressName })
       .pipe(map((response) => response.data));
   }
 }

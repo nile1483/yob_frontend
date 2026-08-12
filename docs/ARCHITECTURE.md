@@ -1042,6 +1042,34 @@ all reachable by making the mock behave normally - do not sign in, send the wron
 password, return an empty fixture - and reaching them that way tests the contract
 rather than testing the switch. Latency applies to failures as well as successes.
 
+## 22. Checkout (Phase 11)
+
+The state split worth copying into future domains:
+
+```text
+CartStore        what is SELECTED   contact, billing, shipping, is_shippable
+page rxResource  what may be CHOSEN the Address and Contact master lists
+```
+
+A section count is not a reason for a store. The question is whether any state has a
+second consumer. The selections do - the cart page and item detail already read the
+cart - so they live in `CartStore`. The master lists do not, so they are page-local and
+disappear with the page, exactly as Catalog's categories do.
+
+Two consequences fall out of that split:
+
+- Checkout never stores a chosen value, so it cannot drift from the cart. The radios
+  render `CartStore` directly, and a click reverts them to it before requesting a
+  change - a click is a request, not a result.
+- Every `set_cart_*` is followed by `get_cart`, because the setters return only an
+  acknowledgement (see `docs/API-CONTRACT.md`). A selection can reprice the order, so
+  the canonical read is the only thing worth adopting.
+
+`AddressBookApi` serves addresses and contacts together: one backend module, one
+consumer, and a contact with no address is not a separate concern. It sits in the
+checkout domain because checkout is its only caller today; an account phase that
+manages the address book should move it rather than import across domains.
+
 ## 21. Architecture Success Criteria
 
 The architecture is successful when:

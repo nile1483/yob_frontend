@@ -76,6 +76,11 @@ export const routes: Routes = [
         loadChildren: () => import('./domains/cart/cart.routes').then((m) => m.CART_ROUTES),
       },
       {
+        path: 'checkout',
+        loadChildren: () =>
+          import('./domains/checkout/checkout.routes').then((m) => m.CHECKOUT_ROUTES),
+      },
+      {
         path: 'account',
         loadChildren: () => import('./domains/account/account.routes').then((m) => m.ACCOUNT_ROUTES),
       },

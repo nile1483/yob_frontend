@@ -32,8 +32,7 @@ import type {
 const NULL_MEDIA = { thumbnail: null, banner: null } as const;
 
 /** Deliberately long, to prove a name cannot widen a grid column off-screen. */
-const LONG_CATEGORY_NAME =
-  'Industrial Fasteners, Fixings and Structural Connection Hardware';
+const LONG_CATEGORY_NAME = 'Industrial Fasteners, Fixings and Structural Connection Hardware';
 
 export const MOCK_TOP_LEVEL_CATEGORIES: readonly CategoryListItemDto[] = [
   {
@@ -164,8 +163,7 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
   {
     // Long name and a bulk UOM, to stress the card layout.
     name: 'YOB-ANCHOR-HD-12',
-    item_name:
-      'Heavy Duty Through Bolt Anchor M12 x 120mm, Hot Dip Galvanised, Boxed Quantity',
+    item_name: 'Heavy Duty Through Bolt Anchor M12 x 120mm, Hot Dip Galvanised, Boxed Quantity',
     slug: 'through-bolt-anchor-m12-120',
     stock_uom: 'Box',
     image: null,

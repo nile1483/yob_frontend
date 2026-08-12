@@ -25,7 +25,21 @@ export type MockScenario =
   /** get_cart reports repriced lines, so the reconciliation notice can be seen. */
   | 'cart-repriced'
   /** get_cart withdraws the cart's lines and reports them as removed. */
-  | 'cart-item-removed';
+  | 'cart-item-removed'
+  /**
+   * The cart reports `is_shippable: 0`.
+   *
+   * The backend derives shippability from `is_stock_item`, and every catalog fixture
+   * is a physical product, so a cart of services or downloads is not reachable by
+   * ordinary means. This stands in for one.
+   */
+  | 'cart-not-shippable'
+  /**
+   * The address and contact lists include a record the setters refuse.
+   *
+   * Stands in for a record deleted after this page read the list.
+   */
+  | 'checkout-stale-records';
 
 /**
  * Runtime knobs for the mock API.
@@ -66,7 +80,9 @@ export class MockApiScenario {
       scenario === 'empty' ||
       scenario === 'server-error' ||
       scenario === 'cart-repriced' ||
-      scenario === 'cart-item-removed'
+      scenario === 'cart-item-removed' ||
+      scenario === 'cart-not-shippable' ||
+      scenario === 'checkout-stale-records'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

@@ -1,4 +1,5 @@
 import type { MockHandlerRegistry } from '../core/mock-handler';
+import { ADDRESS_HANDLERS } from './address.handlers';
 import { AUTH_HANDLERS } from './auth.handlers';
 import { CART_HANDLERS } from './cart.handlers';
 import { CATALOG_HANDLERS } from './catalog.handlers';
@@ -12,6 +13,7 @@ import { CATALOG_HANDLERS } from './catalog.handlers';
  * real backend, so a half-mocked session cannot silently mix mock and live data.
  */
 export const MOCK_HANDLERS: MockHandlerRegistry = {
+  ...ADDRESS_HANDLERS,
   ...AUTH_HANDLERS,
   ...CATALOG_HANDLERS,
   ...CART_HANDLERS,

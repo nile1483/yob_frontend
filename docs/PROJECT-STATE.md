@@ -252,6 +252,85 @@ per `item_code`, Add sets quantity, removal by `item_code`, whole-cart expiry. N
 the deferred behaviour is implemented in Angular or in the mock, and it must not be
 until the backend ships it.
 
+## CONFIRMED - Checkout details (Phase 11, 2026-08-12)
+
+- **Checkout loads three things at once**: `cart.get_cart`, `address.get_addresses`,
+  `address.get_contacts`. None waits for another and each section renders as its own
+  data arrives, so the order summary appears while the contact list is still loading.
+- **`CartStore` owns every current selection** - contact, billing, shipping and
+  `is_shippable`. The page keeps no chosen value of its own, so there is one answer to
+  "which address is selected" and it is the server's. The Address and Contact *lists*
+  are page-local `rxResource`s: master data, one consumer, no second reader. There is
+  no `CheckoutStore`.
+- **The setters do NOT return the cart.** Wire-verified 2026-08-12, and the opposite of
+  what was assumed going in:
+
+  ```text
+  set_cart_contact          -> {"contact_person": "..."}
+  set_cart_billing_address  -> {"billing_address": "...", "shipping_address": "..."}
+  set_cart_shipping_address -> {"shipping_address": "..."}
+  ```
+
+  Only `get_cart` calls `build_cart_response`, so only it carries totals, lines,
+  `is_shippable`, the resolved blocks and reconciliation. Every setter is therefore
+  followed by the canonical read - the same rule as `add_to_cart`/`remove_from_cart`,
+  for the same reason. A selection can genuinely reprice the cart, so adopting the
+  acknowledgement would leave stale totals beside a new selection.
+- **Billing auto-fills shipping**, wire-verified: `cart.py` assigns billing to shipping
+  when shipping is empty, and echoes both. The frontend neither predicts nor imitates
+  this - it re-reads and shows what came back. "Same as billing" is derived by
+  comparing the two returned identifiers; there is no such flag in the contract.
+- **Shipping is shown only when the returned `cart.is_shippable` is non-zero**, re-read
+  from every cart response rather than stored. The backend recomputes it from
+  `is_stock_item` on each reprice.
+- **Billing and shipping share one Address list.** The backend keeps no separate
+  shipping list; `is_shipping_address` is a hint on the record, not a filter.
+- **Create then re-read then select.** `add_address`/`add_contact` return `201` with the
+  created record, but only its `name` is used: `add_contact`'s reply omits `full_name`,
+  which Frappe composes on save. The list read is the authoritative view. The section
+  that opened the form decides which setter runs.
+- **Refused records say nothing about ownership.** `contact_invalid` /
+  `*_address_invalid` become "no longer available - please select another", and the
+  relevant list is re-read. The backend already answers a deleted record and another
+  customer's record identically; the UI must not undo that.
+- **The radio shows the cart, not the click.** A click reverts the group to the cart's
+  value and *then* requests the change, so a refused or dropped selection cannot leave
+  the list showing something the cart does not have. Nothing is applied optimistically.
+- **Phase 11 stops before payment.** No `proceed_to_payment`, and deliberately no
+  button that looks like it starts one - readiness is reported as a status instead.
+  Readiness is UX only; Phase 12 re-validates server-side.
+- Address `display` from the backend is **HTML** and, on the real bench, embeds the
+  customer's GSTIN. It is never rendered; the structured fields are used instead.
+- The deferred Cart line-identity redesign below remains deferred and untouched.
+
+### Verification level (Phase 11)
+
+Wire-verified against the live bench: all three loads with real records, all three
+setters including their success payloads, `contact_required`, `contact_invalid`,
+`billing_address_invalid`, and the billing→shipping auto-fill. Also captured for the
+first time: a populated `get_cart` with resolved contact/address blocks, a cart line
+row, and `is_shippable`.
+
+`shipping_not_applicable` is wire-verified too: 422 with **no `field`**, since no input
+is at fault. It became reachable once the bench cart emptied and the backend recomputed
+`is_shippable` from 1 to 0 - which is itself live confirmation that shippability is
+derived per response and must never be cached client-side.
+
+Source-verified only: the `add_address` / `add_contact` success bodies. Creating real
+master data on a shared bench purely for evidence was out of scope, so both are
+reproduced from `address.py` and covered by deterministic mocks.
+
+Not verifiable in a real browser: a populated checkout. The Item doctype permission
+still blocks adding anything, so the real cart cannot be filled from the storefront.
+The populated path was captured at the API level (resolved blocks, preselected contact
+and addresses, a cart line) before the bench cart was emptied.
+
+**Warning about `scripts/live-smoke.mjs`**: it POSTs `clear_cart` with a valid CSRF
+token, which empties the *real* customer's cart. Harmless on a scratch bench, and it
+predates this phase, but it destroyed the one populated real cart available for
+verification. Worth making non-destructive before this script is ever pointed at a
+bench whose data matters.
+
 ## CONFIRMED - Cart removal, current contract (Phase 10.5, 2026-08-10)
 
 - `remove_from_cart(item_code)` implemented against the backend **as it exists today**.

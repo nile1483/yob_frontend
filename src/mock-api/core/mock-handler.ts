@@ -2,6 +2,7 @@ import type { HttpParams, HttpRequest } from '@angular/common/http';
 
 import type { MockScenario } from '../scenarios/mock-scenario';
 import type { MockReply } from './mock-reply';
+import type { MockServerAddressBook } from './mock-server-address-book';
 import type { MockServerCart } from './mock-server-cart';
 import type { MockServerSession } from './mock-server-session';
 
@@ -29,6 +30,8 @@ export interface MockContext {
   readonly session: MockServerSession;
   /** The mock server's cart. Owned by the session - logout empties it. */
   readonly cart: MockServerCart;
+  /** The customer's Address and Contact master records. */
+  readonly addressBook: MockServerAddressBook;
   /** The configured application code, so handlers never name one themselves. */
   readonly application: string;
   /**

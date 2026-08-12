@@ -107,7 +107,8 @@ export class CartLine {
    * hears a list of identical buttons with no way to tell which is which.
    */
   protected readonly removeLabel = computed(
-    () => $localize`:@@cart.line.remove.label:Remove ${this.line().item_name}:itemName: from your cart`,
+    () =>
+      $localize`:@@cart.line.remove.label:Remove ${this.line().item_name}:itemName: from your cart`,
   );
 
   /** Comparison of two backend values - never a derived discount. */

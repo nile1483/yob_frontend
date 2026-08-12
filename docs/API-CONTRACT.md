@@ -452,7 +452,26 @@ Notes: `address_type` defaults to `Billing`; `is_primary_address`,
 Field *names* are settled. Allowed *values* for `address_type`, `gst_category` and
 `tax_category` are still unverified - confirm those before shipping a write form.
 
-`get_addresses` and `get_contacts` contain useful success examples and should seed mock fixtures after the outer wrapper is verified.
+`get_addresses` and `get_contacts` are now **wire-verified** (2026-08-12) against real
+records. Both return an array in `data` with `meta.count` and a `notice`. Address rows
+carry `name, address_title, address_type, address_line1, address_line2, city, state,
+pincode, country, is_primary_address, is_shipping_address, display`; contact rows carry
+`name, full_name, salutation, first_name, last_name, gender, company_name, designation,
+email, phone`, with `email`/`phone` flattened from the first row of their child tables.
+
+`display` is the backend's pre-rendered address block and **contains HTML** - `<br>`
+tags, and on the verified bench the customer's GSTIN. Never bind it as markup.
+
+Frappe's own Address doctype requires `address_line1`, `city`, `country` and
+`address_type`; the storefront defaults `address_type` and derives `address_title` from
+the Customer link when absent. Because `add_address` wraps everything in a bare
+`except Exception`, a Frappe mandatory-field failure surfaces as a generic
+`500 internal_server_error` rather than a `validation_failed` naming the field - so a
+client that omits its own required-field checks gives the user nothing to act on.
+`add_contact` does check `first_name` itself and reports it properly.
+
+Both creates answer `201`. `add_contact`'s reply omits `full_name`, so re-read the list
+rather than adopting the created record for display.
 
 ### Cart - 9
 
@@ -480,6 +499,27 @@ set_cart_billing_address: billing_address?
 set_cart_contact: contact_person?
 set_cart_shipping_address: shipping_address?
 ```
+
+**The `set_cart_*` endpoints do not return a cart** - wire-verified 2026-08-12. Each
+answers with an acknowledgement of the field it changed, and nothing else:
+
+```text
+set_cart_contact          -> {"contact_person": "..."}
+set_cart_billing_address  -> {"billing_address": "...", "shipping_address": "..."}
+set_cart_shipping_address -> {"shipping_address": "..."}
+```
+
+Only `get_cart` runs `build_cart_response`, so a selection must be followed by a
+`get_cart` to learn the new totals, `is_shippable` and reconciliation. Two further
+verified behaviours: `set_cart_billing_address` copies billing into shipping when
+shipping is empty (which is why it echoes both), and `set_cart_shipping_address`
+answers `shipping_not_applicable` - with no `field` - when the cart is not shippable.
+
+Address and contact selection errors are 422 and name their field:
+`contact_required`, `contact_invalid`, `billing_address_required`,
+`billing_address_invalid`, `shipping_address_required`, `shipping_address_invalid`. A
+record that does not exist and one belonging to another customer answer **identically**;
+do not let the UI reveal the difference.
 
 The documented cart response includes server reconciliation fields:
 

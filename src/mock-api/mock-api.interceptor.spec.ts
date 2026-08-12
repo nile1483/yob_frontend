@@ -30,7 +30,9 @@ function configure(options: { mock: boolean }) {
   TestBed.configureTestingModule({
     providers: [
       provideHttpClient(
-        withInterceptors(options.mock ? [yobCsrfInterceptor, mockApiInterceptor] : [yobCsrfInterceptor]),
+        withInterceptors(
+          options.mock ? [yobCsrfInterceptor, mockApiInterceptor] : [yobCsrfInterceptor],
+        ),
       ),
       provideHttpClientTesting(),
       { provide: YOB_API_CONFIG, useValue: CONFIG },

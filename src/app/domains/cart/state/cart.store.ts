@@ -5,6 +5,9 @@ import { normalizeYobFailure, type YobApiError } from '../../../foundation/netwo
 import type { CartPayloadDto } from '../contracts/cart.types';
 import { CartApi } from '../data/cart.api';
 
+/** Which selection a pending `set_cart_*` call is changing. */
+export type CartSelectionKind = 'contact' | 'billing' | 'shipping';
+
 /**
  * The cart, as the server last reported it.
  *
@@ -38,6 +41,8 @@ export class CartStore {
   private readonly removeErrorSignal = signal<YobApiError | null>(null);
   private readonly removedSignal = signal(false);
   private readonly loadedSignal = signal(false);
+  private readonly selectingSignal = signal<CartSelectionKind | null>(null);
+  private readonly selectionErrorSignal = signal<YobApiError | null>(null);
 
   /** The latest server cart payload, or `null` before the first successful load. */
   readonly payload = this.payloadSignal.asReadonly();
@@ -60,6 +65,32 @@ export class CartStore {
 
   /** Authoritative currency for this cart, when the server has told us one. */
   readonly currency = computed(() => this.cart()?.currency ?? null);
+
+  /** Which selection is currently being changed, if any. */
+  readonly selecting = this.selectingSignal.asReadonly();
+  readonly selectionError = this.selectionErrorSignal.asReadonly();
+
+  /**
+   * The cart's current selections, as record identifiers.
+   *
+   * Read straight off the cart document. Checkout renders from these rather than
+   * keeping its own "chosen" value, so there is exactly one answer to what is selected
+   * and it is the server's.
+   */
+  readonly contactName = computed(() => this.cart()?.contact_person ?? null);
+  readonly billingAddressName = computed(() => this.cart()?.billing_address ?? null);
+  readonly shippingAddressName = computed(() => this.cart()?.shipping_address ?? null);
+
+  /**
+   * Whether this cart needs shipping, entirely as the server decided.
+   *
+   * The backend recomputes it from `is_stock_item` on every reprice, so it can change
+   * with any cart response - which is why this is a `computed` over the current
+   * payload and never a stored flag.
+   *
+   * A Frappe check field, so `0`/`1` rather than a boolean.
+   */
+  readonly isShippable = computed(() => (this.cart()?.is_shippable ?? 0) !== 0);
 
   /**
    * Item codes the backend dropped or repriced on the last read.
@@ -152,6 +183,81 @@ export class CartStore {
       }),
       finalize(() => this.removingSignal.set(null)),
     );
+  }
+
+  /**
+   * Choose the cart's contact person.
+   *
+   * @param contactName the Frappe Contact record `name`, never a display label.
+   */
+  setContact(contactName: string): Observable<CartPayloadDto | never> {
+    return this.select('contact', () => this.api.setContact(contactName));
+  }
+
+  /**
+   * Choose the cart's billing address.
+   *
+   * The backend may assign this address to shipping as well when shipping is empty.
+   * Nothing here anticipates that - the following read simply reports whatever the
+   * cart now holds.
+   */
+  setBillingAddress(addressName: string): Observable<CartPayloadDto | never> {
+    return this.select('billing', () => this.api.setBillingAddress(addressName));
+  }
+
+  /** Choose the cart's shipping address. */
+  setShippingAddress(addressName: string): Observable<CartPayloadDto | never> {
+    return this.select('shipping', () => this.api.setShippingAddress(addressName));
+  }
+
+  /**
+   * The shared shape of the three selection mutations.
+   *
+   * ## Why a second request
+   *
+   * The `set_cart_*` endpoints answer with an acknowledgement of the one field they
+   * changed - `{"contact_person": "…"}` - not a cart. Totals, `is_shippable`, the
+   * resolved blocks and reconciliation exist only on `get_cart`, and a selection can
+   * genuinely reprice the cart, so adopting the acknowledgement would leave the store
+   * holding stale totals next to a new selection. The mutation's reply is discarded
+   * and the canonical read is what the store ingests.
+   *
+   * ## Why one guard for all three
+   *
+   * Any selection in flight blocks the others, not just its own kind. Two concurrent
+   * selections would each finish with their own `get_cart`, and the store would adopt
+   * whichever landed last - so the visible cart could disagree with the visible
+   * selections. Serialising is cheap here; a buyer changes an address once.
+   *
+   * Nothing is applied optimistically: the radio reflects the cart, so a failed
+   * selection leaves the previous choice visibly intact with no rollback to write.
+   */
+  private select(
+    kind: CartSelectionKind,
+    mutate: () => Observable<unknown>,
+  ): Observable<CartPayloadDto | never> {
+    if (this.selectingSignal() !== null) {
+      return EMPTY;
+    }
+
+    this.selectingSignal.set(kind);
+    this.selectionErrorSignal.set(null);
+    this.removedSignal.set(false);
+
+    return mutate().pipe(
+      switchMap(() => this.api.getCart()),
+      tap((payload) => this.ingest(payload)),
+      catchError((failure: unknown) => {
+        this.selectionErrorSignal.set(normalizeYobFailure(failure));
+        return EMPTY;
+      }),
+      finalize(() => this.selectingSignal.set(null)),
+    );
+  }
+
+  /** Discard a selection failure once the user has been given a way forward. */
+  clearSelectionError(): void {
+    this.selectionErrorSignal.set(null);
   }
 
   /** Replace everything with what the server just said. */

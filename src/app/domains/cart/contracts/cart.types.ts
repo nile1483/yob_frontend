@@ -65,9 +65,35 @@ export interface CartDocDto {
   readonly items: readonly CartLineDto[];
 }
 
-/** Resolved contact/address blocks. Unused until the addresses phase. */
-export type CartContactDto = Readonly<Record<string, unknown>>;
-export type CartAddressDto = Readonly<Record<string, unknown>>;
+/**
+ * The cart's resolved contact block.
+ *
+ * A *summary* of the selected Contact, not the master record: `build_cart_response`
+ * returns four fields where `get_contacts` returns ten. Wire-verified 2026-08-12.
+ * Checkout renders the master record it already has in hand and uses this only to know
+ * what the server considers selected.
+ */
+export interface CartContactDto {
+  readonly name: string;
+  readonly full_name: string | null;
+  readonly email: string | null;
+  readonly phone: string | null;
+}
+
+/**
+ * The cart's resolved address block. Wire-verified 2026-08-12.
+ *
+ * Note `display` carries backend-rendered **HTML** and, on the verified bench, the
+ * customer's GSTIN. It is never bound as markup.
+ */
+export interface CartAddressDto {
+  readonly name: string;
+  readonly display: string | null;
+  readonly city: string | null;
+  readonly state: string | null;
+  readonly country: string | null;
+  readonly pincode: string | null;
+}
 
 /**
  * The `data` payload of `get_cart`.

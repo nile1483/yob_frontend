@@ -18,6 +18,8 @@ const getCart: MockHandler = (ctx) => {
     return guard;
   }
 
+  applyShippabilityScenario(ctx);
+
   const payload = ctx.cart.buildPayload({
     reprice: ctx.scenario === 'cart-repriced',
     withdraw: ctx.scenario === 'cart-item-removed',
@@ -119,6 +121,154 @@ const removeFromCart: MockHandler = (ctx) => {
   return mockSuccess(ctx.cart.buildPayload().cart, { notice: 'Item removed' });
 };
 
+/**
+ * Set the cart's contact person.
+ *
+ * ## The reply is an acknowledgement, not a cart
+ *
+ * Wire-verified: `{"contact_person": "…"}`. Only `get_cart` runs
+ * `build_cart_response`, so only `get_cart` carries totals, `is_shippable` and the
+ * resolved blocks. Reproducing that faithfully is what forces the client to re-read -
+ * a mock that returned the full cart here would let a client that ingested the
+ * acknowledgement pass its tests and then hold a two-field object in production.
+ *
+ * Ownership is checked against the mock customer's own records, so `contact_invalid`
+ * is reachable. A record that does not exist and one belonging to someone else answer
+ * identically, exactly as the backend does - the mock must not be more informative
+ * than the thing it stands in for.
+ */
+const setCartContact: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  const contact = readField(ctx, 'contact_person');
+
+  if (contact === '') {
+    return mockYobError('contact_required', 'Contact is required.', {
+      field: 'contact_person',
+      status: 422,
+    });
+  }
+
+  if (!ctx.addressBook.hasContact(contact)) {
+    return mockYobError(
+      'contact_invalid',
+      'The selected contact does not belong to this customer.',
+      {
+        field: 'contact_person',
+        status: 422,
+      },
+    );
+  }
+
+  ctx.cart.setContactPerson(contact);
+  return mockSuccess({ contact_person: contact }, { notice: 'Contact updated' });
+};
+
+/**
+ * Set the cart's billing address.
+ *
+ * Also adopts it for shipping when shipping is empty, and echoes both fields - the
+ * backend's own behaviour, wire-verified. The frontend does not predict this; it
+ * re-reads the cart and displays what came back.
+ */
+const setCartBillingAddress: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  const address = readField(ctx, 'billing_address');
+
+  if (address === '') {
+    return mockYobError('billing_address_required', 'Billing address is required.', {
+      field: 'billing_address',
+      status: 422,
+    });
+  }
+
+  if (!ctx.addressBook.hasAddress(address)) {
+    return mockYobError(
+      'billing_address_invalid',
+      'The selected billing address does not belong to this customer.',
+      { field: 'billing_address', status: 422 },
+    );
+  }
+
+  ctx.cart.setBillingAddress(address);
+
+  return mockSuccess(
+    {
+      billing_address: ctx.cart.currentBillingAddress(),
+      shipping_address: ctx.cart.currentShippingAddress(),
+    },
+    { notice: 'Billing address updated' },
+  );
+};
+
+/**
+ * Set the cart's shipping address.
+ *
+ * Refused with `shipping_not_applicable` when the cart does not need shipping. Note
+ * the ordering: the backend checks shippability *before* ownership, so a
+ * non-shippable cart reports that rather than validating the address - and this has
+ * no `field`, because no input is at fault.
+ */
+const setCartShippingAddress: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  applyShippabilityScenario(ctx);
+
+  const address = readField(ctx, 'shipping_address');
+
+  if (address === '') {
+    return mockYobError('shipping_address_required', 'Shipping address is required.', {
+      field: 'shipping_address',
+      status: 422,
+    });
+  }
+
+  if (!ctx.cart.isShippable()) {
+    return mockYobError('shipping_not_applicable', 'Shipping is not required for this cart.', {
+      status: 422,
+    });
+  }
+
+  if (!ctx.addressBook.hasAddress(address)) {
+    return mockYobError(
+      'shipping_address_invalid',
+      'The selected shipping address does not belong to this customer.',
+      { field: 'shipping_address', status: 422 },
+    );
+  }
+
+  ctx.cart.setShippingAddress(address);
+  return mockSuccess({ shipping_address: address }, { notice: 'Shipping address updated' });
+};
+
+/**
+ * Mirror the scenario onto the mock server's cart.
+ *
+ * Applied by every handler that depends on shippability rather than once at dispatch,
+ * so the setter refuses correctly even if it is called before any `get_cart` - the
+ * real backend reads the stored flag on each call and does not care about ordering.
+ */
+function applyShippabilityScenario(ctx: MockContext): void {
+  ctx.cart.setNotShippable(ctx.scenario === 'cart-not-shippable');
+}
+
+function readField(ctx: MockContext, key: string): string {
+  const body: unknown = ctx.request.body;
+  const record = isRecord(body) ? body : {};
+  const value = record[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 function requireSession(ctx: MockContext): MockReply | null {
   return ctx.session.isAuthenticated() ? null : mockPermissionError(ctx.rpcMethod);
 }
@@ -127,4 +277,7 @@ export const CART_HANDLERS: Readonly<Record<string, MockHandler>> = {
   'yob_storefront.api.cart.get_cart': getCart,
   'yob_storefront.api.cart.add_to_cart': addToCart,
   'yob_storefront.api.cart.remove_from_cart': removeFromCart,
+  'yob_storefront.api.cart.set_cart_contact': setCartContact,
+  'yob_storefront.api.cart.set_cart_billing_address': setCartBillingAddress,
+  'yob_storefront.api.cart.set_cart_shipping_address': setCartShippingAddress,
 };

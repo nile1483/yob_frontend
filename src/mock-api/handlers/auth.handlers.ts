@@ -79,8 +79,11 @@ const logout: MockHandler = (ctx) => {
   }
 
   ctx.session.signOut();
-  // The cart belongs to the session on the real backend, so it goes with it.
+  // The cart belongs to the session on the real backend, so it goes with it - and so
+  // does the address book, which is read per customer. Without this, a contact created
+  // in one session would still be listed after signing in as someone else.
   ctx.cart.reset();
+  ctx.addressBook.reset();
   return mockSuccess({ authenticated: false }, { notice: 'Logout successful.' });
 };
 

@@ -24,7 +24,10 @@ export class MockServerSession {
   readonly isAuthenticated = computed(() => this.context() !== null);
 
   /** Establish a session, as a successful login would. */
-  signIn(application: string, authenticationMethod: 'password' | 'session' | string): SessionContextDto {
+  signIn(
+    application: string,
+    authenticationMethod: 'password' | 'session' | string,
+  ): SessionContextDto {
     const context = mockSessionContext(application, authenticationMethod);
     this.context.set(context);
     return context;

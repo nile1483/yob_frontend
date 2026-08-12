@@ -1,7 +1,19 @@
-import { Service, signal } from '@angular/core';
+import { Service, inject, signal } from '@angular/core';
 
-import type { CartLineDto, CartPayloadDto } from '../../app/domains/cart/contracts/cart.types';
+import type {
+  CartAddressDto,
+  CartContactDto,
+  CartLineDto,
+  CartPayloadDto,
+} from '../../app/domains/cart/contracts/cart.types';
+import {
+  MOCK_ADDRESS_LOCAL,
+  MOCK_CONTACT_PRIMARY,
+  MOCK_HOME_STATE,
+  MOCK_INTERSTATE_SURCHARGE_RATE,
+} from '../fixtures/address-book.fixture';
 import { MOCK_ITEM_DETAILS_BY_SLUG } from '../fixtures/catalog.fixture';
+import { MockServerAddressBook } from './mock-server-address-book';
 
 /**
  * The mock API's server-side cart.
@@ -24,6 +36,28 @@ export class MockServerCart {
   private readonly repricedCodes = signal<ReadonlySet<string>>(new Set());
   /** Item codes the "server" has withdrawn. */
   private readonly withdrawnCodes = signal<ReadonlySet<string>>(new Set());
+
+  private readonly addressBook = inject(MockServerAddressBook);
+
+  /**
+   * The cart's current selections.
+   *
+   * Seeded, because a customer who has ordered before already has a contact and a
+   * billing address on their cart - and preselection is a behaviour worth testing
+   * rather than a state only reachable by first clicking something.
+   */
+  private readonly contactPerson = signal<string | null>(MOCK_CONTACT_PRIMARY);
+  private readonly billingAddress = signal<string | null>(MOCK_ADDRESS_LOCAL);
+  private readonly shippingAddress = signal<string | null>(MOCK_ADDRESS_LOCAL);
+
+  /**
+   * Forces `is_shippable` to 0.
+   *
+   * The real backend derives it from `is_stock_item` on the cart's items, and every
+   * catalog fixture here is a physical product, so a non-shippable cart is not
+   * reachable by ordinary means. This stands in for a cart of services or downloads.
+   */
+  private readonly notShippable = signal(false);
 
   readonly isEmpty = () => this.quantities().size === 0;
 
@@ -77,6 +111,68 @@ export class MockServerCart {
     this.quantities.set(new Map());
     this.repricedCodes.set(new Set());
     this.withdrawnCodes.set(new Set());
+    this.contactPerson.set(MOCK_CONTACT_PRIMARY);
+    this.billingAddress.set(MOCK_ADDRESS_LOCAL);
+    this.shippingAddress.set(MOCK_ADDRESS_LOCAL);
+    this.notShippable.set(false);
+  }
+
+  // ------------------------------------------------------------- selections
+
+  setContactPerson(name: string): void {
+    this.contactPerson.set(name);
+  }
+
+  /**
+   * Set the billing address, and adopt it for shipping when shipping is empty.
+   *
+   * Wire-verified backend behaviour, reproduced rather than invented:
+   * `set_cart_billing_address` does `if not cart.shipping_address: cart.shipping_address
+   * = billing_address`, and its reply echoes both fields for that reason.
+   */
+  setBillingAddress(name: string): void {
+    this.billingAddress.set(name);
+    if (this.shippingAddress() === null) {
+      this.shippingAddress.set(name);
+    }
+  }
+
+  setShippingAddress(name: string): void {
+    this.shippingAddress.set(name);
+  }
+
+  /**
+   * Leave the cart with no shipping address.
+   *
+   * The state a first-time cart is in, and the only one in which the backend copies
+   * billing across - so it has to be reachable for that behaviour to be testable.
+   */
+  clearShippingAddress(): void {
+    this.shippingAddress.set(null);
+  }
+
+  currentBillingAddress(): string | null {
+    return this.billingAddress();
+  }
+
+  currentShippingAddress(): string | null {
+    return this.shippingAddress();
+  }
+
+  /**
+   * Whether this cart needs shipping.
+   *
+   * An empty cart never does - the backend's `any(...)` over zero rows is false, and
+   * that detail matters because `set_cart_shipping_address` refuses with
+   * `shipping_not_applicable` in exactly that case.
+   */
+  isShippable(): boolean {
+    return !this.notShippable() && this.quantities().size > 0;
+  }
+
+  /** Force the non-shippable state. Used by the `cart-not-shippable` scenario. */
+  setNotShippable(value: boolean): void {
+    this.notShippable.set(value);
   }
 
   /**
@@ -134,7 +230,19 @@ export class MockServerCart {
     }
 
     const netTotal = round(lines.reduce((sum, line) => sum + line.amount, 0));
-    const taxTotal = round(lines.reduce((sum, line) => sum + line.tax_amount, 0));
+    const lineTax = round(lines.reduce((sum, line) => sum + line.tax_amount, 0));
+
+    // Destination-based surcharge: shipping out of the company's own state costs more.
+    // A stand-in for real tax rules, and the reason a selection can change the total -
+    // which is the behaviour the frontend has to get right. Nothing in the application
+    // knows this rule exists; it only reads the totals that come back.
+    const billingState = this.addressBook.findAddress(this.billingAddress() ?? '')?.state ?? null;
+    const surcharge =
+      billingState !== null && billingState !== MOCK_HOME_STATE
+        ? round(netTotal * MOCK_INTERSTATE_SURCHARGE_RATE)
+        : 0;
+
+    const taxTotal = round(lineTax + surcharge);
     const totalQuantity = round(lines.reduce((sum, line) => sum + line.quantity, 0));
     const totalDiscount = round(
       lines.reduce((sum, line) => sum + line.discount_amount * line.quantity, 0),
@@ -150,10 +258,10 @@ export class MockServerCart {
         selling_price_list: 'Standard Selling',
         status: 'Draft',
         order_type: 'Shopping Cart',
-        is_shippable: 0,
-        contact_person: null,
-        billing_address: null,
-        shipping_address: null,
+        is_shippable: this.isShippable() ? 1 : 0,
+        contact_person: this.contactPerson(),
+        billing_address: this.billingAddress(),
+        shipping_address: this.shippingAddress(),
         company_address: null,
         sales_order: null,
         checkout_by: 'mock.buyer@example.invalid',
@@ -167,12 +275,55 @@ export class MockServerCart {
         coupon_discount: 0,
         items: lines,
       },
-      contact: null,
-      billing_address: null,
-      shipping_address: null,
+      // Resolved blocks, as `build_cart_response` returns them: a summary of the
+      // selected record, not the master record itself.
+      contact: this.resolveContact(),
+      billing_address: this.resolveAddress(this.billingAddress()),
+      shipping_address: this.resolveAddress(this.shippingAddress()),
       cart_updated: removed.length > 0 || repriced.length > 0,
       removed_items: removed,
       price_updated_items: repriced,
+    };
+  }
+
+  /** Four fields, matching `build_cart_response` - not the ten `get_contacts` returns. */
+  private resolveContact(): CartContactDto | null {
+    const name = this.contactPerson();
+    if (name === null) {
+      return null;
+    }
+
+    const contact = this.addressBook.contacts().find((candidate) => candidate.name === name);
+    if (contact === undefined) {
+      return null;
+    }
+
+    return {
+      name: contact.name,
+      full_name: contact.full_name,
+      email: contact.email,
+      phone: contact.phone,
+    };
+  }
+
+  /** Six fields, again matching `build_cart_response` rather than the master record. */
+  private resolveAddress(name: string | null): CartAddressDto | null {
+    if (name === null) {
+      return null;
+    }
+
+    const address = this.addressBook.findAddress(name);
+    if (address === undefined) {
+      return null;
+    }
+
+    return {
+      name: address.name,
+      display: address.display,
+      city: address.city,
+      state: address.state,
+      country: address.country,
+      pincode: address.pincode,
     };
   }
 }
