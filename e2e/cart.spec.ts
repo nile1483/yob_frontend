@@ -79,6 +79,12 @@ test.describe('quantity on item detail', () => {
     await input.focus();
     await input.fill('');
     await page.keyboard.type('3');
+
+    // Clearing the field disables Add to cart, and typing re-enables it one change
+    // detection later. Tabbing into that gap lands on the body, because a disabled
+    // button is not focusable - so wait for the state a real user would be looking at
+    // before moving on. Racing it tested the scheduler, not the keyboard journey.
+    await expect(page.getByTestId('add-to-cart')).toBeEnabled();
     await page.keyboard.press('Tab');
 
     await expect(page.getByTestId('add-to-cart')).toBeFocused();

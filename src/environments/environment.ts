@@ -20,4 +20,5 @@ export const environment: AppEnvironment = {
   },
   httpInterceptors: [],
   devRoutes: [],
+  providers: [],
 };

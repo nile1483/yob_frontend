@@ -90,3 +90,42 @@ export interface AddContactRequest {
   readonly email: string;
   readonly phone: string;
 }
+
+/**
+ * What `checkout.proceed_to_payment` answers with.
+ *
+ * Reference 2.0.0, `payment.proceed_to_payment`, verification level **`test`** - the
+ * real endpoint executed in-process inside a rolled-back savepoint, so the envelope is
+ * genuine but no HTTP round trip happened. Treat it as accurate and unproven on the
+ * wire, which is why nothing here is inferred beyond the three documented fields.
+ *
+ * ## What is deliberately absent
+ *
+ * No amount, no currency, no cart id, no customer, no fingerprint, no obligation
+ * lifecycle state. The endpoint does not return them and the frontend has no business
+ * knowing them: a Payment Request is an immutable financial obligation issued by the
+ * server, and the browser is told only where to send the buyer next.
+ *
+ * There is also no `created` / `reused` flag, because the frontend must behave
+ * identically for `201` and `200`. Whether the server minted a new obligation, reused
+ * an open one, or rotated a credential on an existing one is its own business.
+ */
+export interface ProceedToPaymentData {
+  /** The Payment Request name, e.g. `ACC-PRQ-2026-00002`. Diagnostic only. */
+  readonly payment_request: string;
+  /**
+   * A **relative** SPA path, `/payment/<token>`.
+   *
+   * The navigation contract. It is used as given rather than rebuilt from `token`,
+   * so the server keeps ownership of where the buyer goes next.
+   */
+  readonly payment_url: string;
+  /**
+   * The checkout credential.
+   *
+   * A **bearer credential** that expires an hour after issue. It is present in the
+   * response because `payment_url` embeds it; it is never stored, logged, or copied
+   * into application state. See `docs/PROJECT-STATE.md`.
+   */
+  readonly token: string;
+}

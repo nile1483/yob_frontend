@@ -1,4 +1,5 @@
 import type { HttpInterceptorFn } from '@angular/common/http';
+import type { Provider } from '@angular/core';
 import type { Routes } from '@angular/router';
 
 import type { YobApiConfig } from '../app/foundation/network/yob-api.config';
@@ -58,4 +59,18 @@ export interface AppEnvironment {
    * rather than merely unreachable.
    */
   readonly devRoutes: Routes;
+
+  /**
+   * Extra providers this environment contributes.
+   *
+   * Empty in production, and for the same structural reason as `httpInterceptors`:
+   * `fileReplacements` swaps the whole file, and the production one imports nothing
+   * from `src/mock-api`, so a development substitute is absent from a production
+   * bundle rather than merely unused.
+   *
+   * Today this carries the deterministic Razorpay Checkout stand-in, so browser tests
+   * never load the real third-party widget. A runtime flag would have left the fake in
+   * the bundle, one mistake away from taking a real payment through a fake modal.
+   */
+  readonly providers: readonly Provider[];
 }

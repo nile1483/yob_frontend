@@ -2,12 +2,12 @@
   "openapi": "3.1.0",
   "info": {
     "title": "YOB Storefront & Auth API",
-    "version": "1.0.0",
-    "description": "Frappe RPC-style API. Every response is wrapped by Frappe in an outer `message` object; the inner body is the YOB envelope (`data`/`notice`/`meta` on success, `errors[]` on failure). There is no `success` boolean: branch on HTTP status, then `errors[0].code`.\n\nCSRF is Frappe's own. Non-GET requests need `X-Frappe-CSRF-Token`, obtained from login or `get_session_context`. Authenticated calls must traverse the edge proxy that sets `X-YOB-Original-Host`."
+    "version": "2.0.0",
+    "description": "Frappe RPC-style API. Every response is wrapped by Frappe in an outer `message` object; the inner body is the YOB envelope (`data` plus optional `notice`/`meta` on success, `errors[]` on failure). There is NO `success` boolean: branch on HTTP status, then on `errors[0].code`.\n\nVersion 2.0.0 reflects the Payment Lifecycle Phase 2B backend. The payment contract changed materially: a Payment Request is an immutable obligation, `get_checkout_data` serves both Cart-backed and Sales-Order-backed sources, and `process_payment` commits the cart to exactly one Draft Sales Order before contacting any provider.\n\nCSRF is Frappe's own: non-GET authenticated requests need `X-Frappe-CSRF-Token`. Authenticated calls must traverse the edge proxy that sets `X-YOB-Original-Host`. Guest payment endpoints are authorized by the checkout token or by Razorpay's HMAC signature and need no session."
   },
   "servers": [
     {
-      "url": "https://storefront.local"
+      "url": "http://storefront.local:8080"
     }
   ],
   "components": {
@@ -24,6 +24,9 @@
         "properties": {
           "message": {
             "type": "object",
+            "required": [
+              "data"
+            ],
             "properties": {
               "data": {},
               "notice": {
@@ -41,11 +44,18 @@
         "properties": {
           "message": {
             "type": "object",
+            "required": [
+              "errors"
+            ],
             "properties": {
               "errors": {
                 "type": "array",
                 "items": {
                   "type": "object",
+                  "required": [
+                    "code",
+                    "detail"
+                  ],
                   "properties": {
                     "code": {
                       "type": "string"
@@ -55,6 +65,9 @@
                     },
                     "field": {
                       "type": "string"
+                    },
+                    "details": {
+                      "type": "object"
                     }
                   }
                 }
@@ -143,6 +156,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -193,6 +207,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -250,6 +265,7 @@
           }
         },
         "requestBody": {
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -267,7 +283,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -303,6 +320,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -360,6 +378,7 @@
           }
         },
         "requestBody": {
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -377,7 +396,67 @@
             "required": true,
             "schema": {
               "type": "string"
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
+          }
+        ]
+      }
+    },
+    "/api/method/yob_storefront.api.address.add_contact": {
+      "post": {
+        "summary": "Create a Contact master linked to the authenticated Customer.",
+        "operationId": "yob_storefront.api.address.add_contact",
+        "tags": [
+          "yob_storefront"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
             }
+          },
+          "4XX": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "properties": {}
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Frappe-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -417,6 +496,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -438,7 +518,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -478,6 +559,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -499,7 +581,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -523,42 +606,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
-                },
-                "example": {
-                  "data": [
-                    {
-                      "address_line1": "Plot 42, GIDC Industrial Estate",
-                      "address_line2": null,
-                      "address_title": "YOB Demo Shipping",
-                      "address_type": "Shipping",
-                      "city": "Ahmedabad",
-                      "country": "India",
-                      "display": "Plot 42, GIDC Industrial Estate<br>Ahmedabad<br>\nGujarat, State Code: 24<br>PIN Code: 382445<br>India<br>\n",
-                      "is_primary_address": 0,
-                      "is_shipping_address": 0,
-                      "name": "YOB Demo Shipping-Shipping",
-                      "pincode": "382445",
-                      "state": "Gujarat"
-                    },
-                    {
-                      "address_line1": "Plot 42, GIDC Industrial Estate",
-                      "address_line2": null,
-                      "address_title": "YOB Demo Billing",
-                      "address_type": "Billing",
-                      "city": "Ahmedabad",
-                      "country": "India",
-                      "display": "Plot 42, GIDC Industrial Estate<br>Ahmedabad<br>\nGujarat, State Code: 24<br>PIN Code: 382445<br>India<br>\nGSTIN: 24ABCDE1234F1Z6<br>",
-                      "is_primary_address": 0,
-                      "is_shipping_address": 0,
-                      "name": "YOB Demo Billing-Billing",
-                      "pincode": "382445",
-                      "state": "Gujarat"
-                    }
-                  ],
-                  "meta": {
-                    "count": 2
-                  },
-                  "notice": "Addresses loaded"
                 }
               }
             }
@@ -642,38 +689,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
-                },
-                "example": {
-                  "data": [
-                    {
-                      "company_name": null,
-                      "designation": null,
-                      "email": "storefront@yob.test",
-                      "first_name": "Storefront",
-                      "full_name": "Storefront",
-                      "gender": null,
-                      "last_name": null,
-                      "name": "Storefront",
-                      "phone": null,
-                      "salutation": null
-                    },
-                    {
-                      "company_name": null,
-                      "designation": null,
-                      "email": "storefront@yob.test",
-                      "first_name": "Demo",
-                      "full_name": "Demo Buyer",
-                      "gender": null,
-                      "last_name": "Buyer",
-                      "name": "Demo Buyer-YOB Demo Buyer",
-                      "phone": "+91 98250 00000",
-                      "salutation": null
-                    }
-                  ],
-                  "meta": {
-                    "count": 2
-                  },
-                  "notice": "Contacts loaded"
                 }
               }
             }
@@ -727,6 +742,7 @@
           }
         },
         "requestBody": {
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -744,7 +760,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -784,6 +801,7 @@
           }
         },
         "requestBody": {
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -801,7 +819,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -841,6 +860,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -865,7 +885,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -905,6 +926,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -926,7 +948,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -966,6 +989,7 @@
           }
         },
         "requestBody": {
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -983,7 +1007,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -1007,43 +1032,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
-                },
-                "example": {
-                  "data": {
-                    "billing_address": null,
-                    "cart": {
-                      "billing_address": null,
-                      "checkout_by": "storefront@yob.test",
-                      "company": "Shayona Technology",
-                      "company_address": null,
-                      "contact_person": null,
-                      "coupon_code": null,
-                      "coupon_discount": 0.0,
-                      "currency": "INR",
-                      "customer": "YOB Demo Buyer",
-                      "grand_total": 0.0,
-                      "is_shippable": 0,
-                      "items": [],
-                      "name": "CART-2026-08-0002",
-                      "net_total": 0.0,
-                      "order_type": "Shopping Cart",
-                      "ordered_on": "2026-08-09 22:39:00.368533",
-                      "sales_order": null,
-                      "selling_price_list": "Standard Selling",
-                      "shipping_address": null,
-                      "status": "Draft",
-                      "tax_total": 0.0,
-                      "total_discount": 0.0,
-                      "total_quantity": 0,
-                      "user": "storefront@yob.test"
-                    },
-                    "cart_updated": false,
-                    "contact": null,
-                    "price_updated_items": [],
-                    "removed_items": [],
-                    "shipping_address": null
-                  },
-                  "notice": "Cart loaded"
                 }
               }
             }
@@ -1097,6 +1085,7 @@
           }
         },
         "requestBody": {
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -1114,7 +1103,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -1154,6 +1144,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -1175,7 +1166,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -1215,6 +1207,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -1236,7 +1229,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -1276,6 +1270,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -1297,7 +1292,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -1337,6 +1333,7 @@
           }
         },
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -1358,7 +1355,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -1382,25 +1380,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
-                },
-                "example": {
-                  "data": [
-                    {
-                      "banner": null,
-                      "category_name": "Industrial Supplies",
-                      "display_order": 1,
-                      "meta_description": null,
-                      "meta_title": null,
-                      "name": "Industrial Supplies",
-                      "parent_category": null,
-                      "slug": "industrial-supplies",
-                      "thumbnail": null
-                    }
-                  ],
-                  "meta": {
-                    "count": 1
-                  },
-                  "notice": "Categories loaded"
                 }
               }
             }
@@ -1447,60 +1426,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
-                },
-                "example": {
-                  "data": {
-                    "category": {
-                      "banner": null,
-                      "category_name": "Fasteners",
-                      "description": "Fasteners available to approved B2B buyers.",
-                      "is_group": 0,
-                      "meta_description": null,
-                      "meta_title": null,
-                      "name": "Fasteners",
-                      "parent_category": "Industrial Supplies",
-                      "slug": "fasteners",
-                      "thumbnail": null
-                    },
-                    "items": [
-                      {
-                        "base_price": 3.75,
-                        "discount_amount": 0.38,
-                        "discount_percentage": 10.0,
-                        "image": null,
-                        "item_name": "Hex Nut M10",
-                        "name": "YOB-NUT-M10",
-                        "net_amount": 33.7,
-                        "pricing_rule_label": "YOB Demo Bulk Discount",
-                        "rate": 3.37,
-                        "slug": "hex-nut-m10",
-                        "stock_uom": "Nos",
-                        "tax_amount": 0,
-                        "total_amount": 33.7
-                      },
-                      {
-                        "base_price": 12.5,
-                        "discount_amount": 1.25,
-                        "discount_percentage": 10.0,
-                        "image": null,
-                        "item_name": "Hex Bolt M10 x 50mm",
-                        "name": "YOB-BOLT-M10",
-                        "net_amount": 112.5,
-                        "pricing_rule_label": "YOB Demo Bulk Discount",
-                        "rate": 11.25,
-                        "slug": "hex-bolt-m10-50",
-                        "stock_uom": "Nos",
-                        "tax_amount": 0,
-                        "total_amount": 112.5
-                      }
-                    ],
-                    "subcategories": []
-                  },
-                  "meta": {
-                    "item_count": 2,
-                    "subcategory_count": 0
-                  },
-                  "notice": "Category loaded"
                 }
               }
             }
@@ -1511,15 +1436,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "errors": [
-                    {
-                      "code": "category_not_found",
-                      "detail": "Category not found.",
-                      "field": "slug"
-                    }
-                  ]
                 }
               }
             }
@@ -1564,17 +1480,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
-                },
-                "example": {
-                  "errors": [
-                    {
-                      "code": "internal_server_error",
-                      "detail": "Something went wrong. Please try again.",
-                      "details": {
-                        "correlation_id": "0246f04aea554d10"
-                      }
-                    }
-                  ]
                 }
               }
             }
@@ -1612,7 +1517,7 @@
     },
     "/api/method/yob_storefront.api.checkout.proceed_to_payment": {
       "post": {
-        "summary": "proceed_to_payment",
+        "summary": "Issue (or re-issue) the checkout credential for the buyer's open Cart.",
         "operationId": "yob_storefront.api.checkout.proceed_to_payment",
         "tags": [
           "yob_storefront"
@@ -1624,11 +1529,21 @@
         ],
         "responses": {
           "200": {
-            "description": "Success envelope",
+            "description": "Existing open obligation reused",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "message": {
+                    "data": {
+                      "payment_request": "ACC-PRQ-2026-00002",
+                      "payment_url": "/payment/<REDACTED>",
+                      "token": "<REDACTED>"
+                    },
+                    "notice": "Proceed to payment"
+                  }
                 }
               }
             }
@@ -1642,9 +1557,31 @@
                 }
               }
             }
+          },
+          "201": {
+            "description": "Success envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "message": {
+                    "data": {
+                      "payment_request": "ACC-PRQ-2026-00002",
+                      "payment_url": "/payment/<REDACTED>",
+                      "token": "<REDACTED>"
+                    },
+                    "notice": "Proceed to payment"
+                  }
+                }
+              }
+            }
           }
         },
+        "description": "- Authenticated. Requires the `sid` session cookie AND `X-Frappe-CSRF-Token`.\n- Must traverse the edge proxy that sets `X-YOB-Original-Host`; a direct origin call answers 403 application_access_denied.\n- No request body. The server derives everything from the session: the browser never sends amount, currency, cart id or any fingerprint.\n- 201 when a Payment Request was CREATED (first checkout, or a replacement because the cart changed). 200 when an existing open obligation was REUSED, with or without a rotated credential.\n- `payment_url` is a RELATIVE SPA path `/payment/<token>`; the public payment route must own that path.\n- The checkout credential expires 1 hour after issue.\n- A Payment Request's amount and currency are IMMUTABLE once issued. An unchanged cart reuses the same obligation and the same token; an expired credential rotates the token on the SAME obligation; a changed cart issues a REPLACEMENT obligation and revokes the old token immediately.\n- Precondition failures, 422 unless noted: cart_not_found (404), cart_empty, contact_required (field=contact_person), billing_address_required (field=billing_address), shipping_address_required (field=shipping_address, only when the cart is shippable).",
         "requestBody": {
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -1662,7 +1599,8 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Frappe CSRF token from login or get_session_context."
           }
         ]
       }
@@ -1686,22 +1624,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
-                },
-                "example": {
-                  "data": {
-                    "allow_guest_purchase": 0,
-                    "allowed_payment_modes": [],
-                    "company": "Shayona Technology",
-                    "default_currency": "INR",
-                    "default_price_list": "Standard Selling",
-                    "default_privacy_page": null,
-                    "default_terms_page": null,
-                    "default_warehouse": null,
-                    "store_domain": "storefront.test",
-                    "store_logo": null,
-                    "store_name": "YOB Demo Store"
-                  },
-                  "notice": "Store config loaded"
                 }
               }
             }
@@ -1749,15 +1671,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
-                },
-                "example": {
-                  "errors": [
-                    {
-                      "code": "order_not_found",
-                      "detail": "Order not found.",
-                      "field": "order_id"
-                    }
-                  ]
                 }
               }
             }
@@ -1794,21 +1707,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
-                },
-                "example": {
-                  "data": [
-                    {
-                      "delivery_date": "2026-08-16",
-                      "grand_total": 723.0,
-                      "name": "SAL-ORD-2026-00001",
-                      "status": "To Deliver and Bill",
-                      "transaction_date": "2026-08-09"
-                    }
-                  ],
-                  "meta": {
-                    "count": 1
-                  },
-                  "notice": "Orders fetched successfully"
                 }
               }
             }
@@ -1829,7 +1727,7 @@
     },
     "/api/method/yob_storefront.api.payment.get_checkout_data": {
       "get": {
-        "summary": "get_checkout_data",
+        "summary": "Render the guest payment page for one immutable obligation.",
         "operationId": "yob_storefront.api.payment.get_checkout_data",
         "tags": [
           "yob_storefront"
@@ -1842,6 +1740,113 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "message": {
+                    "data": {
+                      "amount": 135.0,
+                      "billing_address": {
+                        "city": "Ahmedabad",
+                        "country": "India",
+                        "display": "Plot 42, GIDC Industrial Estate<br>Ahmedabad<br>\nGujarat, State Code: 24<br>PIN Code: 382445<br>India<br>\nGSTIN: 24ABCDE1234F1Z6<br>",
+                        "name": "YOB Demo Billing-Billing",
+                        "pincode": "382445",
+                        "state": "Gujarat"
+                      },
+                      "cart": {
+                        "billing_address": "YOB Demo Billing-Billing",
+                        "checkout_by": null,
+                        "company": "Shayona Technology",
+                        "company_address": null,
+                        "contact_person": "Demo Buyer-YOB Demo Buyer",
+                        "coupon_code": null,
+                        "coupon_discount": 0.0,
+                        "currency": "INR",
+                        "customer": "YOB Demo Buyer",
+                        "grand_total": 135.0,
+                        "is_shippable": 1,
+                        "items": [
+                          {
+                            "amount": 135.0,
+                            "base_price": 12.5,
+                            "conversion_factor": 0.0,
+                            "discount_amount": 1.25,
+                            "discount_percentage": 10.0,
+                            "image": null,
+                            "item_code": "YOB-BOLT-M10",
+                            "item_expiry_date": null,
+                            "item_name": null,
+                            "item_slug": null,
+                            "line_discount": 15.0,
+                            "parent": "CART-2026-08-0002",
+                            "parentfield": "items",
+                            "parenttype": "Cart",
+                            "pricing_rule_apply_on": "Item Code",
+                            "pricing_rule_label": "YOB Demo Bulk Discount",
+                            "pricing_rules": "[\"PRLE-0001\"]",
+                            "quantity": 12.0,
+                            "rate": 11.25,
+                            "stock_uom": "Nos",
+                            "tax_amount": 0.0,
+                            "total_amount": 135.0,
+                            "uom": "Nos"
+                          }
+                        ],
+                        "name": "CART-2026-08-0002",
+                        "net_total": 135.0,
+                        "order_type": "Shopping Cart",
+                        "ordered_on": null,
+                        "sales_order": null,
+                        "selling_price_list": "Standard Selling",
+                        "shipping_address": "YOB Demo Shipping-Shipping",
+                        "status": "Draft",
+                        "tax_total": 0.0,
+                        "total_discount": 15.0,
+                        "total_quantity": 12,
+                        "user": "Administrator"
+                      },
+                      "cart_updated": false,
+                      "contact": {
+                        "email": "storefront@yob.test",
+                        "full_name": "Demo Buyer",
+                        "name": "Demo Buyer-YOB Demo Buyer",
+                        "phone": "+91 98250 00000"
+                      },
+                      "currency": "INR",
+                      "payment_methods": [
+                        {
+                          "description": "Pay Later demo payment method.",
+                          "display_order": 1,
+                          "icon": null,
+                          "method_code": "paylater",
+                          "name": "Pay Later",
+                          "payment_type": "Offline"
+                        },
+                        {
+                          "description": "Razorpay demo payment method.",
+                          "display_order": 2,
+                          "icon": null,
+                          "method_code": "razorpay",
+                          "name": "Razorpay",
+                          "payment_type": "Online"
+                        }
+                      ],
+                      "payment_request": "ACC-PRQ-2026-00002",
+                      "price_updated_items": [],
+                      "removed_items": [],
+                      "shipping_address": {
+                        "city": "Ahmedabad",
+                        "country": "India",
+                        "display": "Plot 42, GIDC Industrial Estate<br>Ahmedabad<br>\nGujarat, State Code: 24<br>PIN Code: 382445<br>India<br>\n",
+                        "name": "YOB Demo Shipping-Shipping",
+                        "pincode": "382445",
+                        "state": "Gujarat"
+                      },
+                      "source_doctype": "Cart",
+                      "source_name": "CART-2026-08-0002"
+                    },
+                    "notice": "Checkout data retrieved successfully"
+                  }
                 }
               }
             }
@@ -1852,20 +1857,32 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 },
                 "example": {
-                  "errors": [
-                    {
-                      "code": "checkout_token_invalid",
-                      "detail": "This checkout link is not valid.",
-                      "field": "token"
-                    }
-                  ]
+                  "message": {
+                    "errors": [
+                      {
+                        "code": "payment_request_stale",
+                        "detail": "Your cart has changed since this payment was started. Please return to the cart and continue again."
+                      }
+                    ]
+                  }
                 }
               }
             }
           }
         },
+        "description": "- PUBLIC (guest). Authorized solely by the unguessable checkout token.\n- Serves TWO source shapes. Branch on `data.source_doctype`.\n- Cart-backed (before payment initiation): source_doctype='Cart', with `cart`, `contact`, `billing_address`, `shipping_address` objects plus `cart_updated`, `removed_items`, `price_updated_items`.\n- Sales-Order-backed (after payment initiation committed the order): source_doctype='Sales Order', with a flat `items[]`, `order_status`, `docstatus`, and `billing_address`/`shipping_address` as NAME STRINGS rather than objects. This shape difference is deliberate and the SPA must handle both.\n- After the Payment Request becomes Sales-Order-backed the Cart is no longer payment truth. It is not read, compared or revalidated, and a later cart change cannot invalidate the committed payment.\n- `amount`/`currency` always come from the immutable Payment Request, in normal business units (e.g. 135.0 INR) -- NOT provider units.\n- The token is NOT revoked when the source moves Cart -> Sales Order, so a browser refresh of /payment/:token keeps working and Pay Later orders remain payable later.\n- `payment_methods[]` is server-eligible only; render exactly this list.",
         "parameters": [
           {
             "name": "token",
@@ -1880,7 +1897,7 @@
     },
     "/api/method/yob_storefront.api.payment.process_payment": {
       "post": {
-        "summary": "process_payment",
+        "summary": "Commit the obligation locally, then dispatch to the chosen method.",
         "operationId": "yob_storefront.api.payment.process_payment",
         "tags": [
           "yob_storefront"
@@ -1906,9 +1923,55 @@
                 }
               }
             }
+          },
+          "201": {
+            "description": "Success envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "message": {
+                    "data": {
+                      "amount": 13500,
+                      "currency": "INR",
+                      "order_id": "order_EXAMPLE0001",
+                      "payment_method": "razorpay",
+                      "payment_request": "ACC-PRQ-2026-00002",
+                      "razorpay_key": "<REDACTED>",
+                      "sales_order": "SAL-ORD-2026-00002"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "message": {
+                    "errors": [
+                      {
+                        "code": "payment_method_unsupported",
+                        "detail": "This payment method is not available for this order.",
+                        "field": "payment_method"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
           }
         },
+        "description": "- PUBLIC (guest). Authorized solely by the checkout token.\n- The browser sends ONLY `token` and `payment_method`. It never sends amount, currency, cart, sales order or razorpay order id -- all are derived server-side from the immutable Payment Request.\n- `payment_method` is the Payment Method's `name` (e.g. 'Pay Later', 'Razorpay'), i.e. the `name` field from `payment_methods[]` -- not `method_code`.\n- Eligibility is re-checked authoritatively on every call. A method that was offered earlier but is no longer eligible is refused, and no order is created.\n- Commits the cart to exactly ONE Draft Sales Order, idempotently. Repeated calls -- Pay Later then Razorpay, or a retry after failure -- converge on the same Sales Order and the same provider order.\n- Razorpay `amount` is in PROVIDER UNITS (paise: 13500 == INR 135.00). Pay Later `amount` is the normal business amount (135.0). This difference is intentional: the Razorpay value is passed straight to the checkout widget.\n- A provider failure AFTER the local commitment returns payment_provider_error with `details.retryable = true` and `details.sales_order`. The Sales Order was NOT rolled back -- do not show the user 'order failed'; offer a retry.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -1943,6 +2006,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "message": {
+                    "data": {
+                      "payment_id": "pay_EXAMPLE0001",
+                      "payment_request": "ACC-PRQ-2026-00002",
+                      "sales_order": "SAL-ORD-2026-00002"
+                    },
+                    "notice": "Payment verified and order created successfully."
+                  }
                 }
               }
             }
@@ -1956,9 +2029,31 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Error envelope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "message": {
+                    "errors": [
+                      {
+                        "code": "payment_signature_invalid",
+                        "detail": "Invalid payment signature."
+                      }
+                    ]
+                  }
+                }
+              }
+            }
           }
         },
+        "description": "- PUBLIC (guest). Authorized by Razorpay's HMAC signature, verified server-side. NO checkout token is accepted or required: the obligation is resolved through the provider order id.\n- All three fields are required; a missing one answers validation_failed with `field` naming the first missing one.\n- Idempotent. Re-verifying the SAME payment id returns the same success body with notice 'Payment already processed.'. A DIFFERENT payment against an already-settled obligation is refused with payment_already_processed (409).\n- Settlement never creates a Sales Order -- it settles the one that process_payment already committed.\n- The frontend's claim of success is never trusted; the server independently fetches and validates the provider order and payment.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -2002,11 +2097,30 @@
                   "$ref": "#/components/schemas/Success"
                 },
                 "example": {
-                  "data": [],
-                  "meta": {
-                    "count": 0
-                  },
-                  "notice": "No payment methods available"
+                  "message": {
+                    "data": [
+                      {
+                        "description": "Pay Later demo payment method.",
+                        "display_order": 1,
+                        "icon": null,
+                        "method_code": "paylater",
+                        "name": "Pay Later",
+                        "payment_type": "Offline"
+                      },
+                      {
+                        "description": "Razorpay demo payment method.",
+                        "display_order": 2,
+                        "icon": null,
+                        "method_code": "razorpay",
+                        "name": "Razorpay",
+                        "payment_type": "Online"
+                      }
+                    ],
+                    "meta": {
+                      "count": 2
+                    },
+                    "notice": "Payment methods loaded"
+                  }
                 }
               }
             }
@@ -2022,6 +2136,7 @@
             }
           }
         },
+        "description": "- Authenticated. Eligibility is centralized server-side; the `customer` query parameter is accepted for backward compatibility only and is overwritten with the authenticated Customer (a mismatching value is rejected outright).\n- Response is an array of eligible methods ordered by `display_order`, each with exactly: name, method_code, payment_type, display_order, icon, description.\n- `meta.count` carries the number of methods.",
         "parameters": [
           {
             "name": "customer",

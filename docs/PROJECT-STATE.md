@@ -28,11 +28,57 @@ Update it only for durable project-level facts or important unresolved contract 
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
-## CONFIRMED - API Source
+## CONFIRMED - API reference version 2.0.0 (2026-08-13)
 
-- Current API reference is `reference/api/openapi.json` and `reference/api/postman_collection.json`.
-- Both references contain 33 operations.
+The API reference in `reference/api/` was **replaced wholesale** on 2026-08-13 with
+reference version **2.0.0**, captured from backend **Payment Lifecycle Phase 2B**.
+
+- **The previous reference (1.0.0) is superseded.** Where an older frontend note,
+  type or mock disagrees with 2.0.0, the reference wins - being written first is not
+  an argument.
+- Read `reference/api/live/README.md` before payment work. It is not a summary of the
+  JSON; it carries the lifecycle rules and the sanitization policy.
+- `verified-responses.json` is the concrete contract. It now grades every entry
+  `wire` / `test` / `source`, and the distinction matters: **payment endpoints are
+  `test`, not `wire`** - executed in-process against seeded data inside a rolled-back
+  savepoint with a deterministic Razorpay fake, so the envelopes are real but no HTTP
+  round trip and no live provider were involved.
+- Every non-payment contract Phases 1-11 were built on is **byte-identical** in 2.0.0.
+  `proceed_to_payment` and `get_payment_methods` simply moved into a new `payment`
+  section. Nothing from Phase 11 needed revisiting.
+- The only added operation is `address.add_contact`, which Phase 11 already
+  source-verified and implemented.
+
+### Payment lifecycle the frontend must model
+
+```text
+Checkout -> proceed_to_payment -> immutable Payment Request, backed by the CART
+/payment/:token -> user picks a method -> process_payment
+    -> Cart commits to ONE Draft Sales Order
+    -> the Payment Request is now backed by that SALES ORDER
+```
+
+- A **Payment Request is an immutable financial obligation.** Its amount and currency
+  never change after issue. A changed cart does not silently update one - it issues a
+  replacement obligation and revokes the old credential.
+- **Before commitment** the Payment Request references the Cart; **after commitment it
+  references the Sales Order.**
+- **After commitment the Cart is no longer payment truth.** It is not re-read or
+  revalidated, and later cart edits cannot invalidate a committed payment.
+- The checkout token survives the Cart -> Sales Order transition, so `/payment/:token`
+  keeps working across refresh and retry. It is revoked only once payment settles.
+- **The frontend never calculates or sends an authoritative amount or currency**, and
+  never sends a cart id, customer, fingerprint or payment method. The server derives
+  all of it from the session.
+- `/payment/:token` is a **public** route; the payment endpoints are guest-accessible.
+  The token is a **bearer credential** - see the Phase 12 entry for the storage rules.
+- Razorpay stays an SPA Checkout.js integration and belongs to Phase 13.
+- **Live smoke must remain non-destructive.** `proceed_to_payment` issues and revokes
+  real Payment Requests, so it is never part of ordinary smoke runs.
+
 - API style is Frappe RPC under `/api/method/...`.
+- API style is Frappe RPC under `/api/method/...`.
+- The reference now contains 34 operations.
 - Frappe session cookie is `sid`.
 - Authenticated mutating operations use Frappe CSRF where declared.
 - CSRF token is described as coming from login or `get_session_context`.
@@ -251,6 +297,159 @@ reads or writes it; it plus each row's `creation` would be the natural basis.
 per `item_code`, Add sets quantity, removal by `item_code`, whole-cart expiry. None of
 the deferred behaviour is implemented in Angular or in the mock, and it must not be
 until the backend ships it.
+
+## CONFIRMED - Phase status
+
+| Item | Status |
+| --- | --- |
+| Frontend Phase 11 - Checkout Details | **PASS** |
+| Frontend Phase 12 - Proceed to Payment handoff | **PASS** |
+| Frontend Phase 13 - Public payment, methods, Razorpay, verification | **PASS** |
+| Backend Payment Lifecycle Phase 2B | **PASS** |
+| API reference 1.0.0 | **superseded** |
+| API reference 2.0.0 (2026-08-13) | in use |
+
+## CONFIRMED - Public payment page (Phase 13, 2026-08-13)
+
+Contracts: `reference/api/live/verified-responses.json`, `payment.*` (reference 2.0.0).
+All three payment endpoints are verification level **`test`**, not `wire` - see the
+pending note at the end.
+
+- **The checkout DTO is a discriminated union on `source_doctype`**, not one flattened
+  model. Cart-backed carries a `cart`, a resolved `contact` and address **objects**;
+  Sales-Order-backed carries a flat `items[]`, `customer`/`company`/`order_status`/
+  `docstatus`, and addresses as **name strings**. The page renders what it is given and
+  never fetches extra data to make the two look alike.
+- **The same token can answer differently across loads.** `process_payment` commits the
+  cart to an order and the obligation moves with it, so a buyer who dismisses the
+  provider modal and reloads legitimately gets the order-backed shape. Nothing in the
+  page assumes a cart still exists. This is covered by a unit test and a browser test.
+- **`process_payment` receives the method's `name`, never its `method_code`.**
+  `"Razorpay"`, not `"razorpay"`. `PaymentApi.processPayment` takes the whole method
+  object rather than a string so the two cannot be confused at a call site, and a
+  regression test asserts the submitted value is not the code. `method_code` is used
+  only to choose the browser integration after the reply arrives.
+- **The request carries only `token` and `payment_method`.** No amount, currency, cart,
+  order, customer, payment request or provider order id.
+- **Payment methods are entirely server-driven.** Rendered verbatim from
+  `payment_methods[]` in `display_order`; nothing filters by type or hardcodes Razorpay
+  or Pay Later as assumptions. Razorpay-only and Pay-Later-only configurations are
+  tested.
+- **Pay Later is an order, not a payment.** It reports the server's `payment_status`
+  (`Unpaid`) and the Sales Order, never "payment successful", and never calls
+  `verify_payment`.
+- **Razorpay `amount` is in provider units** (paise: `13500` == INR 135.00), a different
+  scale from the `amount` `get_checkout_data` reports. It is passed to the widget
+  untouched; a mutation test proves converting it fails.
+- **Checkout.js is loaded on demand**, once, by `RazorpayCheckoutLoader` - not an npm
+  dependency, not a tag in `index.html`. An existing tag is adopted rather than
+  duplicated, and a failed load clears the cache so a retry can succeed. Only the
+  publishable `razorpay_key` reaches the browser; there is no secret.
+- **Success is the server's word.** The provider callback triggers `verify_payment`
+  (exactly the three provider fields, **no token** - the endpoint resolves by provider
+  order id and HMAC), and nothing is shown as paid until it returns.
+- **A dismissed modal is not a rollback.** The order was committed before the modal
+  opened, so the page keeps the buyer where they are with a retry, and says the order is
+  saved.
+- **`payment_provider_error` with `details.retryable` is not a failed order.** The Sales
+  Order exists; the wording says so and shows it, and retry goes through the same
+  method and token. Never "order creation failed", never back to rebuilding a cart.
+- **`payment_request_stale` gets its own terminal state** with a link back to
+  `/checkout`, because this public page cannot issue a replacement obligation.
+- **An invalid or expired token is a public error state**, not an auth failure and never
+  a login redirect. The token is never echoed into any message.
+- **A refused method triggers an authoritative refresh**: the selection is cleared and
+  the eligible list re-read, so the rejected method cannot be resubmitted.
+- **State is page-local.** No payment store - one consumer, route-derived, discarded on
+  leave. A single `busy` guard blocks overlapping `process_payment`, provider opens and
+  `verify_payment` alike; each duplicate would be a real financial action.
+- **Token handling**: read from the route, passed to the two calls that need it, never
+  persisted, logged, put in telemetry or copied into unrelated state.
+- **The Razorpay test seam is a build-level substitution**, not a runtime flag.
+  `environment.providers` swaps `RazorpayCheckout` for a deterministic fake in mock
+  builds; the fake lives under `src/mock-api/`, which production never imports. Verified
+  absent from the production bundle, which still ships the real Checkout.js loader.
+
+### Still pending: real Razorpay Test-Mode verification
+
+Unchanged from the reference's own note, and **not** closed by this phase. Everything
+provider-facing was proven against a deterministic fake. Not yet confirmed against the
+live sandbox: 40-character receipt acceptance on the wire, the duplicate-receipt error
+class, `order.all({"receipt": …})` filtering, and live signature verification. The
+response *contract* the SPA consumes is unaffected; the recovery paths are not
+wire-proven.
+
+Ordinary live smoke remains **non-destructive** and gained nothing this phase: it never
+calls `proceed_to_payment`, `process_payment` or `verify_payment`, because those create
+or reuse real Payment Requests and Sales Orders. A live payment smoke would have to be
+explicit opt-in against controlled data.
+
+## CONFIRMED - Proceed to payment (Phase 12, 2026-08-13)
+
+Contract: `reference/api/live/verified-responses.json`, `payment.proceed_to_payment`
+(reference 2.0.0, verification level **`test`** - real envelopes, no HTTP round trip).
+
+- **The request carries nothing.** `POST proceed_to_payment` with an empty body. No
+  cart id, customer, amount, currency, fingerprint or payment method - the server
+  derives all of it from the session. A test asserts the body is empty rather than
+  merely lacking those keys, so a future addition has to be deliberate.
+- **`201` and `200` are the same outcome to the frontend.** Created, reused and
+  credential-rotated all mean "go here next". Nothing on screen distinguishes them, and
+  `CheckoutApi` exposes no flag that would let a caller try.
+- **Navigation uses the server's `payment_url`**, not a path rebuilt from `token`, so
+  the server keeps ownership of where checkout continues. It is checked first by
+  `sanitizePaymentUrl` - narrowly, for one thing: an internal `/payment/<segment>` path.
+  Otherwise a bad upstream response becomes an open redirect out of the storefront.
+  The internal-path rules are reused from `sanitizeReturnUrl`.
+- **Nothing is committed here.** `proceed_to_payment` issues the obligation; the cart
+  becomes a Sales Order later inside `process_payment`. There is no local "ordered"
+  transition, optimistic or otherwise, and a test pins that the cart is untouched.
+- **Double submission is blocked twice**: the CTA is disabled while pending, and the
+  handler refuses re-entry. The second matters because the button's state is a UI
+  affordance while a duplicate request is a second financial obligation.
+- **A server refusal keeps the buyer on `/checkout`** with wording written here, never
+  the backend's. Cart-state failures (`cart_empty`, `contact_required`, …) trigger a
+  re-read of the cart rather than a local guess at what changed. The message renders
+  outside the page's state branches - a `cart_empty` failure re-reads an empty cart and
+  switches the page to its empty state, which would otherwise swallow the explanation.
+- **`/payment/:token` is public**, under `PublicShell`, outside `secureRouteGuard`. A
+  buyer may arrive with no session, on another device, from a link. Tests assert it
+  resolves while logged out and is never redirected to sign-in.
+- **The token is a bearer credential and lives only in the URL.** Not in localStorage,
+  sessionStorage, IndexedDB, cookies, a store or a log; not copied into component
+  state. The Phase 12 payment page does not even read it - it has no `token` input -
+  because a placeholder has no use for it. Unit and browser tests assert the absence.
+- **Phase 12 stops at the handoff.** The payment page is a routing shell showing
+  "Preparing payment details…". It does not call `get_checkout_data`, show methods, or
+  fake a payment screen that would be deleted next phase.
+- **`proceed_to_payment` is excluded from live smoke** and from every automated run
+  against a live bench, because it issues and revokes real obligations.
+- **Live smoke was made non-destructive.** It previously proved the CSRF header by
+  calling `clear_cart` with a valid token, which emptied the real customer's cart on
+  every run. It now uses `set_cart_contact` with no arguments: Frappe validates CSRF
+  before the handler runs, so a `422 contact_required` proves the header was accepted
+  and changes nothing. Verified by seeding a real cart selection and confirming it
+  survived a full smoke run.
+
+### Phase 13 scope (delivered - see the Phase 13 entry above)
+
+`payment.get_checkout_data` returns **two shapes** and must be branched on
+`data.source_doctype`:
+
+| `"Cart"` | `"Sales Order"` |
+| --- | --- |
+| `cart`, `contact` | flat `items[]` |
+| `billing_address` / `shipping_address` as **objects** | the same fields as **name strings** |
+| reconciliation fields | `customer`, `company`, `order_status`, `docstatus` |
+
+No Phase 12 type assumes a Cart-shaped payload - the only DTO added is
+`ProceedToPaymentData`, which shares nothing with it. Model the source as a
+discriminated union when that work starts; do not flatten the two into one object.
+
+Also Phase 13: payment-method selection, `process_payment`, Pay Later, Razorpay
+Checkout.js, `verify_payment`, confirmation, and provider-retry UI
+(`payment_provider_error` carries `details.retryable` and `details.sales_order`, and the
+order is **not** rolled back).
 
 ## CONFIRMED - Checkout details (Phase 11, 2026-08-12)
 

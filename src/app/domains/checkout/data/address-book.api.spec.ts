@@ -162,14 +162,12 @@ describe('Checkout master data', () => {
         .addContact({ first_name: '', last_name: '', email: '', phone: '' })
         .subscribe({ error: (e: YobApiError) => (error = e) });
 
-      http
-        .expectOne(ADD_CONTACT)
-        .flush(
-          {
-            message: { errors: [{ code: 'validation_failed', detail: 'x', field: 'first_name' }] },
-          },
-          { status: 422, statusText: 'Unprocessable Entity' },
-        );
+      http.expectOne(ADD_CONTACT).flush(
+        {
+          message: { errors: [{ code: 'validation_failed', detail: 'x', field: 'first_name' }] },
+        },
+        { status: 422, statusText: 'Unprocessable Entity' },
+      );
 
       expect(error?.code).toBe('validation_failed');
       expect(error?.field).toBe('first_name');

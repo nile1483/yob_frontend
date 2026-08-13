@@ -1,18 +1,27 @@
 {
-  "captured_at": "2026-08-10",
+  "captured_at": "2026-08-13",
   "environment": {
     "browser_facing_origin": "http://storefront.local:8080",
-    "edge_proxy": "nginx (~/yob-edge/nginx.conf), vhost storefront.local -> 127.0.0.1:8000",
-    "frappe_site": "yob.localhost",
+    "edge_proxy": "nginx ~/yob-edge/nginx.conf on :8080, vhost storefront.local, sets X-YOB-Original-Host and X-Frappe-Site-Name",
+    "frappe_site_for_payment_capture": "test.localhost",
+    "frappe_site_for_earlier_wire_capture": "yob.localhost",
     "application_code": "STOREFRONT",
-    "data_state": "empty catalog, no orders, no addresses, no contacts, empty draft cart"
+    "data_state": "test.localhost carries seeded demo catalog, customer, contact, addresses, pricing rule and payment methods; payment contracts were captured against that data."
   },
-
   "envelope": {
     "outer_wrapper": "message",
     "outer_wrapper_always_present_on_yob_endpoints": true,
-    "success_inner_keys": ["data", "notice?", "meta?"],
-    "error_inner_keys": ["errors[].code", "errors[].detail", "errors[].field?", "errors[].details?"],
+    "success_inner_keys": [
+      "data",
+      "notice?",
+      "meta?"
+    ],
+    "error_inner_keys": [
+      "errors[].code",
+      "errors[].detail",
+      "errors[].field?",
+      "errors[].details?"
+    ],
     "notes": [
       "`data` is always emitted on success and may be an object, an array or null.",
       "`notice` and `meta` are omitted entirely when empty - do not expect them.",
@@ -21,13 +30,16 @@
       "Frappe may add its own keys NEXT TO `message` at the top level (login adds `home_page` and `full_name`). Ignore unknown top-level siblings."
     ]
   },
-
   "auth": {
     "login_with_password": {
       "verified": "wire",
       "method": "POST",
       "path": "/api/method/yob_auth.api.auth.login_with_password",
-      "request": { "application": "STOREFRONT", "username": "storefront@yob.test", "password": "<REDACTED>" },
+      "request": {
+        "application": "STOREFRONT",
+        "username": "storefront@yob.test",
+        "password": "<REDACTED>"
+      },
       "status": 200,
       "response": {
         "message": {
@@ -66,12 +78,13 @@
         "Rate limit: 10 password attempts per 300 s keyed on username, counted BEFORE authentication. Successful logins consume the budget. Exceeding it answers 429 rate_limit_exceeded, which is easy to mistake for a bad password."
       ]
     },
-
     "get_session_context": {
       "verified": "wire",
       "method": "GET",
       "path": "/api/method/yob_auth.api.auth.get_session_context",
-      "query": { "application": "STOREFRONT" },
+      "query": {
+        "application": "STOREFRONT"
+      },
       "status": 200,
       "response": {
         "message": {
@@ -101,37 +114,48 @@
         "NOT guest-allowed. Restoring a session as a guest returns the RAW Frappe 403 body (see errors.raw_frappe_unauthenticated), NOT a YOB error envelope. Session restore must treat that shape as 'guest', not as a transport fault."
       ]
     },
-
     "logout": {
       "verified": "wire",
       "method": "POST",
       "path": "/api/method/yob_auth.api.auth.logout",
       "request": {},
       "status": 200,
-      "response": { "message": { "data": { "authenticated": false }, "notice": "Logout successful." } },
+      "response": {
+        "message": {
+          "data": {
+            "authenticated": false
+          },
+          "notice": "Logout successful."
+        }
+      },
       "notes": [
         "Requires session + X-Frappe-CSRF-Token.",
         "Wire-verified in Phase 3. After a successful logout the same sid no longer resolves: get_session_context answers the raw Frappe 403 again, so session restore correctly reports guest."
       ]
     },
-
     "request_otp": {
       "verified": "source",
       "method": "POST",
       "path": "/api/method/yob_auth.api.auth.request_otp",
-      "request": { "application": "STOREFRONT", "identifier": "<email or mobile>", "method": "<login method>" },
+      "request": {
+        "application": "STOREFRONT",
+        "identifier": "<email or mobile>",
+        "method": "<login method>"
+      },
       "notes": [
         "All three fields are REQUIRED; a blank one answers 422 validation_failed with `field` naming it.",
         "The backend pops `message` out of the OTP result and returns it as the envelope `notice`, precisely so the client cannot infer whether the account exists. Do not branch on it.",
         "The remaining `data` keys were not observed - OTP is not exercisable on this bench. Capture before building the OTP UI."
       ]
     },
-
     "login_with_otp": {
       "verified": "source",
       "method": "POST",
       "path": "/api/method/yob_auth.api.auth.login_with_otp",
-      "request": { "challenge_id": "<from request_otp>", "otp": "<code>" },
+      "request": {
+        "challenge_id": "<from request_otp>",
+        "otp": "<code>"
+      },
       "notes": [
         "On success returns the SAME `data` payload as login_with_password, with authentication_method set to the OTP method.",
         "Does NOT take `application` - the application is recovered from the challenge.",
@@ -139,7 +163,6 @@
       ]
     }
   },
-
   "storefront": {
     "get_config": {
       "verified": "wire",
@@ -169,17 +192,33 @@
         "Booleans arrive as 0/1 integers, not JSON booleans."
       ]
     },
-
     "get_categories": {
       "verified": "wire",
       "method": "GET",
       "path": "/api/method/yob_storefront.api.catalog.get_categories",
-      "query": { "parent_slug": "optional" },
+      "query": {
+        "parent_slug": "optional"
+      },
       "status": 200,
-      "response": { "message": { "data": [], "notice": "Categories loaded", "meta": { "count": 0 } } },
+      "response": {
+        "message": {
+          "data": [],
+          "notice": "Categories loaded",
+          "meta": {
+            "count": 0
+          }
+        }
+      },
       "item_fields_source_verified": [
-        "name", "category_name", "slug", "thumbnail", "banner",
-        "display_order", "meta_title", "meta_description", "parent_category"
+        "name",
+        "category_name",
+        "slug",
+        "thumbnail",
+        "banner",
+        "display_order",
+        "meta_title",
+        "meta_description",
+        "parent_category"
       ],
       "notes": [
         "Empty on this bench; the field list above comes from catalog.get_categories.",
@@ -188,33 +227,62 @@
         "`thumbnail`/`banner` are returned as raw stored paths, NOT absolute URLs (the get_url() calls are commented out in the backend)."
       ]
     },
-
     "get_category": {
       "verified": "source",
       "method": "GET",
       "path": "/api/method/yob_storefront.api.catalog.get_category",
-      "query": { "slug": "required", "qty": "optional, default 1" },
+      "query": {
+        "slug": "required",
+        "qty": "optional, default 1"
+      },
       "success_shape": {
         "message": {
           "data": {
             "category": {
-              "name": "", "category_name": "", "slug": "", "thumbnail": null, "banner": null,
-              "meta_title": null, "meta_description": null, "description": null,
-              "is_group": 0, "parent_category": null
+              "name": "",
+              "category_name": "",
+              "slug": "",
+              "thumbnail": null,
+              "banner": null,
+              "meta_title": null,
+              "meta_description": null,
+              "description": null,
+              "is_group": 0,
+              "parent_category": null
             },
             "subcategories": [
-              { "name": "", "category_name": "", "slug": "", "thumbnail": null, "display_order": 0, "is_group": 0 }
+              {
+                "name": "",
+                "category_name": "",
+                "slug": "",
+                "thumbnail": null,
+                "display_order": 0,
+                "is_group": 0
+              }
             ],
             "items": [
               {
-                "name": "", "item_name": "", "slug": "", "stock_uom": "", "image": null,
-                "base_price": 0, "rate": 0, "discount_percentage": 0, "discount_amount": 0,
-                "net_amount": 0, "tax_amount": 0, "total_amount": 0, "pricing_rule_label": null
+                "name": "",
+                "item_name": "",
+                "slug": "",
+                "stock_uom": "",
+                "image": null,
+                "base_price": 0,
+                "rate": 0,
+                "discount_percentage": 0,
+                "discount_amount": 0,
+                "net_amount": 0,
+                "tax_amount": 0,
+                "total_amount": 0,
+                "pricing_rule_label": null
               }
             ]
           },
           "notice": "Category loaded",
-          "meta": { "subcategory_count": 0, "item_count": 0 }
+          "meta": {
+            "subcategory_count": 0,
+            "item_count": 0
+          }
         }
       },
       "notes": [
@@ -223,27 +291,54 @@
         "Missing slug -> 422 validation_failed / field=slug. Unknown slug -> 404 category_not_found / field=slug (wire-verified)."
       ]
     },
-
     "get_item": {
       "verified": "source",
       "method": "GET",
       "path": "/api/method/yob_storefront.api.catalog.get_item",
-      "query": { "slug": "required", "qty": "optional, default 1" },
+      "query": {
+        "slug": "required",
+        "qty": "optional, default 1"
+      },
       "success_shape": {
         "message": {
           "data": {
-            "name": "", "item_name": "", "image": null, "item_group": "",
-            "custom_slug": "", "qty": 1.0,
-            "base_price": 0, "rate": 0, "discount_percentage": 0, "discount_amount": 0,
-            "net_amount": 0, "tax_amount": 0, "tax_label": null, "total_amount": 0,
+            "name": "",
+            "item_name": "",
+            "image": null,
+            "item_group": "",
+            "custom_slug": "",
+            "qty": 1.0,
+            "base_price": 0,
+            "rate": 0,
+            "discount_percentage": 0,
+            "discount_amount": 0,
+            "net_amount": 0,
+            "tax_amount": 0,
+            "tax_label": null,
+            "total_amount": 0,
             "uom": "",
             "pricing": {
-              "item": { "name": "", "item_name": "", "item_group": "", "image": null, "stock_uom": "" },
-              "selling_price_list": "", "qty": 1,
-              "base_price": 0, "rate": 0,
-              "discount_percentage": 0, "discount_amount": 0, "total_discount": 0,
-              "net_amount": 0, "tax_amount": 0, "tax_label": null, "total_amount": 0,
-              "pricing_rules": [], "pricing_rule_label": null, "pricing_rule_apply_on": null,
+              "item": {
+                "name": "",
+                "item_name": "",
+                "item_group": "",
+                "image": null,
+                "stock_uom": ""
+              },
+              "selling_price_list": "",
+              "qty": 1,
+              "base_price": 0,
+              "rate": 0,
+              "discount_percentage": 0,
+              "discount_amount": 0,
+              "total_discount": 0,
+              "net_amount": 0,
+              "tax_amount": 0,
+              "tax_label": null,
+              "total_amount": 0,
+              "pricing_rules": [],
+              "pricing_rule_label": null,
+              "pricing_rule_apply_on": null,
               "uom": ""
             },
             "pricing_rule_label": null,
@@ -262,7 +357,6 @@
         "RISK: get_item's try/except is commented out in catalog.py, so an unexpected backend fault escapes as a raw Frappe 500 instead of the YOB envelope."
       ]
     },
-
     "get_cart": {
       "verified": "wire",
       "method": "GET",
@@ -313,26 +407,55 @@
         "`ordered_on` is a naive 'YYYY-MM-DD HH:MM:SS.ffffff' string with no timezone marker."
       ]
     },
-
     "get_orders": {
       "verified": "wire",
       "method": "GET",
       "path": "/api/method/yob_storefront.api.order.get_orders",
       "status": 200,
-      "response": { "message": { "data": [], "notice": "Orders fetched successfully", "meta": { "count": 0 } } },
-      "row_fields_documented": ["name", "transaction_date", "delivery_date", "status", "grand_total"]
+      "response": {
+        "message": {
+          "data": [],
+          "notice": "Orders fetched successfully",
+          "meta": {
+            "count": 0
+          }
+        }
+      },
+      "row_fields_documented": [
+        "name",
+        "transaction_date",
+        "delivery_date",
+        "status",
+        "grand_total"
+      ]
     },
-
     "get_order_details": {
       "verified": "source",
       "method": "GET",
       "path": "/api/method/yob_storefront.api.order.get_order_details",
-      "query": { "order_id": "required" },
+      "query": {
+        "order_id": "required"
+      },
       "data_keys": [
-        "name", "customer", "status", "transaction_date", "delivery_date", "currency",
-        "original_total", "discount", "subtotal", "net_total", "tax", "grand_total", "rounded_total",
-        "contact_person", "contact_email", "contact_mobile",
-        "billing_address_name", "shipping_address_name", "payment_terms_template"
+        "name",
+        "customer",
+        "status",
+        "transaction_date",
+        "delivery_date",
+        "currency",
+        "original_total",
+        "discount",
+        "subtotal",
+        "net_total",
+        "tax",
+        "grand_total",
+        "rounded_total",
+        "contact_person",
+        "contact_email",
+        "contact_mobile",
+        "billing_address_name",
+        "shipping_address_name",
+        "payment_terms_template"
       ],
       "notes": [
         "`original_total` and `discount` are computed server-side from the order lines - do not recompute.",
@@ -340,36 +463,56 @@
         "The remaining keys (items, payment logs) were not fully enumerated; capture a real order before typing the detail DTO."
       ]
     },
-
     "get_addresses": {
       "verified": "wire",
       "status": 200,
-      "response": { "message": { "data": [], "notice": "Addresses loaded", "meta": { "count": 0 } } }
+      "response": {
+        "message": {
+          "data": [],
+          "notice": "Addresses loaded",
+          "meta": {
+            "count": 0
+          }
+        }
+      }
     },
-
     "get_contacts": {
       "verified": "wire",
       "status": 200,
-      "response": { "message": { "data": [], "notice": "Contacts loaded", "meta": { "count": 0 } } }
+      "response": {
+        "message": {
+          "data": [],
+          "notice": "Contacts loaded",
+          "meta": {
+            "count": 0
+          }
+        }
+      }
     },
-
-    "get_payment_methods": {
-      "verified": "wire",
-      "status": 200,
-      "response": { "message": { "data": [], "notice": "No payment methods available", "meta": { "count": 0 } } },
-      "notes": ["The notice varies with the outcome; it is display text, never a branch condition."]
-    },
-
     "add_address": {
       "verified": "source",
       "method": "POST",
       "path": "/api/method/yob_storefront.api.address.add_address",
       "request_fields": [
-        "address_title", "address_type", "address_line1", "address_line2",
-        "city", "state", "country", "pincode",
-        "email", "phone", "fax",
-        "is_primary_address", "is_shipping_address", "disabled",
-        "tax_category", "gstin", "gst_category", "gst_state", "gst_state_number"
+        "address_title",
+        "address_type",
+        "address_line1",
+        "address_line2",
+        "city",
+        "state",
+        "country",
+        "pincode",
+        "email",
+        "phone",
+        "fax",
+        "is_primary_address",
+        "is_shipping_address",
+        "disabled",
+        "tax_category",
+        "gstin",
+        "gst_category",
+        "gst_state",
+        "gst_state_number"
       ],
       "notes": [
         "Resolves the empty request body in the OpenAPI/Postman source.",
@@ -380,89 +523,133 @@
         "Field NAMES are now known; allowed VALUES for address_type / gst_category / tax_category are not. Verify before shipping a write form."
       ]
     },
-
     "update_contact": {
       "verified": "source",
       "method": "POST",
       "path": "/api/method/yob_storefront.api.address.update_contact",
-      "request_fields": ["name", "salutation", "first_name", "last_name", "designation", "company", "gender", "email", "phone"],
+      "request_fields": [
+        "name",
+        "salutation",
+        "first_name",
+        "last_name",
+        "designation",
+        "company",
+        "gender",
+        "email",
+        "phone"
+      ],
       "notes": [
         "`name` is required and identifies the contact.",
         "`company` maps to the backend field company_name.",
         "Only `first_name` is treated as non-blankable; the others accept null to clear."
       ]
-    },
-
-    "proceed_to_payment": {
-      "verified": "source",
-      "method": "POST",
-      "path": "/api/method/yob_storefront.api.checkout.proceed_to_payment",
-      "request": {},
-      "success_shape": {
-        "message": {
-          "data": { "payment_url": "/payment/<REDACTED>", "payment_request": "PREQ-…", "token": "<REDACTED>" },
-          "notice": "Proceed to payment"
-        }
-      },
-      "status": "201 when a Payment Request is created, 200 when an open one is reused",
-      "notes": [
-        "`payment_url` is a RELATIVE SPA path '/payment/<token>' - the public payment route must own that path.",
-        "The checkout token expires 1 hour after issue.",
-        "Ordered precondition failures, all 422 unless noted: cart_not_found (404), cart_empty, contact_required (field=contact_person), billing_address_required (field=billing_address), shipping_address_required (field=shipping_address, only when the cart is shippable).",
-        "cart_empty was wire-verified; the success path was not triggered (it would create a real Payment Request)."
-      ]
     }
   },
-
   "errors": {
     "validation_failed_missing_application": {
       "verified": "wire",
       "example_call": "POST login_with_password with {}",
       "status": 422,
-      "response": { "message": { "errors": [ { "code": "validation_failed", "detail": "Application is required.", "field": "application" } ] } }
+      "response": {
+        "message": {
+          "errors": [
+            {
+              "code": "validation_failed",
+              "detail": "Application is required.",
+              "field": "application"
+            }
+          ]
+        }
+      }
     },
-
     "category_not_found": {
       "verified": "wire",
       "example_call": "GET get_category?slug=does-not-exist",
       "status": 404,
-      "response": { "message": { "errors": [ { "code": "category_not_found", "detail": "Category not found.", "field": "slug" } ] } }
+      "response": {
+        "message": {
+          "errors": [
+            {
+              "code": "category_not_found",
+              "detail": "Category not found.",
+              "field": "slug"
+            }
+          ]
+        }
+      }
     },
-
     "order_not_found": {
       "verified": "wire",
       "example_call": "GET get_order_details?order_id=NOPE-0000",
       "status": 404,
-      "response": { "message": { "errors": [ { "code": "order_not_found", "detail": "Order not found.", "field": "order_id" } ] } }
+      "response": {
+        "message": {
+          "errors": [
+            {
+              "code": "order_not_found",
+              "detail": "Order not found.",
+              "field": "order_id"
+            }
+          ]
+        }
+      }
     },
-
     "checkout_token_invalid": {
       "verified": "wire",
       "example_call": "GET get_checkout_data?token=not-a-real-token (unauthenticated, public endpoint)",
       "status": 404,
-      "response": { "message": { "errors": [ { "code": "checkout_token_invalid", "detail": "This checkout link is not valid.", "field": "token" } ] } },
-      "notes": ["Confirms the public payment endpoints really are guest-callable and really do use the YOB envelope."]
+      "response": {
+        "message": {
+          "errors": [
+            {
+              "code": "checkout_token_invalid",
+              "detail": "This checkout link is not valid.",
+              "field": "token"
+            }
+          ]
+        }
+      },
+      "notes": [
+        "Confirms the public payment endpoints really are guest-callable and really do use the YOB envelope."
+      ]
     },
-
     "cart_empty": {
       "verified": "wire",
       "example_call": "POST proceed_to_payment with an empty cart",
       "status": 422,
-      "response": { "message": { "errors": [ { "code": "cart_empty", "detail": "The cart is empty." } ] } },
-      "notes": ["Note the absent `field` key - `field` is optional on every error."]
+      "response": {
+        "message": {
+          "errors": [
+            {
+              "code": "cart_empty",
+              "detail": "The cart is empty."
+            }
+          ]
+        }
+      },
+      "notes": [
+        "Note the absent `field` key - `field` is optional on every error."
+      ]
     },
-
     "application_access_denied": {
       "verified": "wire",
       "example_call": "GET get_categories with a valid sid but BYPASSING the edge proxy (direct to 127.0.0.1:8000, so no X-YOB-Original-Host)",
       "status": 403,
-      "response": { "message": { "errors": [ { "code": "application_access_denied", "detail": "This application is not allowed from the current domain" } ] } },
+      "response": {
+        "message": {
+          "errors": [
+            {
+              "code": "application_access_denied",
+              "detail": "This application is not allowed from the current domain"
+            }
+          ]
+        }
+      },
       "notes": [
         "This is what a misconfigured dev proxy looks like: a valid session that still gets 403. It is NOT a session-expiry signal and must not trigger a logout.",
         "Same code and status when logging in with an unknown `application` value."
       ]
     },
-
     "raw_frappe_unauthenticated": {
       "verified": "wire",
       "example_call": "GET get_categories (or get_session_context) with no session",
@@ -480,7 +667,6 @@
         "The response body contains a full server traceback. Never surface it to users and never log it verbatim."
       ]
     },
-
     "raw_frappe_csrf_missing": {
       "verified": "wire",
       "example_call": "POST clear_cart with a valid sid but no X-Frappe-CSRF-Token",
@@ -496,7 +682,6 @@
         "400 + exc_type='CSRFTokenError' is the signal that the in-memory CSRF token is missing or stale; the correct recovery is to re-run get_session_context, not to log the user out."
       ]
     },
-
     "internal_server_error": {
       "verified": "source",
       "status": 500,
@@ -506,7 +691,9 @@
             {
               "code": "internal_server_error",
               "detail": "Something went wrong. Please try again.",
-              "details": { "correlation_id": "0246f04aea554d10" }
+              "details": {
+                "correlation_id": "0246f04aea554d10"
+              }
             }
           ]
         }
@@ -516,42 +703,619 @@
         "The `details` object is the only documented use of the optional errors[].details key."
       ]
     },
-
     "edge_misdirected_host": {
       "verified": "wire",
       "example_call": "any request to :8080 with a Host other than storefront.local / erp.local",
       "status": 421,
       "response": "<html> nginx 421 Misdirected Request - NOT JSON",
-      "notes": ["A non-JSON error body is reachable. The network layer must not assume every failure parses as JSON."]
+      "notes": [
+        "A non-JSON error body is reachable. The network layer must not assume every failure parses as JSON."
+      ]
     }
   },
-
   "stable_error_codes": {
-    "platform": ["validation_failed", "authentication_required", "rate_limit_exceeded", "internal_server_error"],
-    "auth": ["invalid_credentials", "application_access_denied", "login_method_disabled", "otp_invalid"],
-    "catalog": ["category_not_found", "item_not_found"],
-    "cart": ["cart_not_found", "cart_empty", "quantity_invalid"],
+    "platform": [
+      "validation_failed",
+      "authentication_required",
+      "rate_limit_exceeded",
+      "internal_server_error"
+    ],
+    "auth": [
+      "invalid_credentials",
+      "application_access_denied",
+      "login_method_disabled",
+      "otp_invalid"
+    ],
+    "catalog": [
+      "category_not_found",
+      "item_not_found"
+    ],
+    "cart": [
+      "cart_not_found",
+      "cart_empty",
+      "quantity_invalid"
+    ],
     "contacts_addresses": [
-      "contact_not_found", "contact_invalid", "contact_required",
+      "contact_not_found",
+      "contact_invalid",
+      "contact_required",
       "address_not_found",
-      "billing_address_invalid", "billing_address_required",
-      "shipping_address_invalid", "shipping_address_required",
+      "billing_address_invalid",
+      "billing_address_required",
+      "shipping_address_invalid",
+      "shipping_address_required",
       "shipping_not_applicable"
     ],
     "coupons": [
-      "coupon_code_required", "coupon_invalid", "coupon_not_active", "coupon_expired",
-      "coupon_usage_limit_reached", "coupon_not_applicable",
-      "coupon_minimum_not_met", "coupon_maximum_exceeded", "coupon_not_applied"
+      "coupon_code_required",
+      "coupon_invalid",
+      "coupon_not_active",
+      "coupon_expired",
+      "coupon_usage_limit_reached",
+      "coupon_not_applicable",
+      "coupon_minimum_not_met",
+      "coupon_maximum_exceeded",
+      "coupon_not_applied"
     ],
-    "orders": ["order_not_found"],
-    "checkout_payment": [
-      "checkout_token_invalid", "checkout_token_expired", "customer_not_found",
-      "payment_method_unsupported", "payment_provider_not_configured",
-      "payment_already_processed", "payment_signature_invalid",
-      "payment_verification_failed", "payment_not_captured",
-      "payment_amount_mismatch", "payment_currency_mismatch", "payment_reference_invalid"
+    "orders": [
+      "order_not_found"
     ],
-    "source": "yob_core/api/errors.py, yob_auth/api/response.py, yob_storefront/api/response.py",
-    "notes": ["Complete registry, far larger than the four codes named in the OpenAPI examples. These strings are a stable part of the contract."]
+    "checkout_payment": {
+      "checkout_token_invalid": "404 - blank, unknown, or revoked checkout token.",
+      "checkout_token_expired": "422 - token recognised but past custom_checkout_expiry.",
+      "payment_request_stale": "409 - the cart changed since the obligation was issued; restart checkout.",
+      "payment_reference_invalid": "422 - the payment could not be matched to a usable source/order.",
+      "payment_method_unsupported": "422 - unknown method, or a known method that is not eligible now.",
+      "payment_provider_not_configured": "500 - no Razorpay API key on the server.",
+      "payment_provider_error": "500 - provider unreachable AFTER local commitment; details.retryable=true, details.sales_order present, order NOT rolled back.",
+      "payment_already_processed": "409 - a different payment arrived for an already-settled obligation.",
+      "payment_signature_invalid": "422 - Razorpay HMAC verification failed.",
+      "payment_verification_failed": "500 - signature verification could not be completed.",
+      "payment_not_captured": "422 - provider order/payment is not in a paid/captured state.",
+      "payment_amount_mismatch": "409 - provider amount does not match the immutable obligation.",
+      "payment_currency_mismatch": "409 - provider currency does not match the obligation.",
+      "cart_not_found": "404 - no open cart for proceed_to_payment.",
+      "cart_empty": "422 - proceed_to_payment with an empty cart.",
+      "contact_required": "422 - field=contact_person.",
+      "billing_address_required": "422 - field=billing_address.",
+      "shipping_address_required": "422 - field=shipping_address, shippable carts only.",
+      "validation_failed": "422 - a required request field was missing.",
+      "order_not_found": "404 - the referenced Sales Order no longer exists.",
+      "customer_not_found": "404 - the customer behind the checkout link no longer exists."
+    },
+    "source": "yob_storefront/api/response.py plus the Phase 2B payment capture; every code above appears in current source or captured responses.",
+    "notes": [
+      "Complete registry, far larger than the four codes named in the OpenAPI examples. These strings are a stable part of the contract."
+    ]
+  },
+  "reference_version": "2.0.0",
+  "backend_phase": "Payment Lifecycle Phase 2B",
+  "verification_levels": {
+    "wire": "Observed over HTTP through the edge proxy.",
+    "test": "The real endpoint was executed in-process against seeded data, inside a rolled-back savepoint with frappe.db.commit suppressed and a deterministic Razorpay fake. Bodies are real envelopes from the real implementation, but no HTTP round trip and no live provider were involved.",
+    "source": "Read from the implementation; not executed."
+  },
+  "payment": {
+    "proceed_to_payment": {
+      "verified": "test",
+      "method": "POST",
+      "path": "/api/method/yob_storefront.api.checkout.proceed_to_payment",
+      "guest": false,
+      "notes": [
+        "Authenticated. Requires the `sid` session cookie AND `X-Frappe-CSRF-Token`.",
+        "Must traverse the edge proxy that sets `X-YOB-Original-Host`; a direct origin call answers 403 application_access_denied.",
+        "No request body. The server derives everything from the session: the browser never sends amount, currency, cart id or any fingerprint.",
+        "201 when a Payment Request was CREATED (first checkout, or a replacement because the cart changed). 200 when an existing open obligation was REUSED, with or without a rotated credential.",
+        "`payment_url` is a RELATIVE SPA path `/payment/<token>`; the public payment route must own that path.",
+        "The checkout credential expires 1 hour after issue.",
+        "A Payment Request's amount and currency are IMMUTABLE once issued. An unchanged cart reuses the same obligation and the same token; an expired credential rotates the token on the SAME obligation; a changed cart issues a REPLACEMENT obligation and revokes the old token immediately.",
+        "Precondition failures, 422 unless noted: cart_not_found (404), cart_empty, contact_required (field=contact_person), billing_address_required (field=billing_address), shipping_address_required (field=shipping_address, only when the cart is shippable)."
+      ],
+      "responses": {
+        "created_201": {
+          "status": 201,
+          "body": {
+            "message": {
+              "data": {
+                "payment_request": "ACC-PRQ-2026-00002",
+                "payment_url": "/payment/<REDACTED>",
+                "token": "<REDACTED>"
+              },
+              "notice": "Proceed to payment"
+            }
+          }
+        },
+        "reused_200": {
+          "status": 200,
+          "body": {
+            "message": {
+              "data": {
+                "payment_request": "ACC-PRQ-2026-00002",
+                "payment_url": "/payment/<REDACTED>",
+                "token": "<REDACTED>"
+              },
+              "notice": "Proceed to payment"
+            }
+          }
+        }
+      }
+    },
+    "get_checkout_data": {
+      "verified": "test",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.payment.get_checkout_data",
+      "guest": true,
+      "notes": [
+        "PUBLIC (guest). Authorized solely by the unguessable checkout token.",
+        "Serves TWO source shapes. Branch on `data.source_doctype`.",
+        "Cart-backed (before payment initiation): source_doctype='Cart', with `cart`, `contact`, `billing_address`, `shipping_address` objects plus `cart_updated`, `removed_items`, `price_updated_items`.",
+        "Sales-Order-backed (after payment initiation committed the order): source_doctype='Sales Order', with a flat `items[]`, `order_status`, `docstatus`, and `billing_address`/`shipping_address` as NAME STRINGS rather than objects. This shape difference is deliberate and the SPA must handle both.",
+        "After the Payment Request becomes Sales-Order-backed the Cart is no longer payment truth. It is not read, compared or revalidated, and a later cart change cannot invalidate the committed payment.",
+        "`amount`/`currency` always come from the immutable Payment Request, in normal business units (e.g. 135.0 INR) -- NOT provider units.",
+        "The token is NOT revoked when the source moves Cart -> Sales Order, so a browser refresh of /payment/:token keeps working and Pay Later orders remain payable later.",
+        "`payment_methods[]` is server-eligible only; render exactly this list."
+      ],
+      "responses": {
+        "cart_backed": {
+          "status": 200,
+          "body": {
+            "message": {
+              "data": {
+                "amount": 135.0,
+                "billing_address": {
+                  "city": "Ahmedabad",
+                  "country": "India",
+                  "display": "Plot 42, GIDC Industrial Estate<br>Ahmedabad<br>\nGujarat, State Code: 24<br>PIN Code: 382445<br>India<br>\nGSTIN: 24ABCDE1234F1Z6<br>",
+                  "name": "YOB Demo Billing-Billing",
+                  "pincode": "382445",
+                  "state": "Gujarat"
+                },
+                "cart": {
+                  "billing_address": "YOB Demo Billing-Billing",
+                  "checkout_by": null,
+                  "company": "Shayona Technology",
+                  "company_address": null,
+                  "contact_person": "Demo Buyer-YOB Demo Buyer",
+                  "coupon_code": null,
+                  "coupon_discount": 0.0,
+                  "currency": "INR",
+                  "customer": "YOB Demo Buyer",
+                  "grand_total": 135.0,
+                  "is_shippable": 1,
+                  "items": [
+                    {
+                      "amount": 135.0,
+                      "base_price": 12.5,
+                      "conversion_factor": 0.0,
+                      "discount_amount": 1.25,
+                      "discount_percentage": 10.0,
+                      "image": null,
+                      "item_code": "YOB-BOLT-M10",
+                      "item_expiry_date": null,
+                      "item_name": null,
+                      "item_slug": null,
+                      "line_discount": 15.0,
+                      "parent": "CART-2026-08-0002",
+                      "parentfield": "items",
+                      "parenttype": "Cart",
+                      "pricing_rule_apply_on": "Item Code",
+                      "pricing_rule_label": "YOB Demo Bulk Discount",
+                      "pricing_rules": "[\"PRLE-0001\"]",
+                      "quantity": 12.0,
+                      "rate": 11.25,
+                      "stock_uom": "Nos",
+                      "tax_amount": 0.0,
+                      "total_amount": 135.0,
+                      "uom": "Nos"
+                    }
+                  ],
+                  "name": "CART-2026-08-0002",
+                  "net_total": 135.0,
+                  "order_type": "Shopping Cart",
+                  "ordered_on": null,
+                  "sales_order": null,
+                  "selling_price_list": "Standard Selling",
+                  "shipping_address": "YOB Demo Shipping-Shipping",
+                  "status": "Draft",
+                  "tax_total": 0.0,
+                  "total_discount": 15.0,
+                  "total_quantity": 12,
+                  "user": "Administrator"
+                },
+                "cart_updated": false,
+                "contact": {
+                  "email": "storefront@yob.test",
+                  "full_name": "Demo Buyer",
+                  "name": "Demo Buyer-YOB Demo Buyer",
+                  "phone": "+91 98250 00000"
+                },
+                "currency": "INR",
+                "payment_methods": [
+                  {
+                    "description": "Pay Later demo payment method.",
+                    "display_order": 1,
+                    "icon": null,
+                    "method_code": "paylater",
+                    "name": "Pay Later",
+                    "payment_type": "Offline"
+                  },
+                  {
+                    "description": "Razorpay demo payment method.",
+                    "display_order": 2,
+                    "icon": null,
+                    "method_code": "razorpay",
+                    "name": "Razorpay",
+                    "payment_type": "Online"
+                  }
+                ],
+                "payment_request": "ACC-PRQ-2026-00002",
+                "price_updated_items": [],
+                "removed_items": [],
+                "shipping_address": {
+                  "city": "Ahmedabad",
+                  "country": "India",
+                  "display": "Plot 42, GIDC Industrial Estate<br>Ahmedabad<br>\nGujarat, State Code: 24<br>PIN Code: 382445<br>India<br>\n",
+                  "name": "YOB Demo Shipping-Shipping",
+                  "pincode": "382445",
+                  "state": "Gujarat"
+                },
+                "source_doctype": "Cart",
+                "source_name": "CART-2026-08-0002"
+              },
+              "notice": "Checkout data retrieved successfully"
+            }
+          }
+        },
+        "sales_order_backed": {
+          "status": 200,
+          "body": {
+            "message": {
+              "data": {
+                "amount": 135.0,
+                "billing_address": "YOB Demo Billing-Billing",
+                "company": "Shayona Technology",
+                "contact_person": "Demo Buyer-YOB Demo Buyer",
+                "currency": "INR",
+                "customer": "YOB Demo Buyer",
+                "docstatus": 0,
+                "items": [
+                  {
+                    "amount": 135.0,
+                    "item_code": "YOB-BOLT-M10",
+                    "item_name": "Hex Bolt M10 x 50mm",
+                    "quantity": 12.0,
+                    "rate": 11.25,
+                    "uom": "Nos"
+                  }
+                ],
+                "order_status": "Draft",
+                "payment_methods": [
+                  {
+                    "description": "Pay Later demo payment method.",
+                    "display_order": 1,
+                    "icon": null,
+                    "method_code": "paylater",
+                    "name": "Pay Later",
+                    "payment_type": "Offline"
+                  },
+                  {
+                    "description": "Razorpay demo payment method.",
+                    "display_order": 2,
+                    "icon": null,
+                    "method_code": "razorpay",
+                    "name": "Razorpay",
+                    "payment_type": "Online"
+                  }
+                ],
+                "payment_request": "ACC-PRQ-2026-00002",
+                "shipping_address": "YOB Demo Shipping-Shipping",
+                "source_doctype": "Sales Order",
+                "source_name": "SAL-ORD-2026-00002"
+              },
+              "notice": "Checkout data retrieved successfully"
+            }
+          }
+        },
+        "blank_token": {
+          "status": 404,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "checkout_token_invalid",
+                  "detail": "This checkout link is not valid.",
+                  "field": "token"
+                }
+              ]
+            }
+          }
+        },
+        "invalid_token": {
+          "status": 404,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "checkout_token_invalid",
+                  "detail": "This checkout link is not valid.",
+                  "field": "token"
+                }
+              ]
+            }
+          }
+        },
+        "expired_token": {
+          "status": 422,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "checkout_token_expired",
+                  "detail": "This payment link has expired.",
+                  "field": "token"
+                }
+              ]
+            }
+          }
+        },
+        "stale_cart": {
+          "status": 409,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "payment_request_stale",
+                  "detail": "Your cart has changed since this payment was started. Please return to the cart and continue again."
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "process_payment": {
+      "verified": "test",
+      "method": "POST",
+      "path": "/api/method/yob_storefront.api.payment.process_payment",
+      "guest": true,
+      "notes": [
+        "PUBLIC (guest). Authorized solely by the checkout token.",
+        "The browser sends ONLY `token` and `payment_method`. It never sends amount, currency, cart, sales order or razorpay order id -- all are derived server-side from the immutable Payment Request.",
+        "`payment_method` is the Payment Method's `name` (e.g. 'Pay Later', 'Razorpay'), i.e. the `name` field from `payment_methods[]` -- not `method_code`.",
+        "Eligibility is re-checked authoritatively on every call. A method that was offered earlier but is no longer eligible is refused, and no order is created.",
+        "Commits the cart to exactly ONE Draft Sales Order, idempotently. Repeated calls -- Pay Later then Razorpay, or a retry after failure -- converge on the same Sales Order and the same provider order.",
+        "Razorpay `amount` is in PROVIDER UNITS (paise: 13500 == INR 135.00). Pay Later `amount` is the normal business amount (135.0). This difference is intentional: the Razorpay value is passed straight to the checkout widget.",
+        "A provider failure AFTER the local commitment returns payment_provider_error with `details.retryable = true` and `details.sales_order`. The Sales Order was NOT rolled back -- do not show the user 'order failed'; offer a retry."
+      ],
+      "responses": {
+        "paylater": {
+          "status": 201,
+          "body": {
+            "message": {
+              "data": {
+                "amount": 135.0,
+                "currency": "INR",
+                "payment_method": "paylater",
+                "payment_request": "ACC-PRQ-2026-00002",
+                "payment_status": "Unpaid",
+                "sales_order": "SAL-ORD-2026-00002"
+              },
+              "notice": "Order created with Pay Later"
+            }
+          }
+        },
+        "razorpay": {
+          "status": 201,
+          "body": {
+            "message": {
+              "data": {
+                "amount": 13500,
+                "currency": "INR",
+                "order_id": "order_EXAMPLE0001",
+                "payment_method": "razorpay",
+                "payment_request": "ACC-PRQ-2026-00002",
+                "razorpay_key": "<REDACTED>",
+                "sales_order": "SAL-ORD-2026-00002"
+              }
+            }
+          }
+        },
+        "missing_method": {
+          "status": 422,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "validation_failed",
+                  "detail": "Payment method is required.",
+                  "field": "payment_method"
+                }
+              ]
+            }
+          }
+        },
+        "unknown_method": {
+          "status": 422,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "payment_method_unsupported",
+                  "detail": "This payment method is not supported.",
+                  "field": "payment_method"
+                }
+              ]
+            }
+          }
+        },
+        "ineligible_method": {
+          "status": 422,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "payment_method_unsupported",
+                  "detail": "This payment method is not available for this order.",
+                  "field": "payment_method"
+                }
+              ]
+            }
+          }
+        },
+        "stale_cart": {
+          "status": 409,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "payment_request_stale",
+                  "detail": "Your cart has changed since this payment was started. Please return to the cart and continue again."
+                }
+              ]
+            }
+          }
+        },
+        "provider_failure_after_commitment": {
+          "status": 500,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "payment_provider_error",
+                  "detail": "We could not reach the payment provider. Your order is saved -- please try paying again.",
+                  "details": {
+                    "retryable": true,
+                    "sales_order": "SAL-ORD-2026-00002"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "verify_payment": {
+      "verified": "test",
+      "method": "POST",
+      "path": "/api/method/yob_storefront.api.payment.verify_payment",
+      "guest": true,
+      "notes": [
+        "PUBLIC (guest). Authorized by Razorpay's HMAC signature, verified server-side. NO checkout token is accepted or required: the obligation is resolved through the provider order id.",
+        "All three fields are required; a missing one answers validation_failed with `field` naming the first missing one.",
+        "Idempotent. Re-verifying the SAME payment id returns the same success body with notice 'Payment already processed.'. A DIFFERENT payment against an already-settled obligation is refused with payment_already_processed (409).",
+        "Settlement never creates a Sales Order -- it settles the one that process_payment already committed.",
+        "The frontend's claim of success is never trusted; the server independently fetches and validates the provider order and payment."
+      ],
+      "responses": {
+        "success": {
+          "status": 200,
+          "body": {
+            "message": {
+              "data": {
+                "payment_id": "pay_EXAMPLE0001",
+                "payment_request": "ACC-PRQ-2026-00002",
+                "sales_order": "SAL-ORD-2026-00002"
+              },
+              "notice": "Payment verified and order created successfully."
+            }
+          }
+        },
+        "idempotent_retry": {
+          "status": 200,
+          "body": {
+            "message": {
+              "data": {
+                "payment_id": "pay_EXAMPLE0001",
+                "payment_request": "ACC-PRQ-2026-00002",
+                "sales_order": "SAL-ORD-2026-00002"
+              },
+              "notice": "Payment already processed."
+            }
+          }
+        },
+        "bad_signature": {
+          "status": 422,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "payment_signature_invalid",
+                  "detail": "Invalid payment signature."
+                }
+              ]
+            }
+          }
+        },
+        "missing_field": {
+          "status": 422,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "validation_failed",
+                  "detail": "Payment verification details are incomplete.",
+                  "field": "razorpay_order_id"
+                }
+              ]
+            }
+          }
+        },
+        "unknown_order": {
+          "status": 422,
+          "body": {
+            "message": {
+              "errors": [
+                {
+                  "code": "payment_reference_invalid",
+                  "detail": "This payment could not be matched to an order."
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "get_payment_methods": {
+      "verified": "test",
+      "method": "GET",
+      "path": "/api/method/yob_storefront.api.payment_method.get_payment_methods",
+      "guest": false,
+      "notes": [
+        "Authenticated. Eligibility is centralized server-side; the `customer` query parameter is accepted for backward compatibility only and is overwritten with the authenticated Customer (a mismatching value is rejected outright).",
+        "Response is an array of eligible methods ordered by `display_order`, each with exactly: name, method_code, payment_type, display_order, icon, description.",
+        "`meta.count` carries the number of methods."
+      ],
+      "responses": {
+        "eligible": {
+          "status": 200,
+          "body": {
+            "message": {
+              "data": [
+                {
+                  "description": "Pay Later demo payment method.",
+                  "display_order": 1,
+                  "icon": null,
+                  "method_code": "paylater",
+                  "name": "Pay Later",
+                  "payment_type": "Offline"
+                },
+                {
+                  "description": "Razorpay demo payment method.",
+                  "display_order": 2,
+                  "icon": null,
+                  "method_code": "razorpay",
+                  "name": "Razorpay",
+                  "payment_type": "Online"
+                }
+              ],
+              "meta": {
+                "count": 2
+              },
+              "notice": "Payment methods loaded"
+            }
+          }
+        }
+      }
+    }
   }
 }

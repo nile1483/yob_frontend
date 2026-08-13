@@ -4,6 +4,7 @@ import type { MockScenario } from '../scenarios/mock-scenario';
 import type { MockReply } from './mock-reply';
 import type { MockServerAddressBook } from './mock-server-address-book';
 import type { MockServerCart } from './mock-server-cart';
+import type { MockServerPayment } from './mock-server-payment';
 import type { MockServerSession } from './mock-server-session';
 
 /**
@@ -32,6 +33,8 @@ export interface MockContext {
   readonly cart: MockServerCart;
   /** The customer's Address and Contact master records. */
   readonly addressBook: MockServerAddressBook;
+  /** The payment obligation's lifecycle position: Cart-backed or Sales-Order-backed. */
+  readonly payment: MockServerPayment;
   /** The configured application code, so handlers never name one themselves. */
   readonly application: string;
   /**

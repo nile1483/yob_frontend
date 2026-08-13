@@ -59,6 +59,45 @@ export function selectionNeedsMasterDataRefresh(error: YobApiError): boolean {
 }
 
 /**
+ * Safe, localized wording for a failed `proceed_to_payment`.
+ *
+ * These are the server's own preconditions, re-checked authoritatively at the moment
+ * the obligation would be issued. The page's readiness rule is only a UX hint, so
+ * reaching one of these is entirely possible - the cart can change in another tab, or
+ * a selected record can vanish - and each message therefore says what to fix.
+ *
+ * Nothing from the backend is displayed, and none of these is a session failure: the
+ * buyer stays on checkout, signed in.
+ */
+export function proceedToPaymentErrorMessage(error: YobApiError): string {
+  switch (error.code) {
+    case 'cart_empty':
+      return $localize`:@@checkout.proceed.error.cartEmpty:Your cart is empty. Add something before checking out.`;
+
+    case 'cart_not_found':
+      return $localize`:@@checkout.proceed.error.cartNotFound:We could not find your cart. Please reload and try again.`;
+
+    case 'contact_required':
+      return $localize`:@@checkout.proceed.error.contactRequired:Select a contact person before continuing.`;
+
+    case 'billing_address_required':
+      return $localize`:@@checkout.proceed.error.billingRequired:Select a billing address before continuing.`;
+
+    case 'shipping_address_required':
+      return $localize`:@@checkout.proceed.error.shippingRequired:Select a shipping address before continuing.`;
+
+    case 'client_network_unavailable':
+      return $localize`:@@checkout.error.offline:We could not reach the server. Check your connection and try again.`;
+
+    default:
+      // Includes internal_server_error, every raw Frappe failure, and a `payment_url`
+      // we refused to follow. Deliberately says nothing about payment having been
+      // set up, because whether an obligation was issued is not knowable here.
+      return $localize`:@@checkout.proceed.error.generic:We could not continue to payment. Please try again.`;
+  }
+}
+
+/**
  * Safe wording for a failed create.
  *
  * `validation_failed` is the one case where the backend's `field` is worth acting on -

@@ -349,11 +349,17 @@ test.describe('readiness', () => {
     await expect(page.getByTestId('checkout-readiness')).toContainText('Ready to proceed');
   });
 
-  test('never offers a payment action in this phase', async ({ page }) => {
+  test('offers exactly one payment action, and it only hands off', async ({ page }) => {
+    // Phase 11 asserted there was no payment action at all. Phase 12 added the handoff,
+    // so the assertion that still earns its place is that there is precisely one - and
+    // that nothing which belongs to Phase 13 has crept in beside it.
     await openCheckout(page);
 
-    // No button that looks like it starts payment, wired or otherwise.
-    await expect(page.getByRole('button', { name: /pay|payment|place order/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /pay|payment|place order/i })).toHaveCount(1);
+    await expect(page.getByTestId('checkout-proceed')).toBeVisible();
+
+    // No method selection, no provider, no order placement on this page.
+    await expect(page.getByText(/pay later|razorpay|card|upi|net ?banking/i)).toHaveCount(0);
     await expect(page.getByRole('link', { name: /pay|payment|place order/i })).toHaveCount(0);
   });
 });

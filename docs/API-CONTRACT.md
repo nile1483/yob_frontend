@@ -630,14 +630,30 @@ Precondition failures, in the order the backend checks them - all `422` unless n
 
 ```text
 cart_not_found              404
-cart_empty                  (verified live)
+cart_empty                  (wire-verified)
 contact_required            field=contact_person
 billing_address_required    field=billing_address
 shipping_address_required   field=shipping_address, only when the cart is shippable
 ```
 
-The success path was deliberately not triggered during capture because it creates a
-real Payment Request.
+**Both success statuses are captured in reference 2.0.0** at verification level `test`:
+`201` when an obligation was created (first checkout, or a replacement because the cart
+changed) and `200` when an open one was reused, possibly with a rotated credential. The
+**bodies are identical**, and the frontend must behave identically - created versus
+reused, supersession and rotation are server business and never surface to the buyer.
+
+The request has **no body at all**. The browser never sends an amount, currency, cart
+id, customer, fingerprint or payment method; the server derives everything from the
+session. That is the security property of the endpoint: a Payment Request is an
+immutable financial obligation, and a client that could name the amount could name the
+wrong one.
+
+`proceed_to_payment` does **not** commit the cart. It issues or reuses the obligation;
+the cart becomes a Sales Order later, inside `payment.process_payment`, once a method
+is chosen. Never mark a cart ordered locally on the strength of this call.
+
+Because it issues and revokes real financial obligations, it is **excluded from
+`scripts/live-smoke.mjs`** and from any ordinary automated run against a live bench.
 
 ### Store/CMS config - 1
 

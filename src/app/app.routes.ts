@@ -14,6 +14,7 @@ import { SecureShell } from './shells/secure/secure-shell';
  *
  * PUBLIC   (PublicShell, no guard)
  *   /login                 access domain
+ *   /payment/:token        payment domain - token-based, guest-accessible
  *   /terms                 content domain
  *   /session-unavailable   content domain
  *
@@ -53,6 +54,12 @@ export const routes: Routes = [
       {
         path: 'login',
         loadChildren: () => import('./domains/access/access.routes').then((m) => m.ACCESS_ROUTES),
+      },
+      {
+        // Public on purpose: the checkout token in the URL is the credential, and the
+        // buyer may arrive with no session, on another device, from a link.
+        path: 'payment',
+        loadChildren: () => import('./domains/payment/payment.routes').then((m) => m.PAYMENT_ROUTES),
       },
       {
         path: '',

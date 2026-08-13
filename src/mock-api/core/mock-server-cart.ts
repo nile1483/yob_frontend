@@ -151,6 +151,10 @@ export class MockServerCart {
     this.shippingAddress.set(null);
   }
 
+  currentContactPerson(): string | null {
+    return this.contactPerson();
+  }
+
   currentBillingAddress(): string | null {
     return this.billingAddress();
   }

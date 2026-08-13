@@ -1,4 +1,6 @@
+import { RazorpayCheckout } from '../app/domains/payment/razorpay/razorpay-checkout';
 import { mockApiInterceptor } from '../mock-api/mock-api.interceptor';
+import { FakeRazorpayCheckout } from '../mock-api/razorpay/fake-razorpay-checkout';
 import type { AppEnvironment } from './environment.types';
 
 /**
@@ -31,6 +33,10 @@ export const environment: AppEnvironment = {
     defaultCurrency: 'INR',
   },
   httpInterceptors: USE_MOCK_API ? [mockApiInterceptor] : [],
+  // Real Checkout.js when developing against the real backend; the stand-in only when
+  // the whole API is mocked, because a fake modal against real obligations would be
+  // worse than no modal at all.
+  providers: USE_MOCK_API ? [{ provide: RazorpayCheckout, useClass: FakeRazorpayCheckout }] : [],
   devRoutes: [
     {
       path: '__design',

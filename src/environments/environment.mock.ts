@@ -1,4 +1,6 @@
+import { RazorpayCheckout } from '../app/domains/payment/razorpay/razorpay-checkout';
 import { mockApiInterceptor } from '../mock-api/mock-api.interceptor';
+import { FakeRazorpayCheckout } from '../mock-api/razorpay/fake-razorpay-checkout';
 import type { AppEnvironment } from './environment.types';
 
 /**
@@ -25,6 +27,7 @@ export const environment: AppEnvironment = {
     defaultCurrency: 'INR',
   },
   httpInterceptors: [mockApiInterceptor],
+  providers: [{ provide: RazorpayCheckout, useClass: FakeRazorpayCheckout }],
   devRoutes: [
     {
       path: '__design',

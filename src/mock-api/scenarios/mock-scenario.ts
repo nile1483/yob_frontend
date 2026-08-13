@@ -39,7 +39,44 @@ export type MockScenario =
    *
    * Stands in for a record deleted after this page read the list.
    */
-  | 'checkout-stale-records';
+  | 'checkout-stale-records'
+  /**
+   * `proceed_to_payment` answers 200 (obligation reused) instead of 201 (created).
+   *
+   * A knob because nothing a correct client does chooses between them - the server
+   * decides from its own obligation state - and the frontend must behave identically,
+   * which is only provable if both are reachable.
+   */
+  | 'payment-reused'
+  /**
+   * `proceed_to_payment` refuses with a documented precondition failure.
+   *
+   * A knob because it is unreachable by behaving correctly: the failure models the
+   * cart changing between the page rendering and the buyer pressing Proceed - another
+   * tab, another device - which a browser test cannot otherwise arrange.
+   */
+  | 'payment-refused'
+  /** get_checkout_data and process_payment answer 409 payment_request_stale. */
+  | 'payment-stale'
+  /** The checkout credential has expired: 422 checkout_token_expired. */
+  | 'payment-token-expired'
+  /** process_payment refuses the chosen method and narrows the eligible set. */
+  | 'payment-method-ineligible'
+  /**
+   * The order commits and then the provider call fails.
+   *
+   * 500 payment_provider_error with `retryable: true` and the Sales Order - the case
+   * the UI must never report as a failed order.
+   */
+  | 'payment-provider-error'
+  /** verify_payment rejects the signature. */
+  | 'payment-signature-invalid'
+  /** Only Razorpay is eligible. */
+  | 'payment-razorpay-only'
+  /** Only Pay Later is eligible. */
+  | 'payment-paylater-only'
+  /** The obligation is already Sales-Order-backed on first load. */
+  | 'payment-committed';
 
 /**
  * Runtime knobs for the mock API.
@@ -82,7 +119,17 @@ export class MockApiScenario {
       scenario === 'cart-repriced' ||
       scenario === 'cart-item-removed' ||
       scenario === 'cart-not-shippable' ||
-      scenario === 'checkout-stale-records'
+      scenario === 'checkout-stale-records' ||
+      scenario === 'payment-reused' ||
+      scenario === 'payment-refused' ||
+      scenario === 'payment-stale' ||
+      scenario === 'payment-token-expired' ||
+      scenario === 'payment-method-ineligible' ||
+      scenario === 'payment-provider-error' ||
+      scenario === 'payment-signature-invalid' ||
+      scenario === 'payment-razorpay-only' ||
+      scenario === 'payment-paylater-only' ||
+      scenario === 'payment-committed'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

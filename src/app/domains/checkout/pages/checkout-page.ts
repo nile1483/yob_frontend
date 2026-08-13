@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 import { Alert } from '../../../design/alert/alert';
 import { Button } from '../../../design/button/button';
@@ -11,11 +11,14 @@ import { CartStore } from '../../cart/state/cart.store';
 import {
   checkoutCreateErrorMessage,
   checkoutSelectionErrorMessage,
+  proceedToPaymentErrorMessage,
   selectionNeedsMasterDataRefresh,
 } from '../checkout-error-message';
 import { toAddressChoice, toContactChoice } from '../checkout.choices';
 import type { AddAddressRequest, AddContactRequest } from '../contracts/checkout.types';
+import { sanitizePaymentUrl } from '../../payment/payment.route-path';
 import { AddressBookApi } from '../data/address-book.api';
+import { CheckoutApi } from '../data/checkout.api';
 import { AddressForm } from '../parts/address-form';
 import { CheckoutSummary } from '../parts/checkout-summary';
 import { ChoiceList } from '../parts/choice-list';
@@ -23,6 +26,21 @@ import { ContactForm } from '../parts/contact-form';
 
 /** Which section opened the shared address form, and therefore what happens after. */
 type AddressContext = 'billing' | 'shipping';
+
+/**
+ * `proceed_to_payment` failures that are complaints about the cart's checkout state.
+ *
+ * Worth re-reading the cart for, because the server is telling us our copy is out of
+ * date. Transport failures and server faults are not - nothing about the cart changed,
+ * and a retry request would only add noise.
+ */
+const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
+  'cart_not_found',
+  'cart_empty',
+  'contact_required',
+  'billing_address_required',
+  'shipping_address_required',
+]);
 
 /**
  * Checkout details: who to contact, where to bill, where to ship.
@@ -78,6 +96,16 @@ type AddressContext = 'billing' | 'shipping';
          reloaded underneath it, exactly as the cart page's reconciliation notice does. -->
     @if (selectionErrorMessage(); as message) {
       <div class="mt-6" data-testid="checkout-selection-error">
+        <app-alert tone="error">{{ message }}</app-alert>
+      </div>
+    }
+
+    <!-- Also outside the branches, and for a sharper reason: a failed Proceed re-reads
+         the cart, and if the failure was an empty cart the page switches to the empty
+         state - taking any message rendered inside the populated branch with it. The
+         buyer would have pressed a button and seen nothing explain itself. -->
+    @if (proceedErrorMessage(); as message) {
+      <div class="mt-6" data-testid="checkout-proceed-error">
         <app-alert tone="error">{{ message }}</app-alert>
       </div>
     }
@@ -277,13 +305,11 @@ type AddressContext = 'billing' | 'shipping';
             </section>
           }
 
-          <!-- ---------------------------------------------------- readiness -->
+          <!-- --------------------------------------- readiness and proceed -->
           <section aria-live="polite" data-testid="checkout-readiness">
             @if (isReady()) {
               <app-alert tone="success">
-                <span i18n="@@checkout.ready"
-                  >Ready to proceed. Payment arrives in the next step.</span
-                >
+                <span i18n="@@checkout.ready">Ready to proceed.</span>
               </app-alert>
             } @else {
               <p class="text-sm text-slate-600" data-testid="checkout-not-ready">
@@ -291,6 +317,24 @@ type AddressContext = 'billing' | 'shipping';
               </p>
             }
           </section>
+
+          <div>
+            <!-- Disabled rather than hidden: a button that vanishes leaves the buyer
+                 wondering where checkout continues. The readiness line above says what
+                 is missing. Backend validation remains authoritative either way. -->
+            <button
+              yob-button
+              type="button"
+              class="w-full sm:w-auto"
+              [disabled]="!isReady()"
+              [loading]="proceeding()"
+              (click)="onProceedToPayment()"
+              data-testid="checkout-proceed"
+              i18n="@@checkout.proceed"
+            >
+              Proceed to Payment
+            </button>
+          </div>
         </div>
 
         <app-checkout-summary [cart]="cart" />
@@ -301,6 +345,8 @@ type AddressContext = 'billing' | 'shipping';
 export class CheckoutPage {
   protected readonly store = inject(CartStore);
   private readonly api = inject(AddressBookApi);
+  private readonly checkoutApi = inject(CheckoutApi);
+  private readonly router = inject(Router);
 
   /**
    * Master data. Two independent resources, started at construction alongside the
@@ -327,6 +373,10 @@ export class CheckoutPage {
   protected readonly creatingContact = signal(false);
   protected readonly createContactError = signal('');
   protected readonly createContactFieldErrors = signal<Readonly<Record<string, string>>>({});
+
+  /** A `proceed_to_payment` is in flight. Also what blocks a second submission. */
+  protected readonly proceeding = signal(false);
+  protected readonly proceedErrorMessage = signal<string | null>(null);
 
   constructor() {
     // Third of the three parallel loads. The store may already hold a payload from the
@@ -416,6 +466,72 @@ export class CheckoutPage {
         const error = this.store.selectionError();
         if (error !== null && selectionNeedsMasterDataRefresh(error)) {
           refreshMasterData();
+        }
+      },
+    });
+  }
+
+  // --------------------------------------------------------------- proceed
+
+  /**
+   * Ask the server to issue the checkout credential, then hand off to the payment route.
+   *
+   * ## What this does not do
+   *
+   * It does not commit anything. `proceed_to_payment` issues or reuses a Payment
+   * Request against the current cart - the cart becomes a Sales Order later, inside
+   * `process_payment`, once the buyer has chosen how to pay. So there is no local
+   * "ordered" transition here, optimistic or otherwise, and the cart is left exactly
+   * as the server last reported it.
+   *
+   * It also does not distinguish `201` from `200`. Created, reused and
+   * credential-rotated are the same outcome as far as the buyer is concerned: go here
+   * next.
+   *
+   * ## Failure
+   *
+   * The server re-validates its own preconditions at the moment of issue, so this can
+   * fail on a page that looked ready - another tab emptied the cart, a selected record
+   * was deleted. The buyer stays on checkout, and the cart is re-read so the page
+   * shows current server truth rather than a guess at what went wrong.
+   */
+  protected onProceedToPayment(): void {
+    // Readiness is re-checked here, not only bound to the button: a disabled button is
+    // a UI affordance, and this is the one place that must not start the request.
+    if (this.proceeding() || !this.isReady()) {
+      return;
+    }
+
+    this.proceeding.set(true);
+    this.proceedErrorMessage.set(null);
+
+    this.checkoutApi.proceedToPayment().subscribe({
+      next: (data) => {
+        // The server owns where checkout continues, but "the server said so" is not a
+        // licence to navigate anywhere - see `sanitizePaymentUrl`.
+        const destination = sanitizePaymentUrl(data.payment_url);
+
+        if (destination === null) {
+          this.proceeding.set(false);
+          this.proceedErrorMessage.set(
+            proceedToPaymentErrorMessage(normalizeYobFailure(new Error('unusable payment_url'))),
+          );
+          return;
+        }
+
+        // Angular routing, not a location assignment: this is an internal SPA path.
+        // The token stays in the URL and is not copied anywhere.
+        void this.router.navigateByUrl(destination);
+      },
+      error: (failure: unknown) => {
+        this.proceeding.set(false);
+        const error = normalizeYobFailure(failure);
+        this.proceedErrorMessage.set(proceedToPaymentErrorMessage(error));
+
+        if (CHECKOUT_STATE_ERROR_CODES.has(error.code)) {
+          // The cart is what these complain about, so re-read it rather than trying to
+          // work out locally what changed.
+          this.store.load().subscribe();
         }
       },
     });

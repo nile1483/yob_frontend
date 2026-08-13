@@ -3,6 +3,8 @@ import { ADDRESS_HANDLERS } from './address.handlers';
 import { AUTH_HANDLERS } from './auth.handlers';
 import { CART_HANDLERS } from './cart.handlers';
 import { CATALOG_HANDLERS } from './catalog.handlers';
+import { CHECKOUT_HANDLERS } from './checkout.handlers';
+import { PAYMENT_HANDLERS } from './payment.handlers';
 
 /**
  * Every RPC method the mock API can answer, keyed by Frappe method name.
@@ -17,4 +19,6 @@ export const MOCK_HANDLERS: MockHandlerRegistry = {
   ...AUTH_HANDLERS,
   ...CATALOG_HANDLERS,
   ...CART_HANDLERS,
+  ...CHECKOUT_HANDLERS,
+  ...PAYMENT_HANDLERS,
 };

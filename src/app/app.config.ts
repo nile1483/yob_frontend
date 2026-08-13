@@ -2,7 +2,7 @@ import {
   ApplicationConfig,
   inject,
   provideAppInitializer,
-  provideBrowserGlobalErrorListeners
+  provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 
@@ -24,6 +24,9 @@ export const appConfig: ApplicationConfig = {
     // Resolve the session before the first render so nothing has to cope with a
     // half-known state. `restore()` never errors, so a backend outage delays boot but
     // does not break it - the failure surfaces as `SessionStore.restoreError`.
-    provideAppInitializer(() => inject(SessionStore).restore())
-  ]
+    provideAppInitializer(() => inject(SessionStore).restore()),
+    // Empty in production. In mock builds this substitutes the deterministic Razorpay
+    // stand-in for the real Checkout.js loader.
+    ...environment.providers,
+  ],
 };

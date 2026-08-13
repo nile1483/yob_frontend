@@ -149,18 +149,32 @@ const auth = { Cookie: `sid=${sid}` };
 }
 
 console.log('\n== 5. Raw Frappe 400 CSRFTokenError, then the header that fixes it ==');
+// NON-DESTRUCTIVE BY CONSTRUCTION. Both calls use `set_cart_contact` with no arguments.
+//
+// Frappe validates CSRF in the request pipeline, before the whitelisted method runs, so
+// the pair still proves exactly what it needs to: without a token the request is
+// rejected at 400, and with one it reaches the handler - which then refuses on its own
+// terms with 422 `contact_required` and changes nothing.
+//
+// It used to call `clear_cart` with a valid token, which succeeded and emptied the real
+// customer's cart every run. Ordinary smoke must not mutate real business data: no
+// cleared carts, no Payment Requests, no Sales Orders, no provider calls. In particular
+// `proceed_to_payment` must never appear in this file - it issues and revokes real
+// financial obligations. Payment flows are covered by the mock and browser suites.
 {
-  const r = await call('yob_storefront.api.cart.clear_cart', { verb: 'POST', body: {}, headers: auth });
+  const r = await call('yob_storefront.api.cart.set_cart_contact', { verb: 'POST', body: {}, headers: auth });
   const c = classify(r.status, r.json, r.text);
   check('POST without CSRF -> client_csrf_token_invalid @400', r.status === 400 && c.code === 'client_csrf_token_invalid', `${r.status} ${JSON.stringify(c)}`);
 }
 {
-  const r = await call('yob_storefront.api.cart.clear_cart', {
+  const r = await call('yob_storefront.api.cart.set_cart_contact', {
     verb: 'POST',
     body: {},
     headers: { ...auth, 'X-Frappe-CSRF-Token': csrf },
   });
-  check('POST with X-Frappe-CSRF-Token accepted -> interceptor header name is correct', r.status === 200, `status=${r.status}`);
+  const c = classify(r.status, r.json, r.text);
+  // Past CSRF and into the handler: a business validation failure, not a 400.
+  check('POST with X-Frappe-CSRF-Token accepted -> interceptor header name is correct', r.status === 422 && c.code === 'contact_required', `status=${r.status} ${JSON.stringify(c)}`);
 }
 
 console.log('\n== 6. Non-JSON edge failure (421) ==');

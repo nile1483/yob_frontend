@@ -1,6 +1,7 @@
 {
   "info": {
-    "name": "YOB Storefront & Auth API",
+    "name": "YOB Storefront & Auth API (Phase 2B)",
+    "description": "Session: run login_with_password first, keep the sid cookie, and put the returned csrf_token into the {{csrf_token}} variable.\n\nNo real credentials, session ids, checkout tokens or Razorpay secrets are stored in this collection -- every such value is a placeholder variable you fill in locally.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -10,6 +11,24 @@
     },
     {
       "key": "csrf_token",
+      "value": "",
+      "description": "From login response."
+    },
+    {
+      "key": "checkout_token",
+      "value": "",
+      "description": "From proceed_to_payment `data.token`. A live bearer credential -- never commit a real one."
+    },
+    {
+      "key": "razorpay_order_id",
+      "value": ""
+    },
+    {
+      "key": "razorpay_payment_id",
+      "value": ""
+    },
+    {
+      "key": "razorpay_signature",
       "value": ""
     }
   ],
@@ -33,7 +52,8 @@
             "api",
             "method",
             "yob_auth.api.auth.get_session_context"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -56,7 +76,8 @@
             "api",
             "method",
             "yob_auth.api.auth.login_with_otp"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -83,7 +104,8 @@
             "api",
             "method",
             "yob_auth.api.auth.login_with_password"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -114,7 +136,8 @@
             "api",
             "method",
             "yob_auth.api.auth.logout"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -141,7 +164,8 @@
             "api",
             "method",
             "yob_auth.api.auth.request_otp"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -172,7 +196,40 @@
             "api",
             "method",
             "yob_storefront.api.address.add_address"
-          ]
+          ],
+          "query": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        }
+      }
+    },
+    {
+      "name": "yob_storefront.api.address.add_contact",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Frappe-CSRF-Token",
+            "value": "{{csrf_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/method/yob_storefront.api.address.add_contact",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "method",
+            "yob_storefront.api.address.add_contact"
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -203,7 +260,8 @@
             "api",
             "method",
             "yob_storefront.api.address.delete_address"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -234,7 +292,8 @@
             "api",
             "method",
             "yob_storefront.api.address.delete_contact"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -261,7 +320,8 @@
             "api",
             "method",
             "yob_storefront.api.address.get_addresses"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -284,7 +344,8 @@
             "api",
             "method",
             "yob_storefront.api.address.get_contact_for_customer"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -307,7 +368,8 @@
             "api",
             "method",
             "yob_storefront.api.address.get_contacts"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -334,7 +396,8 @@
             "api",
             "method",
             "yob_storefront.api.address.update_address"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -365,7 +428,8 @@
             "api",
             "method",
             "yob_storefront.api.address.update_contact"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -396,7 +460,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.add_to_cart"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -427,7 +492,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.apply_coupon"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -458,7 +524,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.clear_cart"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -485,7 +552,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.get_cart"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -512,7 +580,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.remove_coupon"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -543,7 +612,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.remove_from_cart"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -574,7 +644,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.set_cart_billing_address"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -605,7 +676,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.set_cart_contact"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -636,7 +708,8 @@
             "api",
             "method",
             "yob_storefront.api.cart.set_cart_shipping_address"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -663,7 +736,8 @@
             "api",
             "method",
             "yob_storefront.api.catalog.get_categories"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -686,7 +760,8 @@
             "api",
             "method",
             "yob_storefront.api.catalog.get_category"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -709,7 +784,8 @@
             "api",
             "method",
             "yob_storefront.api.catalog.get_item"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -736,7 +812,8 @@
             "api",
             "method",
             "yob_storefront.api.checkout.proceed_to_payment"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
@@ -763,7 +840,8 @@
             "api",
             "method",
             "yob_storefront.api.cms.get_config"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -786,7 +864,8 @@
             "api",
             "method",
             "yob_storefront.api.order.get_order_details"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -809,7 +888,8 @@
             "api",
             "method",
             "yob_storefront.api.order.get_orders"
-          ]
+          ],
+          "query": []
         }
       }
     },
@@ -824,7 +904,7 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/method/yob_storefront.api.payment.get_checkout_data",
+          "raw": "{{base_url}}/api/method/yob_storefront.api.payment.get_checkout_data?token={{checkout_token}}",
           "host": [
             "{{base_url}}"
           ],
@@ -832,12 +912,18 @@
             "api",
             "method",
             "yob_storefront.api.payment.get_checkout_data"
+          ],
+          "query": [
+            {
+              "key": "token",
+              "value": "{{checkout_token}}"
+            }
           ]
         }
       }
     },
     {
-      "name": "yob_storefront.api.payment.process_payment",
+      "name": "yob_storefront.api.payment.process_payment (Pay Later)",
       "request": {
         "method": "POST",
         "header": [
@@ -855,11 +941,40 @@
             "api",
             "method",
             "yob_storefront.api.payment.process_payment"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"token\": \"\",\n  \"payment_method\": \"\"\n}"
+          "raw": "{\n  \"token\": \"{{checkout_token}}\",\n  \"payment_method\": \"Pay Later\"\n}"
+        }
+      }
+    },
+    {
+      "name": "yob_storefront.api.payment.process_payment (Razorpay)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/method/yob_storefront.api.payment.process_payment",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "method",
+            "yob_storefront.api.payment.process_payment"
+          ],
+          "query": []
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"token\": \"{{checkout_token}}\",\n  \"payment_method\": \"Razorpay\"\n}"
         }
       }
     },
@@ -882,11 +997,12 @@
             "api",
             "method",
             "yob_storefront.api.payment.verify_payment"
-          ]
+          ],
+          "query": []
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"razorpay_order_id\": \"\",\n  \"razorpay_payment_id\": \"\",\n  \"razorpay_signature\": \"\"\n}"
+          "raw": "{\n  \"razorpay_order_id\": \"{{razorpay_order_id}}\",\n  \"razorpay_payment_id\": \"{{razorpay_payment_id}}\",\n  \"razorpay_signature\": \"{{razorpay_signature}}\"\n}"
         }
       }
     },
@@ -901,7 +1017,7 @@
           }
         ],
         "url": {
-          "raw": "{{base_url}}/api/method/yob_storefront.api.payment_method.get_payment_methods",
+          "raw": "{{base_url}}/api/method/yob_storefront.api.payment_method.get_payment_methods?order_amount=500",
           "host": [
             "{{base_url}}"
           ],
@@ -909,6 +1025,12 @@
             "api",
             "method",
             "yob_storefront.api.payment_method.get_payment_methods"
+          ],
+          "query": [
+            {
+              "key": "order_amount",
+              "value": "500"
+            }
           ]
         }
       }

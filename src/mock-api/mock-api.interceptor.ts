@@ -14,6 +14,7 @@ import type { MockContext } from './core/mock-handler';
 import { type MockReply, mockYobError } from './core/mock-reply';
 import { MockServerAddressBook } from './core/mock-server-address-book';
 import { MockServerCart } from './core/mock-server-cart';
+import { MockServerPayment } from './core/mock-server-payment';
 import { MockServerSession } from './core/mock-server-session';
 import { MOCK_HANDLERS } from './handlers/mock-handlers';
 import { MockApiScenario } from './scenarios/mock-scenario';
@@ -52,6 +53,7 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
   const session = inject(MockServerSession);
   const cart = inject(MockServerCart);
   const addressBook = inject(MockServerAddressBook);
+  const payment = inject(MockServerPayment);
   const scenario = inject(MockApiScenario);
 
   // A URL-set scenario spares the auth endpoints, so a browser test can still sign in
@@ -67,6 +69,7 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
       session,
       cart,
       addressBook,
+      payment,
       application,
       scenario: active,
     },
