@@ -28,6 +28,105 @@ Update it only for durable project-level facts or important unresolved contract 
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Buyer orders (Phase 14, 2026-08-13)
+
+The authoritative handoff (`docs/api-handoff/`) covers these two endpoints only in the
+authorization matrix and the error tables - it carries **no response shapes** for them.
+So this contract is source-verified from `yob_storefront/api/order.py` and wire-verified
+against the bench's three real Sales Orders, two of which were paid by real Razorpay
+Test Mode transactions.
+
+### The contract
+
+| | `get_orders` | `get_order_details` |
+| --- | --- | --- |
+| Method | GET, authenticated | GET, authenticated |
+| Parameters | **none at all** | `order_id` |
+| Returns | five fields per row | the full order |
+| Ordering | `creation desc`, fixed | - |
+
+`get_orders` has **no pagination, filters, sorting or search**, and its rows carry
+`name`, `status`, `grand_total`, `transaction_date`, `delivery_date` - no currency and
+no payment data. No such controls are offered in the UI, because the endpoint cannot
+honour them.
+
+`order_id` is the Sales Order **`name`** (`SAL-ORD-2026-00001`). There is no separate
+display order number, so the identifier and the thing a buyer quotes are the same
+string, and nothing is translated between them.
+
+### What a buyer-visible Order is - and why "Draft" is never shown
+
+`get_orders` filters on `customer` **only**. There is no `docstatus` filter, so Draft,
+Submitted and Cancelled Sales Orders are all returned.
+
+Every order on the development bench is `status: "Draft"`, **including two paid in full
+by real Razorpay transactions**. The payment flow commits orders at `docstatus = 0`, so
+ERPNext calls them Draft - an internal submit state, not a buyer-meaningful one.
+Rendering it would tell someone who has just been charged that their order was never
+placed.
+
+So the ERPNext vocabulary is **mapped, never echoed**. `orders.status.ts` maps the
+closed nine-value Select (Draft, On Hold, To Pay, To Deliver and Bill, To Bill, To
+Deliver, Completed, Cancelled, Closed) to buyer wording, with `Draft -> "Order
+received"`. `docstatus` is never returned by either endpoint, so there is nothing
+numeric to leak.
+
+### Payment status
+
+There is **no order-level payment field**. The only signal is `payment_logs[]` - rows
+from Razorpay Payment Log whose `payment_status` is a free-text field written straight
+from `payment.status`, i.e. raw provider vocabulary.
+
+- A log the provider reported as `captured` means paid. Only that value counts: logs
+  exist for failed attempts too, so "a payment id exists" is not "it was paid".
+- **No logs at all** means not paid through the provider - the unpaid, abandoned or Pay
+  Later case. One real bench order is in exactly this state.
+
+Failed and pending attempts are not surfaced; they are provider retry noise a buyer
+cannot act on.
+
+### Security
+
+Ownership is the backend's: `get_order_details` checks
+`exists("Sales Order", {name, customer})` **before** loading, so an unknown order and
+another customer's answer identically with `404 order_not_found`. The frontend renders
+one state for both - it cannot tell them apart, and wording that distinguished them
+would hand back what the backend withheld. A refusal is a business error and never
+clears `SessionStore` (Phase 9.5 semantics). Frappe's generic `/api/resource/Sales
+Order` is never called; a test pins that.
+
+### State and routes
+
+Page-local `rxResource`, no store - both pages are read-only and route-derived, the
+Catalog reasoning. Routes `/orders` and `/orders/:orderId` inside the secure branch,
+with an Orders entry in the primary navigation. Rows are real `<a>` elements, not
+clickable divs.
+
+### API gaps (frontend limitations, not defects to fix here)
+
+1. **The list returns no `currency`** - only a bare `grand_total`. The detail endpoint
+   does return one. The list reuses the environment-configured `CATALOG_CURRENCY`
+   fallback already established for the catalog, which has the same gap.
+2. **The list returns no payment information**, so payment state appears only on the
+   detail page.
+3. `contact_email` and `contact_mobile` were **null on every real order** despite
+   `contact_person` being set. The contact block renders only what is present and
+   disappears when nothing is.
+4. Order lines expose **no slug**, and `item_code` is the item name, so item names
+   render as plain text. Building a catalog route from a display string would be a
+   guess.
+5. The backend resolves addresses from the **current** Address master rather than a
+   stored snapshot, so editing an address changes how past orders display. That is the
+   backend's design; the frontend renders what it is given and never fetches master
+   data to reconstruct history.
+
+### Verification
+
+Read-only against the real bench: the list, a Razorpay-settled order's detail, real
+amounts, and the billing/shipping/contact projection, at 390 and 1440 - 28 checks, no
+writes, no new provider artifacts. Mock fixtures are fictitious and deliberately do
+**not** copy the bench's real payment ids.
+
 ## CONFIRMED - Backend contract synchronization (Phase 13.5, 2026-08-13)
 
 **The authoritative contract is now `docs/api-handoff/`**, unpacked from the backend
@@ -404,6 +503,7 @@ until the backend ships it.
 | Frontend Phase 12 - Proceed to Payment handoff | **PASS** |
 | Frontend Phase 13 - Public payment, methods, Razorpay, verification | **PASS** |
 | Frontend Phase 13.5 - Backend contract synchronization | **PASS** |
+| Frontend Phase 14 - Buyer orders | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |
 | API reference 2.0.0 (2026-08-13) | in use |

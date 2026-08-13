@@ -4,6 +4,7 @@ import { AUTH_HANDLERS } from './auth.handlers';
 import { CART_HANDLERS } from './cart.handlers';
 import { CATALOG_HANDLERS } from './catalog.handlers';
 import { CHECKOUT_HANDLERS } from './checkout.handlers';
+import { ORDERS_HANDLERS } from './orders.handlers';
 import { PAYMENT_HANDLERS } from './payment.handlers';
 
 /**
@@ -20,5 +21,6 @@ export const MOCK_HANDLERS: MockHandlerRegistry = {
   ...CATALOG_HANDLERS,
   ...CART_HANDLERS,
   ...CHECKOUT_HANDLERS,
+  ...ORDERS_HANDLERS,
   ...PAYMENT_HANDLERS,
 };

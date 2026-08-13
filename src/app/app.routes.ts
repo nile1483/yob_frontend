@@ -20,6 +20,7 @@ import { SecureShell } from './shells/secure/secure-shell';
  *
  * SECURE   (SecureShell, secureRouteGuard)
  *   /catalog               catalog domain
+ *   /orders                orders domain
  *   /account               account domain
  *
  * anything else            not-found, inside PublicShell
@@ -89,6 +90,10 @@ export const routes: Routes = [
         path: 'checkout',
         loadChildren: () =>
           import('./domains/checkout/checkout.routes').then((m) => m.CHECKOUT_ROUTES),
+      },
+      {
+        path: 'orders',
+        loadChildren: () => import('./domains/orders/orders.routes').then((m) => m.ORDERS_ROUTES),
       },
       {
         path: 'account',
