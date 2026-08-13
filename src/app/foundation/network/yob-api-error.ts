@@ -59,6 +59,51 @@ export type YobClientErrorCode =
 const GENERIC_DETAIL = 'Something went wrong. Please try again.';
 
 /**
+ * The structured extras the frontend may act on, and nothing else.
+ *
+ * The backend's `details` object is open-ended: payment errors put provider state in
+ * it, and a future backend change could put anything there. Handing that object to
+ * components would mean arbitrary server- and provider-authored content one careless
+ * interpolation away from the page, and would let UI code quietly grow a dependency on
+ * a field nobody agreed to support.
+ *
+ * So this is an **allow-list**, built by copying three known keys with their types
+ * checked. Anything else the backend sends is dropped at the network boundary. Adding a
+ * field here is a deliberate act, which is the point.
+ */
+export interface YobErrorContext {
+  /**
+   * Whether the server says retrying is safe. Payment provider errors only.
+   *
+   * `true` means the order was committed and only the provider call failed - retry is
+   * correct and "your order failed" would be a lie. `false` means nothing was
+   * committed, so another method should be offered instead.
+   */
+  readonly retryable?: boolean;
+  /** The Sales Order the server says survived a failure. A buyer-quotable reference. */
+  readonly salesOrder?: string;
+  /** Opaque support id linking to the server Error Log. Never provider or user text. */
+  readonly correlationId?: string;
+}
+
+/** Copy only the supported keys, and only when they have the expected type. */
+function toErrorContext(details: Readonly<Record<string, unknown>> | undefined): YobErrorContext {
+  if (details === undefined) {
+    return {};
+  }
+
+  const retryable = details['retryable'];
+  const salesOrder = details['sales_order'];
+  const correlationId = details['correlation_id'];
+
+  return {
+    ...(typeof retryable === 'boolean' ? { retryable } : {}),
+    ...(typeof salesOrder === 'string' && salesOrder !== '' ? { salesOrder } : {}),
+    ...(typeof correlationId === 'string' && correlationId !== '' ? { correlationId } : {}),
+  };
+}
+
+/**
  * One normalised failure shape for every way a YOB call can fail.
  *
  * SECURITY: raw Frappe failures carry a full server traceback in `exc` and
@@ -78,7 +123,13 @@ export class YobApiError extends Error {
   /** First error's human-readable text. Safe to display. */
   readonly detail: string;
   readonly field?: string;
-  readonly details?: Readonly<Record<string, unknown>>;
+  /**
+   * The few structured extras the frontend is allowed to act on.
+   *
+   * Always present, possibly empty. See {@link YobErrorContext} for why this is an
+   * allow-list rather than the backend's `details` object.
+   */
+  readonly context: YobErrorContext;
   /** Every error the backend returned; `errors` is always a list and may hold several. */
   readonly errors: readonly YobErrorItem[];
   /** Frappe's exception class name, when the failure came from Frappe itself. */
@@ -106,9 +157,7 @@ export class YobApiError extends Error {
     if (first?.field !== undefined) {
       this.field = first.field;
     }
-    if (first?.details !== undefined) {
-      this.details = first.details;
-    }
+    this.context = toErrorContext(first?.details);
     if (init.frappeExcType !== undefined) {
       this.frappeExcType = init.frappeExcType;
     }

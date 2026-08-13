@@ -87,7 +87,9 @@ describe('YobApiClient', () => {
         })
         .subscribe();
 
-      const req = http.expectOne((r) => r.url === '/api/method/yob_storefront.api.catalog.get_category');
+      const req = http.expectOne(
+        (r) => r.url === '/api/method/yob_storefront.api.catalog.get_category',
+      );
       expect(req.request.params.get('slug')).toBe('fasteners');
       expect(req.request.params.get('qty')).toBe('10');
       expect(req.request.params.get('flag')).toBe('true');
@@ -135,7 +137,11 @@ describe('YobApiClient', () => {
         message: { data: [], notice: 'Categories loaded', meta: { count: 0 } },
       });
 
-      expect(captured.value()).toEqual({ data: [], notice: 'Categories loaded', meta: { count: 0 } });
+      expect(captured.value()).toEqual({
+        data: [],
+        notice: 'Categories loaded',
+        meta: { count: 0 },
+      });
       expect(captured.error()).toBeUndefined();
     });
 
@@ -213,7 +219,12 @@ describe('YobApiClient', () => {
             {
               code: 'internal_server_error',
               detail: 'Something went wrong. Please try again.',
-              details: { correlation_id: '0246f04aea554d10' },
+              details: {
+                correlation_id: '0246f04aea554d10',
+                // Extras the backend might send. None may reach a component.
+                provider_message: 'gateway said: card declined by issuer bank XYZ',
+                exc: 'Traceback (most recent call last): ...',
+              },
             },
           ],
         },
@@ -221,7 +232,15 @@ describe('YobApiClient', () => {
 
       expect(captured.error()?.kind).toBe('yob');
       expect(captured.error()?.code).toBe('internal_server_error');
-      expect(captured.error()?.details).toEqual({ correlation_id: '0246f04aea554d10' });
+      expect(captured.error()?.context.correlationId).toBe('0246f04aea554d10');
+
+      // The allow-list drops everything else. `details` is open-ended - payment errors
+      // put provider state in it - and handing that object to components would put
+      // arbitrary server-authored content one interpolation away from the page.
+      const context = captured.error()?.context as Record<string, unknown>;
+      expect(Object.keys(context).sort()).toEqual(['correlationId']);
+      expect(context['provider_message']).toBeUndefined();
+      expect(context['exc']).toBeUndefined();
     });
   });
 
@@ -233,7 +252,11 @@ describe('YobApiClient', () => {
         {
           message: {
             errors: [
-              { code: 'validation_failed', detail: 'Application is required.', field: 'application' },
+              {
+                code: 'validation_failed',
+                detail: 'Application is required.',
+                field: 'application',
+              },
             ],
           },
         },
@@ -251,14 +274,18 @@ describe('YobApiClient', () => {
     });
 
     it('normalizes a 404 not-found and keeps the backend code', () => {
-      const captured = collect(client.get('yob_storefront.api.catalog.get_category', { slug: 'x' }));
+      const captured = collect(
+        client.get('yob_storefront.api.catalog.get_category', { slug: 'x' }),
+      );
 
       http
         .expectOne((r) => r.url === '/api/method/yob_storefront.api.catalog.get_category')
         .flush(
           {
             message: {
-              errors: [{ code: 'category_not_found', detail: 'Category not found.', field: 'slug' }],
+              errors: [
+                { code: 'category_not_found', detail: 'Category not found.', field: 'slug' },
+              ],
             },
           },
           { status: 404, statusText: 'Not Found' },
@@ -290,10 +317,12 @@ describe('YobApiClient', () => {
     it('handles an error with no field, such as cart_empty', () => {
       const captured = collect(client.post('yob_storefront.api.checkout.proceed_to_payment'));
 
-      http.expectOne('/api/method/yob_storefront.api.checkout.proceed_to_payment').flush(
-        { message: { errors: [{ code: 'cart_empty', detail: 'The cart is empty.' }] } },
-        { status: 422, statusText: 'Unprocessable Entity' },
-      );
+      http
+        .expectOne('/api/method/yob_storefront.api.checkout.proceed_to_payment')
+        .flush(
+          { message: { errors: [{ code: 'cart_empty', detail: 'The cart is empty.' }] } },
+          { status: 422, statusText: 'Unprocessable Entity' },
+        );
 
       expect(captured.error()?.code).toBe('cart_empty');
       expect(captured.error()?.field).toBeUndefined();
@@ -326,7 +355,8 @@ describe('YobApiClient', () => {
   });
 
   describe('raw Frappe error normalization', () => {
-    const TRACEBACK = '["Traceback (most recent call last):\\n  File \\"apps/frappe/frappe/app.py\\"..."]';
+    const TRACEBACK =
+      '["Traceback (most recent call last):\\n  File \\"apps/frappe/frappe/app.py\\"..."]';
 
     it('normalizes a 403 PermissionError into a permission denial, not a session verdict', () => {
       const captured = collect(client.get(CATEGORIES));
@@ -358,7 +388,8 @@ describe('YobApiClient', () => {
 
       http.expectOne(`/api/method/${CATEGORIES}`).flush(
         {
-          exception: 'frappe.exceptions.PermissionError: <details><summary>secret</summary></details>',
+          exception:
+            'frappe.exceptions.PermissionError: <details><summary>secret</summary></details>',
           exc_type: 'PermissionError',
           exc: TRACEBACK,
           _server_messages: '[{"message":"..."}]',
@@ -403,7 +434,10 @@ describe('YobApiClient', () => {
       http
         .expectOne(`/api/method/${CATEGORIES}`)
         .flush(
-          { exception: 'frappe.exceptions.DuplicateEntryError: ...', exc_type: 'DuplicateEntryError' },
+          {
+            exception: 'frappe.exceptions.DuplicateEntryError: ...',
+            exc_type: 'DuplicateEntryError',
+          },
           { status: 409, statusText: 'Conflict' },
         );
 
@@ -461,7 +495,7 @@ describe('YobApiClient', () => {
       );
 
       expect(captured.error()?.code).toBe('internal_server_error');
-      expect(captured.error()?.details).toEqual({ correlation_id: '0246f04aea554d10' });
+      expect(captured.error()?.context.correlationId).toBe('0246f04aea554d10');
     });
   });
 });

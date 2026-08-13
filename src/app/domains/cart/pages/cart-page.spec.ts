@@ -66,7 +66,7 @@ describe('CartPage', () => {
   });
 
   it('renders server-authoritative lines and totals', async () => {
-    mockCart.setQuantity(BOLT, 4);
+    mockCart.seedQuantity(BOLT, 4);
     const view = await open();
 
     expect(view.all('cart-line')).toHaveLength(1);
@@ -78,7 +78,7 @@ describe('CartPage', () => {
   });
 
   it('shows the summary totals the server reported', async () => {
-    mockCart.setQuantity(BOLT, 4);
+    mockCart.seedQuantity(BOLT, 4);
     const view = await open();
 
     expect(view.testId('cart-total-quantity')?.textContent).toContain('4');
@@ -87,7 +87,7 @@ describe('CartPage', () => {
   });
 
   it('formats amounts in the currency the cart supplied', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     // From `cart.currency`, not the environment fallback.
@@ -95,7 +95,7 @@ describe('CartPage', () => {
   });
 
   it('links a line back to its item', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     expect(view.testId('cart-line-link')?.getAttribute('href')).toBe(
@@ -104,7 +104,7 @@ describe('CartPage', () => {
   });
 
   it('explains repriced lines without naming item codes', async () => {
-    mockCart.setQuantity(BOLT, 2);
+    mockCart.seedQuantity(BOLT, 2);
     scenario.scenario.set('cart-repriced');
     const view = await open();
 
@@ -115,7 +115,7 @@ describe('CartPage', () => {
   });
 
   it('explains removed lines without naming item codes', async () => {
-    mockCart.setQuantity(BOLT, 2);
+    mockCart.seedQuantity(BOLT, 2);
     scenario.scenario.set('cart-item-removed');
     const view = await open();
 
@@ -125,7 +125,7 @@ describe('CartPage', () => {
   });
 
   it('shows no reconciliation notice for an ordinary cart', async () => {
-    mockCart.setQuantity(BOLT, 2);
+    mockCart.seedQuantity(BOLT, 2);
     const view = await open();
 
     expect(view.testId('cart-reconciliation')).toBeNull();
@@ -158,7 +158,7 @@ describe('CartPage', () => {
 
   describe('removal', () => {
     it('offers a Remove action on each line', async () => {
-      mockCart.setQuantity(BOLT, 2);
+      mockCart.seedQuantity(BOLT, 2);
       const view = await open();
 
       const button = view.testId('cart-line-remove') as HTMLButtonElement;
@@ -168,7 +168,7 @@ describe('CartPage', () => {
     });
 
     it('names the row it removes, for screen readers', async () => {
-      mockCart.setQuantity(BOLT, 2);
+      mockCart.seedQuantity(BOLT, 2);
       const view = await open();
 
       // Every visible label is just "Remove"; the accessible name must disambiguate.
@@ -178,7 +178,7 @@ describe('CartPage', () => {
     });
 
     it('removes the line and acknowledges it', async () => {
-      mockCart.setQuantity(BOLT, 2);
+      mockCart.seedQuantity(BOLT, 2);
       const view = await open();
 
       (view.testId('cart-line-remove') as HTMLButtonElement).click();
@@ -189,7 +189,7 @@ describe('CartPage', () => {
     });
 
     it('keeps the acknowledgement visible once the cart is empty', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       (view.testId('cart-line-remove') as HTMLButtonElement).click();
@@ -202,8 +202,8 @@ describe('CartPage', () => {
     });
 
     it('removes only the chosen line', async () => {
-      mockCart.setQuantity(BOLT, 2);
-      mockCart.setQuantity('YOB-WASH-M10', 3);
+      mockCart.seedQuantity(BOLT, 2);
+      mockCart.seedQuantity('YOB-WASH-M10', 3);
       const view = await open();
       expect(view.all('cart-line')).toHaveLength(2);
 
@@ -217,7 +217,7 @@ describe('CartPage', () => {
     });
 
     it('keeps the line and explains safely when removal fails', async () => {
-      mockCart.setQuantity(BOLT, 2);
+      mockCart.seedQuantity(BOLT, 2);
       const view = await open();
       scenario.scenario.set('server-error');
 
@@ -234,7 +234,7 @@ describe('CartPage', () => {
 
   describe('quantity is display-only', () => {
     it('shows the quantity as text', async () => {
-      mockCart.setQuantity(BOLT, 4);
+      mockCart.seedQuantity(BOLT, 4);
       const view = await open();
 
       expect(view.testId('cart-line-quantity')?.textContent).toContain('4');
@@ -242,7 +242,7 @@ describe('CartPage', () => {
     });
 
     it('offers no way to edit a quantity', async () => {
-      mockCart.setQuantity(BOLT, 4);
+      mockCart.seedQuantity(BOLT, 4);
       const view = await open();
 
       // The backend Add endpoint can set a quantity, but that capability is not

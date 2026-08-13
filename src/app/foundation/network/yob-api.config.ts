@@ -1,9 +1,5 @@
 import { provideHttpClient, withInterceptors, type HttpInterceptorFn } from '@angular/common/http';
-import {
-  InjectionToken,
-  makeEnvironmentProviders,
-  type EnvironmentProviders,
-} from '@angular/core';
+import { InjectionToken, makeEnvironmentProviders, type EnvironmentProviders } from '@angular/core';
 
 import { yobCsrfInterceptor } from './csrf.interceptor';
 

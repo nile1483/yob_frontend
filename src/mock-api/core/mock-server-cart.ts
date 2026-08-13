@@ -67,12 +67,37 @@ export class MockServerCart {
   }
 
   /**
-   * Set the quantity for an item code.
+   * Add a quantity to an item's line, creating the line if it is not there.
    *
-   * **Set, never increment** - mirroring `existing.quantity = qty` in `cart.py`.
-   * Adding 3 to a line already holding 2 leaves 3.
+   * ## `qty` is a DELTA
+   *
+   * `cart.py` does `existing.quantity = (existing.quantity or 0) + qty`, so a line
+   * holding 2 that receives 5 ends at **7** - not 5, and not a second row. Verified by
+   * execution against the running backend (`tests/test_cart_quantity_semantics.py`)
+   * and recorded in the backend handoff.
+   *
+   * Earlier phases of this frontend pinned the opposite - SET - and were wrong. The
+   * regression tests were rewritten rather than adjusted, because a test asserting
+   * `2 then 5 is 5` was actively protecting a defect.
+   *
+   * **Not idempotent.** Applying the same call twice adds twice: 2 → 7 → 12. That is
+   * why the store guards re-entry and why nothing retries this call.
    */
-  setQuantity(itemCode: string, quantity: number): void {
+  addQuantity(itemCode: string, quantity: number): void {
+    const next = new Map(this.quantities());
+    next.set(itemCode, (next.get(itemCode) ?? 0) + quantity);
+    this.quantities.set(next);
+  }
+
+  /**
+   * Put a line at an exact quantity, bypassing the delta.
+   *
+   * Test scaffolding only - there is no absolute set-quantity endpoint, so this has no
+   * counterpart in the backend and is never reachable from application code. It exists
+   * so a test can arrange a starting cart in one step instead of reasoning about
+   * accumulated deltas.
+   */
+  seedQuantity(itemCode: string, quantity: number): void {
     const next = new Map(this.quantities());
     next.set(itemCode, quantity);
     this.quantities.set(next);

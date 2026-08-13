@@ -100,10 +100,7 @@ import { CatalogApi } from '../data/catalog.api';
 
         <div class="flex flex-col gap-4">
           <header>
-            <h1
-              class="text-2xl font-semibold tracking-tight break-words"
-              data-testid="item-title"
-            >
+            <h1 class="text-2xl font-semibold tracking-tight break-words" data-testid="item-title">
               {{ detail.item_name }}
             </h1>
             <p class="mt-1 text-sm text-slate-500 break-words">
@@ -176,8 +173,10 @@ import { CatalogApi } from '../data/catalog.api';
 
           <form class="flex flex-col gap-3" (submit)="addToCart($event, detail.name)">
             <app-field
-              label="Quantity"
+              label="Quantity to add"
               i18n-label="@@item.quantity.label"
+              hint="Added to whatever is already in your cart."
+              i18n-hint="@@item.quantity.hint"
               [error]="quantityError()"
             >
               <input
@@ -219,6 +218,14 @@ import { CatalogApi } from '../data/catalog.api';
             @if (addErrorMessage(); as message) {
               <div data-testid="add-to-cart-error">
                 <app-alert tone="error">{{ message }}</app-alert>
+              </div>
+            }
+
+            @if (addUnconfirmedMessage(); as message) {
+              <!-- Not an error and not a success. Adding is non-idempotent, so
+                   claiming either way would be a guess with a real cost. -->
+              <div data-testid="add-to-cart-unconfirmed">
+                <app-alert tone="info">{{ message }}</app-alert>
               </div>
             }
           </form>
@@ -305,6 +312,24 @@ export class ItemPage {
     () => this.item.isLoading() && this.detail() !== undefined,
   );
 
+  /**
+   * Wording for an add whose outcome we could not determine.
+   *
+   * Deliberately says neither "added" nor "not added". `add_to_cart` applies a delta
+   * and is not idempotent, so a lost response may still have been applied - and a
+   * buyer told "not added" would add again and buy twice as much.
+   */
+  protected readonly addUnconfirmedMessage = computed(() => {
+    switch (this.cart.addUnconfirmed()) {
+      case 'refreshed':
+        return $localize`:@@item.add.unconfirmed.refreshed:We couldn't confirm the cart update. Your cart has been refreshed.`;
+      case 'unknown':
+        return $localize`:@@item.add.unconfirmed.unknown:We couldn't confirm the cart update. Please check your cart before adding this again.`;
+      default:
+        return null;
+    }
+  });
+
   protected readonly addErrorMessage = computed(() => {
     const error = this.cart.addError();
     if (error === null) {
@@ -365,7 +390,9 @@ export class ItemPage {
 
   protected readonly hasDiscount = computed(() => {
     const detail = this.item.value();
-    return detail !== undefined && detail.rate < detail.base_price && detail.discount_percentage > 0;
+    return (
+      detail !== undefined && detail.rate < detail.base_price && detail.discount_percentage > 0
+    );
   });
 
   protected readonly showsTaxBreakdown = computed(() => {

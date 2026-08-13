@@ -388,8 +388,18 @@ describe('catalog pages', () => {
     const AUTHENTICATED_PAYLOAD = {
       authenticated: true,
       authentication_method: 'session',
-      user: { name: 'buyer@example.invalid', full_name: 'Buyer', user_image: null, email: 'buyer@example.invalid', mobile_no: null },
-      context: { application: 'TEST_APP', profile_doctype: 'Customer', profile_name: 'Mock Trading Co' },
+      user: {
+        name: 'buyer@example.invalid',
+        full_name: 'Buyer',
+        user_image: null,
+        email: 'buyer@example.invalid',
+        mobile_no: null,
+      },
+      context: {
+        application: 'TEST_APP',
+        profile_doctype: 'Customer',
+        profile_name: 'Mock Trading Co',
+      },
       csrf_token: 'csrf-token',
     };
 

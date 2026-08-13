@@ -45,11 +45,28 @@ export class CartApi {
   }
 
   /**
-   * Add an item, or set the quantity of one already in the cart.
+   * Add a quantity of an item to the cart.
    *
-   * **Set semantics, not increment.** The backend does `existing.quantity = qty` for a
-   * line that is already present, so sending 3 for a line holding 2 results in 3, not
-   * 5. Source-verified in `cart.py`; pinned by tests here and in the mock.
+   * ## `qty` is a DELTA, and this call is not idempotent
+   *
+   * The backend does `existing.quantity = (existing.quantity or 0) + qty`, so sending
+   * 5 for a line holding 2 results in **7** - one row, never 5 and never two rows.
+   * Sending it again gives 12.
+   *
+   * Verified by execution against the running backend and recorded in the backend
+   * handoff (`docs/frontend-api-handoff.zip`, `API-CHANGELOG.md` item 16). An earlier
+   * revision of this file claimed SET semantics; that was wrong.
+   *
+   * Consequences that are not optional:
+   *
+   * - **Never retry this call automatically.** A timeout may already have applied the
+   *   delta, and a retry would apply it twice. There is no retry operator anywhere in
+   *   this path and a test pins that.
+   * - **Guard the control.** `CartStore.add` drops a second call while one is in
+   *   flight; a double click or held Enter must not produce two requests.
+   * - There is **no absolute set-quantity endpoint**. The cart UI is read-only by
+   *   product decision, so no client-side delta arithmetic is required anywhere - the
+   *   buyer's input on item detail *is* the delta.
    *
    * `itemCode` is the Frappe Item code - catalog `name`, never a slug.
    *

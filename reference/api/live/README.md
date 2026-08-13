@@ -1,3 +1,13 @@
+> # SUPERSEDED — do not build against this
+>
+> This package (reference **2.0.0**, captured 2026-08-13) has been replaced by the
+> backend handoff in **`docs/api-handoff/`**, which was generated from the running
+> backend after the Checkout/Payment work completed.
+>
+> It is kept for history only. Where the two disagree, **the handoff wins** — most
+> importantly on `add_to_cart`, which this package described as SET semantics and
+> which is in fact a **DELTA**. See `docs/api-handoff/API-CHANGELOG.md` item 16.
+
 # YOB frontend API reference — live verification capture
 
 **Reference version 2.0.0 — regenerated for backend Payment Lifecycle Phase 2B.**

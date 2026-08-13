@@ -87,7 +87,7 @@ describe('CheckoutPage', () => {
   // ------------------------------------------------------------------ load
 
   it('renders the cart, the addresses and the contacts together', async () => {
-    mockCart.setQuantity(BOLT, 2);
+    mockCart.seedQuantity(BOLT, 2);
     const view = await open();
 
     expect(view.testId('checkout-items')).not.toBeNull();
@@ -98,7 +98,7 @@ describe('CheckoutPage', () => {
   it('starts all three requests without waiting for one another', async () => {
     // Each resource and the cart load are begun at construction. If any waited for
     // another, the later ones would not have been issued by first render.
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     expect(view.testId('checkout-items')).not.toBeNull();
@@ -119,21 +119,21 @@ describe('CheckoutPage', () => {
   // ---------------------------------------------------------- preselection
 
   it('preselects the contact the cart already holds', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     expect(view.checked('checkout-contact')).toBe(MOCK_CONTACT_PRIMARY);
   });
 
   it('preselects the billing address the cart already holds', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     expect(view.checked('checkout-billing')).toBe(MOCK_ADDRESS_LOCAL);
   });
 
   it('preselects the shipping address when the cart is shippable', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     expect(view.testId('checkout-shipping-section')).not.toBeNull();
@@ -141,7 +141,7 @@ describe('CheckoutPage', () => {
   });
 
   it('offers the same address records for billing and shipping', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     const billing = view.radios('checkout-billing').map((r) => r.value);
@@ -152,7 +152,7 @@ describe('CheckoutPage', () => {
   // -------------------------------------------------------------- shipping
 
   it('hides the shipping section when the cart is not shippable', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     scenario.scenario.set('cart-not-shippable');
     const view = await open();
 
@@ -162,14 +162,14 @@ describe('CheckoutPage', () => {
   });
 
   it('says shipping matches billing when the two identifiers agree', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     expect(view.testId('checkout-same-as-billing')).not.toBeNull();
   });
 
   it('drops the same-as-billing note once they differ', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     mockCart.setShippingAddress(MOCK_ADDRESS_REMOTE);
     const view = await open();
 
@@ -179,7 +179,7 @@ describe('CheckoutPage', () => {
   // ------------------------------------------------------------- selecting
 
   it('sends a chosen contact and adopts the returned cart', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     const radio = view
@@ -193,7 +193,7 @@ describe('CheckoutPage', () => {
   });
 
   it('shows the repriced total the server returned after a billing change', async () => {
-    mockCart.setQuantity(BOLT, 2);
+    mockCart.seedQuantity(BOLT, 2);
     const view = await open();
     const before = view.testId('cart-grand-total')?.textContent ?? '';
 
@@ -214,7 +214,7 @@ describe('CheckoutPage', () => {
   });
 
   it('keeps the previous selection visible when the server refuses a record', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     // A record that is not this customer's: the list is stale.
@@ -232,7 +232,7 @@ describe('CheckoutPage', () => {
 
   it('reverts the radio when the server refuses the record it names', async () => {
     // The list still offers a record that has since been deleted server-side.
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     scenario.scenario.set('checkout-stale-records');
     const view = await open();
 
@@ -252,7 +252,7 @@ describe('CheckoutPage', () => {
   });
 
   it('re-reads the master list after a record is refused', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     scenario.scenario.set('checkout-stale-records');
     const view = await open();
 
@@ -272,7 +272,7 @@ describe('CheckoutPage', () => {
   // ------------------------------------------------------------- readiness
 
   it('reports readiness when contact, billing and shipping are all set', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     expect(view.testId('checkout-readiness')).not.toBeNull();
@@ -281,7 +281,7 @@ describe('CheckoutPage', () => {
   });
 
   it('lists what is still missing when a selection is absent', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     mockCart.clearShippingAddress();
     const view = await open();
 
@@ -290,7 +290,7 @@ describe('CheckoutPage', () => {
   });
 
   it('ignores a missing shipping address when the cart does not ship', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     mockCart.clearShippingAddress();
     scenario.scenario.set('cart-not-shippable');
     const view = await open();
@@ -302,7 +302,7 @@ describe('CheckoutPage', () => {
   // ----------------------------------------------------------- add records
 
   it('creates an address, refreshes the list and selects it as billing', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     (view.testId('checkout-add-billing-address') as HTMLButtonElement).click();
@@ -325,7 +325,7 @@ describe('CheckoutPage', () => {
   });
 
   it('creates an address from the shipping section and selects it there', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     (view.testId('checkout-add-shipping-address') as HTMLButtonElement).click();
@@ -346,7 +346,7 @@ describe('CheckoutPage', () => {
   });
 
   it('creates a contact, refreshes the list and selects it', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     (view.testId('checkout-add-contact') as HTMLButtonElement).click();
@@ -367,7 +367,7 @@ describe('CheckoutPage', () => {
   });
 
   it('refuses to submit an address with no street or city', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     (view.testId('checkout-add-billing-address') as HTMLButtonElement).click();
@@ -385,7 +385,7 @@ describe('CheckoutPage', () => {
   // ----------------------------------------------------------------- state
 
   it('holds no selection of its own - the cart is the only source', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     // Change the cart behind the page's back, then re-read it. If the page kept its
@@ -398,7 +398,7 @@ describe('CheckoutPage', () => {
   });
 
   it('groups each list for assistive technology', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     for (const group of ['checkout-contact', 'checkout-billing', 'checkout-shipping']) {
@@ -409,7 +409,7 @@ describe('CheckoutPage', () => {
   });
 
   it('gives each group a distinct radio name so they do not interfere', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     const billing = new Set(view.radios('checkout-billing').map((r) => r.name));
@@ -420,7 +420,7 @@ describe('CheckoutPage', () => {
   });
 
   it('never renders the backend HTML address block', async () => {
-    mockCart.setQuantity(BOLT, 1);
+    mockCart.seedQuantity(BOLT, 1);
     const view = await open();
 
     // `display` is backend-rendered HTML - on the real bench it embeds the customer's

@@ -32,11 +32,21 @@ import { Spinner } from '../app/design/spinner/spinner';
             Place order
           </button>
 
-          <button yob-button data-testid="button-disabled" disabled (click)="clicks.set(clicks() + 1)">
+          <button
+            yob-button
+            data-testid="button-disabled"
+            disabled
+            (click)="clicks.set(clicks() + 1)"
+          >
             Disabled
           </button>
 
-          <button yob-button data-testid="button-loading" [loading]="true" (click)="clicks.set(clicks() + 1)">
+          <button
+            yob-button
+            data-testid="button-loading"
+            [loading]="true"
+            (click)="clicks.set(clicks() + 1)"
+          >
             Saving
           </button>
 
@@ -59,11 +69,7 @@ import { Spinner } from '../app/design/spinner/spinner';
           />
         </app-field>
 
-        <app-field
-          label="Password"
-          [required]="true"
-          error="Enter your password"
-        >
+        <app-field label="Password" [required]="true" error="Enter your password">
           <input
             data-testid="field-error-input"
             type="password"

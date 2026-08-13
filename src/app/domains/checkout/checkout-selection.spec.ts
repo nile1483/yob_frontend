@@ -57,7 +57,7 @@ describe('Checkout selection', () => {
 
     mockSession.signIn('TEST_APP', 'password');
     session.restore().subscribe();
-    mockCart.setQuantity(BOLT, 2);
+    mockCart.seedQuantity(BOLT, 2);
   });
 
   afterEach(() => {

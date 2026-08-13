@@ -25,11 +25,7 @@ import type { CategoryLink } from '../contracts/catalog.types';
       data-testid="category-card"
     >
       @if (category().thumbnail; as thumbnail) {
-        <img
-          [src]="thumbnail"
-          alt=""
-          class="aspect-4/3 w-full rounded-md object-cover"
-        />
+        <img [src]="thumbnail" alt="" class="aspect-4/3 w-full rounded-md object-cover" />
       } @else {
         <!-- Decorative placeholder: the name below already identifies the category,
              so an empty alt keeps a screen reader from announcing it twice. -->

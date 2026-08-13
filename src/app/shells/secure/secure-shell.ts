@@ -21,12 +21,8 @@ import { SecureNav } from './parts/secure-nav';
   template: `
     <div data-testid="secure-shell" class="flex min-h-dvh flex-col bg-white text-slate-900">
       <header class="border-b border-slate-200">
-        <div
-          class="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-8 gap-y-3 px-4 py-4"
-        >
-          <a routerLink="/catalog" class="text-lg font-semibold tracking-tight"
-            >Your Order Book</a
-          >
+        <div class="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-8 gap-y-3 px-4 py-4">
+          <a routerLink="/catalog" class="text-lg font-semibold tracking-tight">Your Order Book</a>
 
           <app-secure-nav />
 

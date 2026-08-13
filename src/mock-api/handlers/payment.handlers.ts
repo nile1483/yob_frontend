@@ -99,6 +99,16 @@ const processPayment: MockHandler = (ctx) => {
   // still leaves a Sales Order behind.
   ctx.payment.commit();
 
+  if (ctx.scenario === 'payment-provider-unavailable') {
+    // retryable false and NO sales order: the gateway could never take this payment,
+    // and nothing was committed. A retry would fail identically.
+    return mockYobError(
+      'payment_provider_error',
+      'This payment method cannot be used for this order.',
+      { details: { retryable: false }, status: 422 },
+    );
+  }
+
   if (ctx.scenario === 'payment-provider-error') {
     return mockYobError(
       'payment_provider_error',
@@ -159,6 +169,12 @@ const verifyPayment: MockHandler = (ctx) => {
         status: 422,
       });
     }
+  }
+
+  if (ctx.scenario === 'payment-already-processed') {
+    return mockYobError('payment_already_processed', 'This order has already been paid.', {
+      status: 409,
+    });
   }
 
   if (ctx.scenario === 'payment-signature-invalid') {

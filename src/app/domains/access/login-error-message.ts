@@ -1,7 +1,4 @@
-import {
-  YOB_CLIENT_ERROR_CODES,
-  type YobApiError,
-} from '../../foundation/network/yob-api-error';
+import { YOB_CLIENT_ERROR_CODES, type YobApiError } from '../../foundation/network/yob-api-error';
 
 /**
  * Turns a normalized API failure into something worth showing a person trying to

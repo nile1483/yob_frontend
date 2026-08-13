@@ -36,7 +36,9 @@ test('the public shell stays usable at this viewport', async ({ page }) => {
 
   // Header and footer landmarks both survive, including on a narrow phone where the
   // header contents must wrap rather than overflow.
-  await expect(page.getByRole('banner').getByRole('link', { name: 'Your Order Book' })).toBeVisible();
+  await expect(
+    page.getByRole('banner').getByRole('link', { name: 'Your Order Book' }),
+  ).toBeVisible();
   await expect(page.getByRole('contentinfo').getByRole('link', { name: 'Terms' })).toBeVisible();
 });
 

@@ -5,6 +5,29 @@ import { normalizeYobFailure, type YobApiError } from '../../../foundation/netwo
 import type { CartPayloadDto } from '../contracts/cart.types';
 import { CartApi } from '../data/cart.api';
 
+/**
+ * What we know after an add whose outcome could not be determined.
+ *
+ * `refreshed` - the cart was re-read successfully, so what is on screen is current;
+ * we still cannot say whether the delta applied.
+ * `unknown` - even the re-read failed, so nothing on screen can be trusted.
+ */
+export type AddUnconfirmed = 'refreshed' | 'unknown';
+
+/**
+ * Whether a failure leaves the result of a non-idempotent add genuinely unknown.
+ *
+ * A YOB error envelope means the request reached the endpoint and was refused by it -
+ * a definite rejection with nothing applied. A transport failure, a request that never
+ * completed, or a server fault after acceptance all leave the delta's fate open.
+ *
+ * `httpStatus === 0` covers the case that matters most: the request may have been
+ * received and applied while the answer was lost.
+ */
+function isUncertainOutcome(error: YobApiError): boolean {
+  return error.httpStatus === 0 || error.httpStatus >= 500;
+}
+
 /** Which selection a pending `set_cart_*` call is changing. */
 export type CartSelectionKind = 'contact' | 'billing' | 'shipping';
 
@@ -37,6 +60,7 @@ export class CartStore {
   private readonly addingSignal = signal(false);
   private readonly errorSignal = signal<YobApiError | null>(null);
   private readonly addErrorSignal = signal<YobApiError | null>(null);
+  private readonly addUnconfirmedSignal = signal<AddUnconfirmed | null>(null);
   private readonly removingSignal = signal<string | null>(null);
   private readonly removeErrorSignal = signal<YobApiError | null>(null);
   private readonly removedSignal = signal(false);
@@ -50,6 +74,14 @@ export class CartStore {
   readonly isAdding = this.addingSignal.asReadonly();
   readonly error = this.errorSignal.asReadonly();
   readonly addError = this.addErrorSignal.asReadonly();
+  /**
+   * Set when an add failed in a way that leaves the outcome unknown.
+   *
+   * Deliberately separate from {@link addError}: that one means "the server refused
+   * this", and saying so when we do not know would be a lie in the buyer's favour and
+   * against their interest - they might add again and be charged for twice as much.
+   */
+  readonly addUnconfirmed = this.addUnconfirmedSignal.asReadonly();
 
   /** The `item_code` currently being removed, so only that row shows a busy state. */
   readonly removingItemCode = this.removingSignal.asReadonly();
@@ -120,15 +152,43 @@ export class CartStore {
   }
 
   /**
-   * Add an item, or set its quantity if it is already in the cart.
+   * Add a quantity of an item to the cart.
    *
-   * Two calls on purpose. `add_to_cart` answers with the bare cart document: a
-   * different shape from `get_cart`, missing `currency`'s companions - the
-   * reconciliation fields - and missing the resolved contact and addresses. Ingesting
-   * it would leave the store holding a partial, differently-shaped truth, so the
-   * mutation is followed by the canonical read and **that** is what the store adopts.
+   * ## `quantity` is a DELTA
    *
-   * A second click while one add is in flight is dropped rather than queued.
+   * The backend does `existing.quantity = (existing.quantity or 0) + qty`, so a line
+   * holding 2 that receives 5 ends at **7** - one row, not two, and never 5. Nothing
+   * here computes that: the caller passes what the buyer asked to add, and the
+   * canonical quantity comes back from the server.
+   *
+   * ## The call is not idempotent, which shapes everything below
+   *
+   * A repeat adds again (2 → 7 → 12). So:
+   *
+   * - a second call while one is in flight is **dropped**, not queued;
+   * - the call is **never retried automatically** - not here, not in the API layer,
+   *   not in an interceptor. There is no retry operator anywhere in this path, and a
+   *   test pins that.
+   *
+   * ## Two calls on purpose
+   *
+   * `add_to_cart` answers with the bare cart document: a different shape from
+   * `get_cart`, without the reconciliation fields or the resolved contact and
+   * addresses. Ingesting it would leave the store holding a partial, differently
+   * shaped truth, so the mutation is followed by the canonical read.
+   *
+   * ## Definite refusal vs uncertain outcome
+   *
+   * These are handled differently because they are different facts:
+   *
+   * - The server answered with an error envelope - `quantity_invalid`,
+   *   `item_not_found`, a permission refusal. The request was **received and
+   *   rejected**; nothing changed. Keep the cart, show the error.
+   * - The request timed out, the connection dropped, or the server failed after
+   *   accepting it. Completion is **genuinely unknown** - the delta may already have
+   *   applied. Re-read the cart so the buyer sees the truth, and say plainly that we
+   *   could not confirm it. Claiming "not added" here would be a guess, and retrying
+   *   would risk adding twice.
    */
   add(itemCode: string, quantity: number): Observable<CartPayloadDto | never> {
     if (this.addingSignal()) {
@@ -137,6 +197,7 @@ export class CartStore {
 
     this.addingSignal.set(true);
     this.addErrorSignal.set(null);
+    this.addUnconfirmedSignal.set(null);
     this.removedSignal.set(false);
 
     return this.api.addToCart(itemCode, quantity).pipe(
@@ -144,10 +205,37 @@ export class CartStore {
       switchMap(() => this.api.getCart()),
       tap((payload) => this.ingest(payload)),
       catchError((failure: unknown) => {
-        this.addErrorSignal.set(normalizeYobFailure(failure));
-        return EMPTY;
+        const error = normalizeYobFailure(failure);
+
+        if (!isUncertainOutcome(error)) {
+          this.addErrorSignal.set(error);
+          return EMPTY;
+        }
+
+        return this.recoverAfterUncertainAdd();
       }),
       finalize(() => this.addingSignal.set(false)),
+    );
+  }
+
+  /**
+   * Re-read the cart after an add whose outcome we cannot determine.
+   *
+   * This is a read, so repeating it is safe - unlike the add itself, which is why the
+   * recovery is a `get_cart` and never another `add_to_cart`.
+   */
+  private recoverAfterUncertainAdd(): Observable<CartPayloadDto | never> {
+    return this.api.getCart().pipe(
+      tap((payload) => {
+        this.ingest(payload);
+        this.addUnconfirmedSignal.set('refreshed');
+      }),
+      catchError(() => {
+        // Recovery failed too, so we know neither what happened nor what the cart
+        // holds. The buyer is told to look before trying again; we do not try for them.
+        this.addUnconfirmedSignal.set('unknown');
+        return EMPTY;
+      }),
     );
   }
 

@@ -174,6 +174,28 @@ describe('Payment', () => {
       req.flush({ message: { data: {} } });
     });
 
+    it('sends no CSRF header when there is no session', () => {
+      // Verified against the live bench: a guest POST to verify_payment reaches the
+      // handler (validation_failed), while the same call carrying a `sid` cookie but
+      // no CSRF header is refused by Frappe with CSRFTokenError.
+      //
+      // The interceptor conditions on whether a CSRF token exists, not on which
+      // endpoint is being called - so a guest sends none, and a signed-in buyer paying
+      // in the same browser sends one. Classifying by endpoint would have broken one
+      // of those two journeys.
+      api
+        .verifyPayment({
+          razorpay_order_id: 'order_1',
+          razorpay_payment_id: 'pay_1',
+          razorpay_signature: 'sig',
+        })
+        .subscribe();
+
+      const req = http.expectOne(VERIFY_PAYMENT);
+      expect(req.request.headers.has('X-Frappe-CSRF-Token')).toBe(false);
+      req.flush({ message: { data: {} } });
+    });
+
     it('verifies with exactly the three provider fields and no token', () => {
       api
         .verifyPayment({
@@ -543,6 +565,52 @@ describe('Payment', () => {
       expect(view.pay().disabled).toBe(false);
     });
 
+    it('offers another method when the provider can never take this payment', async () => {
+      // retryable: false with no sales order - nothing was committed and a retry would
+      // fail identically, so a "try again" would strand the buyer.
+      scenario.scenario.set('payment-provider-unavailable');
+      const view = await open();
+
+      selectMethod(view.methodRadios(), 'razorpay');
+      await view.settle();
+      view.pay().click();
+      await view.settle();
+      await view.settle();
+
+      expect(view.text()).toContain('not available right now');
+      expect(view.text()).not.toContain('order has been saved');
+      // Not terminal: another method may work, so the list stays.
+      expect(view.testId('payment-methods')).not.toBeNull();
+    });
+
+    it('stops offering payment once the obligation is already settled', async () => {
+      scenario.scenario.set('payment-already-processed');
+      const view = await open();
+
+      selectMethod(view.methodRadios(), 'razorpay');
+      await view.settle();
+      view.pay().click();
+      await view.settle();
+      await view.settle();
+
+      expect(view.text()).toContain('already been paid');
+      // Terminal: a Pay button here would invite a second payment that must fail.
+      expect(view.testId('payment-pay')).toBeNull();
+      expect(view.testId('payment-methods')).toBeNull();
+    });
+
+    it('reads a revoked link as closed rather than invalid', async () => {
+      // The server revokes the token on settlement, so a paid buyer hitting refresh
+      // gets checkout_token_invalid. Telling them the link is bad would be wrong in
+      // the most common case.
+      const view = await open('a-revoked-token');
+
+      expect(view.testId('payment-load-error')).not.toBeNull();
+      expect(view.text()).toContain('payment link is closed');
+      expect(view.text()).toContain('already paid');
+      expect(view.testId('payment-methods')).toBeNull();
+    });
+
     it('gives a stale payment request its own state and a way back to checkout', async () => {
       scenario.scenario.set('payment-stale');
       const view = await open();
@@ -560,7 +628,10 @@ describe('Payment', () => {
       const view = await open('not-a-real-token');
 
       expect(view.testId('payment-load-error')).not.toBeNull();
-      expect(view.text()).toContain('not valid');
+      // A revoked token - the state after a successful payment - answers with this same
+      // code, so the wording leads with the likely case rather than calling a paid
+      // buyer's link invalid.
+      expect(view.text()).toContain('payment link is closed');
       // Public route: an unusable bearer token is not an authentication failure.
       expect(TestBed.inject(Router).url).toContain('/payment/');
       expect(TestBed.inject(Router).url).not.toContain('/login');

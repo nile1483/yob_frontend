@@ -33,7 +33,11 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
       data-testid="item-card"
     >
       @if (item().image; as image) {
-        <img [src]="image" [alt]="item().item_name" class="aspect-square w-full rounded-md object-cover" />
+        <img
+          [src]="image"
+          [alt]="item().item_name"
+          class="aspect-square w-full rounded-md object-cover"
+        />
       } @else {
         <div class="aspect-square w-full rounded-md bg-slate-100" aria-hidden="true"></div>
       }

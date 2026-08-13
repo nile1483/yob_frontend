@@ -20,7 +20,10 @@ test.describe('reaching item detail from the catalog', () => {
   test('login to catalog to category to item', async ({ page }) => {
     await signInAsMockBuyer(page);
 
-    await page.getByRole('link', { name: /Industrial Fasteners/ }).first().click();
+    await page
+      .getByRole('link', { name: /Industrial Fasteners/ })
+      .first()
+      .click();
     await expect(page).toHaveURL('/catalog/fasteners');
 
     await page.getByRole('link', { name: 'Hex Bolt M10 x 50mm' }).click();

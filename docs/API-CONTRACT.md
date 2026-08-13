@@ -1,5 +1,19 @@
 # YOB Storefront API Contract Notes
 
+> ## The authoritative contract is `docs/api-handoff/`
+>
+> The backend handoff unpacked at **`docs/api-handoff/`** (generated 2026-08-13 from
+> the running backend) is the single source of truth for frontend work. Start with
+> its `FRONTEND-CONTRACT.md`.
+>
+> This file remains as the frontend's own commentary — why our layers are built the
+> way they are — and `reference/api/` is kept for history only. **Where any of them
+> disagrees with the handoff, the handoff wins.**
+>
+> One correction it forced, recorded here because this document previously stated the
+> opposite: **`add_to_cart`'s `qty` is a DELTA**, added to the existing line
+> (2 then 5 gives 7), and the call is **not idempotent**.
+
 > **Phase 1 status: the live contract has been verified.** Sections below marked
 > **VERIFIED** were captured from the running local stack on 2026-08-10. See
 > `reference/api/live/README.md` and `reference/api/live/verified-responses.json`.
@@ -490,7 +504,8 @@ POST yob_storefront.api.cart.set_cart_shipping_address      secure + CSRF
 Inputs:
 
 ```text
-add_to_cart: item_code?, qty? (default documented as 1)
+add_to_cart: item_code?, qty? (default 1) - qty is a DELTA, added to the
+             existing line; NOT idempotent, never auto-retry
 apply_coupon: code?
 clear_cart: empty body
 remove_coupon: empty body

@@ -54,3 +54,11 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Backend contract handoff archives.
+#
+# The authoritative, reviewable content is the extracted `docs/api-handoff/**`, which
+# IS tracked. The zips are transport only: committing both means a binary duplicate of
+# files already in the tree, invisible to diffs and review.
+reference/reference.zip
+docs/frontend-api-handoff.zip

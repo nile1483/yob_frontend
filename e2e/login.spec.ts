@@ -266,7 +266,10 @@ test.describe('secure shell after sign-in', () => {
       (window as unknown as Record<string, unknown>)['__spaMarker'] = true;
     });
 
-    await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Account' }).click();
+    await page
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('link', { name: 'Account' })
+      .click();
 
     await expect(page).toHaveURL('/account');
     await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();

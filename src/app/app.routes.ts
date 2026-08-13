@@ -59,11 +59,13 @@ export const routes: Routes = [
         // Public on purpose: the checkout token in the URL is the credential, and the
         // buyer may arrive with no session, on another device, from a link.
         path: 'payment',
-        loadChildren: () => import('./domains/payment/payment.routes').then((m) => m.PAYMENT_ROUTES),
+        loadChildren: () =>
+          import('./domains/payment/payment.routes').then((m) => m.PAYMENT_ROUTES),
       },
       {
         path: '',
-        loadChildren: () => import('./domains/content/content.routes').then((m) => m.CONTENT_ROUTES),
+        loadChildren: () =>
+          import('./domains/content/content.routes').then((m) => m.CONTENT_ROUTES),
       },
     ],
   },
@@ -76,7 +78,8 @@ export const routes: Routes = [
     children: [
       {
         path: 'catalog',
-        loadChildren: () => import('./domains/catalog/catalog.routes').then((m) => m.CATALOG_ROUTES),
+        loadChildren: () =>
+          import('./domains/catalog/catalog.routes').then((m) => m.CATALOG_ROUTES),
       },
       {
         path: 'cart',
@@ -89,7 +92,8 @@ export const routes: Routes = [
       },
       {
         path: 'account',
-        loadChildren: () => import('./domains/account/account.routes').then((m) => m.ACCOUNT_ROUTES),
+        loadChildren: () =>
+          import('./domains/account/account.routes').then((m) => m.ACCOUNT_ROUTES),
       },
     ],
   },

@@ -144,30 +144,56 @@ describe('Cart domain', () => {
       expect(store.addError()).toBeNull();
     });
 
-    /* ---- CURRENT BACKEND semantics: SET, not increment ----
+    /* ---- CURRENT BACKEND semantics: qty is a DELTA ----
      *
-     * This pins the backend as it exists today, not the long-term product design.
-     * The confirmed future model is that every Add creates an independent row; that
-     * is a deferred backend change (see docs/PROJECT-STATE.md) and is deliberately
-     * not implemented in Angular or in the mock. When the backend ships it, this test
-     * is the one that must change.
+     * `cart.py` does `existing.quantity = (existing.quantity or 0) + qty`. Verified by
+     * execution against the running backend and recorded in the backend handoff
+     * (`API-CHANGELOG.md` item 16).
+     *
+     * These tests previously asserted the opposite - that `qty` SET the line - which
+     * was wrong and was actively protecting a defect. They were rewritten rather than
+     * adjusted. The future independent-line model remains deferred; see
+     * `docs/PROJECT-STATE.md`.
      */
-    it('CURRENT BACKEND: SETS the quantity rather than incrementing it', () => {
+    it('CURRENT BACKEND: adds the quantity to the existing line', () => {
       store.add(BOLT, 2).subscribe();
       expect(store.lines()[0]?.quantity).toBe(2);
 
-      store.add(BOLT, 3).subscribe();
+      store.add(BOLT, 5).subscribe();
 
-      // `existing.quantity = qty` in cart.py. 2 then 3 is 3, never 5.
-      expect(store.lines()[0]?.quantity).toBe(3);
+      // 2 + 5 = 7. Not 5, and not two rows.
+      expect(store.lines()[0]?.quantity).toBe(7);
       expect(store.lines()).toHaveLength(1);
     });
 
-    it('still sets rather than increments for a fractional quantity', () => {
-      store.add(BOLT, 1.5).subscribe();
-      store.add(BOLT, 2.25).subscribe();
+    it('CURRENT BACKEND: is not idempotent - repeating the add adds again', () => {
+      store.add(BOLT, 2).subscribe();
+      store.add(BOLT, 5).subscribe();
+      expect(store.lines()[0]?.quantity).toBe(7);
 
-      expect(store.lines()[0]?.quantity).toBe(2.25);
+      // The same request again applies the delta a second time. This is precisely why
+      // the call is never auto-retried and why re-entry is guarded.
+      store.add(BOLT, 5).subscribe();
+
+      expect(store.lines()[0]?.quantity).toBe(12);
+      expect(store.lines()).toHaveLength(1);
+    });
+
+    it('accumulates fractional deltas', () => {
+      store.add(BOLT, 2.5).subscribe();
+      store.add(BOLT, 0.25).subscribe();
+
+      expect(store.lines()[0]?.quantity).toBe(2.75);
+    });
+
+    it('keeps one row per item code, and a separate row per item', () => {
+      store.add(BOLT, 2).subscribe();
+      store.add(BOLT, 3).subscribe();
+      store.add(WASHER, 1).subscribe();
+
+      expect(store.lines()).toHaveLength(2);
+      expect(store.lines().find((l) => l.item_code === BOLT)?.quantity).toBe(5);
+      expect(store.lines().find((l) => l.item_code === WASHER)?.quantity).toBe(1);
     });
 
     /* -------- pinned semantic 2: get_cart is the ingestion path -------- */
@@ -195,9 +221,10 @@ describe('Cart domain', () => {
       store.add(BOLT, 5).subscribe();
 
       expect(store.payload()).not.toBe(first);
-      expect(store.cart()?.total_quantity).toBe(5);
+      // 2 + 5 = 7, because qty is a delta.
+      expect(store.cart()?.total_quantity).toBe(7);
       // The total is the server's, not lines summed here.
-      expect(store.cart()?.net_total).toBeCloseTo(56.25, 2);
+      expect(store.cart()?.net_total).toBeCloseTo(78.75, 2);
     });
 
     /* -------- pinned semantic 3: reconciliation is codes, retained internally -------- */
@@ -221,7 +248,7 @@ describe('Cart domain', () => {
     });
 
     it('prevents a duplicate concurrent add', () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       // The mock answers synchronously, so drive the guard directly: while `isAdding`
       // is true a second call is dropped rather than queued.
       const first = store.add(BOLT, 2);

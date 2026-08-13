@@ -7,7 +7,9 @@ function apiError(code: string, detail = 'backend wording', httpStatus = 400): Y
 
 describe('loginErrorMessage', () => {
   it('is vague about invalid credentials on purpose', () => {
-    const message = loginErrorMessage(apiError('invalid_credentials', 'Invalid login credentials.', 401));
+    const message = loginErrorMessage(
+      apiError('invalid_credentials', 'Invalid login credentials.', 401),
+    );
 
     expect(message).toBe('The username or password is incorrect.');
     // Distinguishing "no such user" from "wrong password" would turn the form into a

@@ -137,7 +137,9 @@ test.describe('field', () => {
 
 test.describe('alert', () => {
   test('an error interrupts, other tones do not', async ({ page }) => {
-    await expect(page.getByRole('alert').filter({ hasText: 'could not sign you in' })).toBeVisible();
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'could not sign you in' }),
+    ).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'changes were saved' })).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'Prices include tax' })).toBeVisible();
   });

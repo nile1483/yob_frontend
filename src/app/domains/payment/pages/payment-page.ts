@@ -122,33 +122,42 @@ import {
             </div>
           }
 
-          <app-payment-method-list
-            [methods]="data.payment_methods"
-            [selected]="selectedMethod()"
-            [disabled]="busy()"
-            (select)="onSelectMethod($event)"
-          />
+          <!-- Withheld once the obligation is finished or closed: an already-settled
+               payment, a revoked link or a failed signature cannot be retried from
+               here, and a Pay button would invite a second attempt that must fail. -->
+          @if (!isTerminal()) {
+            <app-payment-method-list
+              [methods]="data.payment_methods"
+              [selected]="selectedMethod()"
+              [disabled]="busy()"
+              (select)="onSelectMethod($event)"
+            />
 
-          <div>
-            <button
-              yob-button
-              type="button"
-              class="w-full sm:w-auto"
-              [disabled]="selectedMethod() === null"
-              [loading]="busy()"
-              (click)="onPay()"
-              data-testid="payment-pay"
-              i18n="@@payment.pay"
-            >
-              Pay now
-            </button>
+            <div>
+              <button
+                yob-button
+                type="button"
+                class="w-full sm:w-auto"
+                [disabled]="selectedMethod() === null"
+                [loading]="busy()"
+                (click)="onPay()"
+                data-testid="payment-pay"
+                i18n="@@payment.pay"
+              >
+                Pay now
+              </button>
 
-            @if (busyLabel(); as label) {
-              <p class="mt-3 text-sm text-slate-600" aria-live="polite" data-testid="payment-busy">
-                {{ label }}
-              </p>
-            }
-          </div>
+              @if (busyLabel(); as label) {
+                <p
+                  class="mt-3 text-sm text-slate-600"
+                  aria-live="polite"
+                  data-testid="payment-busy"
+                >
+                  {{ label }}
+                </p>
+              }
+            </div>
+          }
         </div>
       }
     </div>
@@ -183,6 +192,15 @@ export class PaymentPage {
   private readonly actionFailureSignal = signal<PaymentFailure | null>(null);
 
   protected readonly actionFailure = this.actionFailureSignal.asReadonly();
+
+  /**
+   * No further payment attempt is possible against this obligation.
+   *
+   * An already-settled payment, a revoked link or a failed signature are all finished
+   * states rather than transient faults - the payment controls are withdrawn so the
+   * page cannot invite an attempt that is guaranteed to fail.
+   */
+  protected readonly isTerminal = computed(() => this.actionFailureSignal()?.kind === 'terminal');
 
   /**
    * One guard for every asynchronous step.

@@ -38,10 +38,11 @@ const getCart: MockHandler = (ctx) => {
 };
 
 /**
- * Add an item, or set the quantity of one already present.
+ * Add a quantity to an item's line.
  *
- * **Set semantics.** `cart.py` does `existing.quantity = qty`, so a line holding 2
- * that receives 3 ends at 3 - never 5. Reproduced exactly; a test pins it.
+ * **`qty` is a DELTA.** `cart.py` does `existing.quantity = (existing.quantity or 0)
+ * + qty`, so a line holding 2 that receives 5 ends at **7** - never 5, and never a
+ * second row. The call is therefore **not idempotent**: repeating it adds again.
  *
  * Validation order and codes are wire-verified: missing `item_code` is 422
  * `validation_failed`, `qty <= 0` is 422 `quantity_invalid`, and an unknown code is
@@ -80,7 +81,7 @@ const addToCart: MockHandler = (ctx) => {
     });
   }
 
-  ctx.cart.setQuantity(itemCode, qty);
+  ctx.cart.addQuantity(itemCode, qty);
 
   // The bare cart document, exactly as the backend replies - no reconciliation, no
   // contact, no addresses. The client must re-read to get those.

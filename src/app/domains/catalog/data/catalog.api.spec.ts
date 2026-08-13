@@ -59,25 +59,27 @@ describe('CatalogApi', () => {
       let result: readonly unknown[] | undefined;
       api.getCategories().subscribe((categories) => (result = categories));
 
-      http.expectOne((r) => r.url === CATEGORIES_URL).flush({
-        message: {
-          data: [
-            {
-              name: 'Fasteners',
-              category_name: 'Fasteners',
-              slug: 'fasteners',
-              thumbnail: null,
-              banner: null,
-              display_order: 1,
-              meta_title: null,
-              meta_description: null,
-              parent_category: null,
-            },
-          ],
-          notice: 'Categories loaded',
-          meta: { count: 1 },
-        },
-      });
+      http
+        .expectOne((r) => r.url === CATEGORIES_URL)
+        .flush({
+          message: {
+            data: [
+              {
+                name: 'Fasteners',
+                category_name: 'Fasteners',
+                slug: 'fasteners',
+                thumbnail: null,
+                banner: null,
+                display_order: 1,
+                meta_title: null,
+                meta_description: null,
+                parent_category: null,
+              },
+            ],
+            notice: 'Categories loaded',
+            meta: { count: 1 },
+          },
+        });
 
       expect(result).toHaveLength(1);
       expect(result?.[0]).toMatchObject({ slug: 'fasteners', category_name: 'Fasteners' });
@@ -141,17 +143,19 @@ describe('CatalogApi', () => {
       let result: { payload: unknown; meta: unknown } | undefined;
       api.getCategory('fasteners').subscribe((value) => (result = value));
 
-      http.expectOne((r) => r.url === CATEGORY_URL).flush({
-        message: {
-          data: {
-            category: { slug: 'fasteners', category_name: 'Fasteners', is_group: 0 },
-            subcategories: [],
-            items: [{ name: 'YOB-BOLT-M10', rate: 11.25 }],
+      http
+        .expectOne((r) => r.url === CATEGORY_URL)
+        .flush({
+          message: {
+            data: {
+              category: { slug: 'fasteners', category_name: 'Fasteners', is_group: 0 },
+              subcategories: [],
+              items: [{ name: 'YOB-BOLT-M10', rate: 11.25 }],
+            },
+            notice: 'Category loaded',
+            meta: { subcategory_count: 0, item_count: 1 },
           },
-          notice: 'Category loaded',
-          meta: { subcategory_count: 0, item_count: 1 },
-        },
-      });
+        });
 
       expect(result?.payload).toMatchObject({ category: { slug: 'fasteners' } });
       expect(result?.meta).toEqual({ subcategory_count: 0, item_count: 1 });
@@ -166,7 +170,9 @@ describe('CatalogApi', () => {
         .flush(
           {
             message: {
-              errors: [{ code: 'category_not_found', detail: 'Category not found.', field: 'slug' }],
+              errors: [
+                { code: 'category_not_found', detail: 'Category not found.', field: 'slug' },
+              ],
             },
           },
           { status: 404, statusText: 'Not Found' },
@@ -200,18 +206,20 @@ describe('CatalogApi', () => {
       let result: { name?: string; custom_slug?: string; uom?: string } | undefined;
       api.getItem('hex-bolt-m10-50').subscribe((item) => (result = item));
 
-      http.expectOne((r) => r.url === ITEM_URL).flush({
-        message: {
-          data: {
-            name: 'YOB-BOLT-M10',
-            item_name: 'Hex Bolt M10 x 50mm',
-            custom_slug: 'hex-bolt-m10-50',
-            uom: 'Nos',
-            rate: 11.25,
+      http
+        .expectOne((r) => r.url === ITEM_URL)
+        .flush({
+          message: {
+            data: {
+              name: 'YOB-BOLT-M10',
+              item_name: 'Hex Bolt M10 x 50mm',
+              custom_slug: 'hex-bolt-m10-50',
+              uom: 'Nos',
+              rate: 11.25,
+            },
+            notice: 'Item loaded',
           },
-          notice: 'Item loaded',
-        },
-      });
+        });
 
       // Note the detail-only field names: custom_slug, not slug; uom, not stock_uom.
       expect(result?.custom_slug).toBe('hex-bolt-m10-50');
@@ -226,7 +234,11 @@ describe('CatalogApi', () => {
       http
         .expectOne((r) => r.url === ITEM_URL)
         .flush(
-          { message: { errors: [{ code: 'item_not_found', detail: 'Item not found.', field: 'slug' }] } },
+          {
+            message: {
+              errors: [{ code: 'item_not_found', detail: 'Item not found.', field: 'slug' }],
+            },
+          },
           { status: 404, statusText: 'Not Found' },
         );
 
@@ -240,14 +252,16 @@ describe('CatalogApi', () => {
       let error: YobApiError | undefined;
       api.getItem('hex-bolt-m10-50').subscribe({ error: (e: YobApiError) => (error = e) });
 
-      http.expectOne((r) => r.url === ITEM_URL).flush(
-        {
-          exception: 'frappe.exceptions.PermissionError: No permission for Item',
-          exc_type: 'PermissionError',
-          exc: '["Traceback ..."]',
-        },
-        { status: 403, statusText: 'Forbidden' },
-      );
+      http
+        .expectOne((r) => r.url === ITEM_URL)
+        .flush(
+          {
+            exception: 'frappe.exceptions.PermissionError: No permission for Item',
+            exc_type: 'PermissionError',
+            exc: '["Traceback ..."]',
+          },
+          { status: 403, statusText: 'Forbidden' },
+        );
 
       expect(error?.kind).toBe('frappe');
       expect(error?.code).not.toBe('item_not_found');

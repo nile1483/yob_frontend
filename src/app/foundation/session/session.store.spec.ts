@@ -90,7 +90,9 @@ describe('SessionStore', () => {
 
   describe('restore', () => {
     it('becomes authenticated on a successful context read', () => {
-      const resolved = restoreWith((req) => req.flush({ message: { data: authenticatedPayload() } }));
+      const resolved = restoreWith((req) =>
+        req.flush({ message: { data: authenticatedPayload() } }),
+      );
 
       expect(resolved()).toBe('authenticated');
       expect(session.status()).toBe('authenticated');

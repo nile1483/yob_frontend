@@ -265,7 +265,9 @@ test.describe('failures', () => {
 
     const error = page.getByTestId('payment-load-error');
     await expect(error).toBeVisible();
-    await expect(error).toContainText('not valid');
+    // A revoked token - the state after a successful payment - answers with the same
+    // code, so the wording must not call a paid buyer's link invalid.
+    await expect(error).toContainText('payment link is closed');
     await expect(page).not.toHaveURL(/login/);
     // The token is never echoed back into the page.
     await expect(page.locator('body')).not.toContainText('not-a-real-token');

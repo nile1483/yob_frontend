@@ -28,6 +28,104 @@ Update it only for durable project-level facts or important unresolved contract 
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Backend contract synchronization (Phase 13.5, 2026-08-13)
+
+**The authoritative contract is now `docs/api-handoff/`**, unpacked from the backend
+team's handoff and generated from the running backend after the payment work. The
+frontend's own `reference/api/` package is **superseded** and kept only for history;
+its README says so. There is one authority, not two.
+
+### The correction that mattered
+
+**`add_to_cart`'s `qty` is a DELTA, not an absolute quantity.**
+
+```text
+line has qty 2  ->  add_to_cart(item, qty=5)  ->  line becomes 7   (one row)
+```
+
+Earlier phases of this frontend pinned the opposite - SET - in the mock, in the tests
+and in three doc comments. That was wrong, and the tests were *protecting* the error:
+they would have failed against the real backend. They were rewritten rather than
+adjusted.
+
+Consequences now pinned by tests:
+
+- **Not idempotent.** Repeating the call adds again: 2 -> 7 -> 12.
+- **Never auto-retried.** There is no retry operator anywhere in the add path. A
+  mutation test that inserts `retry(1)` fails six tests.
+- **Re-entry guarded.** A double click, a held Enter, or a direct second call while
+  one is in flight all produce exactly one request.
+- **No client-side delta arithmetic.** The buyer's input on item detail *is* the
+  delta; nothing computes `desired - existing`. The field now reads "Quantity to add".
+- **The cart stays read-only.** No stepper, no inline editing - and there is no
+  absolute set-quantity endpoint to build one on.
+
+### Uncertain add outcomes
+
+An add that fails is classified before anything is said to the buyer:
+
+| Outcome | Meaning | Behaviour |
+| --- | --- | --- |
+| Server answered with an error envelope | received and **refused**; nothing applied | keep the cart, show the normal safe error |
+| Never completed, or the server failed after accepting (`httpStatus` 0 or >= 500) | **unknown** - the delta may have applied | re-read `get_cart`, ingest it, and say we could not confirm |
+
+The recovery is a **read**, never another add. If the read also fails, the buyer is
+told to check the cart before adding again. Nothing ever claims "not added" when that
+is a guess - a buyer told that would add again and buy twice as much.
+
+### Error `details` narrowed to an allow-list
+
+`YobApiError.details` used to hand the backend's whole `details` object to components.
+It is replaced by `YobApiError.context`, built by copying three known keys with their
+types checked: `retryable`, `salesOrder`, `correlationId`. Anything else - provider
+text, tracebacks - is dropped at the network boundary. A test feeds hostile extras and
+asserts they do not survive.
+
+### Payment error semantics corrected
+
+- `payment_provider_error` now branches on `context.retryable`: **true** keeps the
+  "your order is saved, try again" wording; **false without** an order offers another
+  method; **false with** an order asks the buyer to contact us. Previously all three
+  were treated as retryable.
+- A **revoked** token answers `checkout_token_invalid`, which is what a buyer sees
+  after paying and refreshing. The wording no longer calls their link invalid; it
+  reads as closed, and mentions that a completed payment is confirmed.
+- `checkout_token_expired`, `payment_already_processed` and `payment_signature_invalid`
+  are **terminal**: the payment controls are withdrawn rather than inviting an attempt
+  that must fail.
+
+### Audited and already correct - no change
+
+Response-shape asymmetry (`add`/`remove` flat document vs the `get_cart` envelope, with
+`get_cart` canonical); setter acknowledgements followed by `get_cart`; billing
+auto-filling shipping; `is_shippable` re-read from every response and never cached;
+`proceed_to_payment` 200 = 201; `/payment/:token` public and outside the guard;
+`payment_method` sent as `name`; `process_payment` limited to two fields; Razorpay
+paise passed through unchanged; no client-side HMAC; token never persisted; raw Frappe
+403 normalized and never rendered; the master-data create-then-refresh pattern.
+
+### Deliberately not done
+
+- **No `get_payment_methods` call was added.** The public payment page reads
+  `payment_methods[]` from `get_checkout_data`, which the handoff explicitly prefers
+  for that page. Adding an authenticated, company-scoped call there would break the
+  incognito journey the backend verified in a real browser. If an authenticated method
+  list is ever added elsewhere, `company` is **required** - omitting it returns `[]`
+  with no error, which reads as "none configured".
+- **`cms.get_config.allowed_payment_modes` is not used** and must not be: the backend
+  reads the wrong field and it is always `[]`. Known backend defect, not fixed from
+  here.
+- `address.get_contact_for_customer` is **internal Desk tooling** and is not called.
+
+### CURRENT vs DEFERRED cart - do not mix these
+
+**CURRENT (implemented):** one row per `item_code`; `qty` is an additive delta;
+non-idempotent; no absolute set-quantity endpoint; whole-line removal; whole-cart
+expiry; cart UI read-only.
+
+**DEFERRED (not implemented, do not build):** independent duplicate rows; stable
+per-line identity; immutable line quantity; per-line expiry.
+
 ## CONFIRMED - API reference version 2.0.0 (2026-08-13)
 
 The API reference in `reference/api/` was **replaced wholesale** on 2026-08-13 with
@@ -305,6 +403,7 @@ until the backend ships it.
 | Frontend Phase 11 - Checkout Details | **PASS** |
 | Frontend Phase 12 - Proceed to Payment handoff | **PASS** |
 | Frontend Phase 13 - Public payment, methods, Razorpay, verification | **PASS** |
+| Frontend Phase 13.5 - Backend contract synchronization | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |
 | API reference 2.0.0 (2026-08-13) | in use |

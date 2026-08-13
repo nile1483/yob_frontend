@@ -164,7 +164,7 @@ describe('Proceed to payment', () => {
     // ------------------------------------------------------------ readiness
 
     it('disables the CTA until the cart is ready', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       mockCart.clearShippingAddress();
       const view = await open();
 
@@ -173,14 +173,14 @@ describe('Proceed to payment', () => {
     });
 
     it('enables the CTA when contact, billing and shipping are all selected', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       expect(view.proceed().disabled).toBe(false);
     });
 
     it('does not require shipping when the cart is not shippable', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       mockCart.clearShippingAddress();
       scenario.scenario.set('cart-not-shippable');
       const view = await open();
@@ -199,7 +199,7 @@ describe('Proceed to payment', () => {
     // ---------------------------------------------------------- the request
 
     it('sends exactly one request per click', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       let calls = 0;
@@ -217,7 +217,7 @@ describe('Proceed to payment', () => {
     });
 
     it('disables the CTA while a request is in flight', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       const api = TestBed.inject(CheckoutApi);
@@ -235,7 +235,7 @@ describe('Proceed to payment', () => {
       // The disabled attribute is a UI affordance, not the guarantee. This drives the
       // handler directly, the way a stray programmatic call or a race would, so the
       // guard inside it is what is under test rather than the button's state.
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
 
       const harness = await RouterTestingHarness.create();
       await harness.navigateByUrl('/checkout');
@@ -265,7 +265,7 @@ describe('Proceed to payment', () => {
     // ------------------------------------------------------------ navigation
 
     it('navigates to the payment_url the server returned (201 created)', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       view.proceed().click();
@@ -275,7 +275,7 @@ describe('Proceed to payment', () => {
     });
 
     it('navigates identically when the obligation was reused (200)', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       scenario.scenario.set('payment-reused');
       const view = await open();
 
@@ -287,7 +287,7 @@ describe('Proceed to payment', () => {
     });
 
     it('refuses a payment_url that points outside the application', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       const api = TestBed.inject(CheckoutApi);
@@ -310,7 +310,7 @@ describe('Proceed to payment', () => {
     // --------------------------------------------------------------- failure
 
     it('stays on checkout and shows safe wording when the server refuses', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       // The cart is emptied elsewhere between render and submit.
@@ -328,7 +328,7 @@ describe('Proceed to payment', () => {
     });
 
     it('re-reads the cart after a checkout-state failure rather than guessing', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       mockCart.reset();
@@ -340,7 +340,7 @@ describe('Proceed to payment', () => {
     });
 
     it('never marks the cart ordered locally', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
       const store = TestBed.inject(CartStore);
       const before = store.cart()?.status;
@@ -358,7 +358,7 @@ describe('Proceed to payment', () => {
     // ----------------------------------------------------------- token safety
 
     it('does not persist the checkout token anywhere', async () => {
-      mockCart.setQuantity(BOLT, 1);
+      mockCart.seedQuantity(BOLT, 1);
       const view = await open();
 
       view.proceed().click();

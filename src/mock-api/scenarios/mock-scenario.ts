@@ -76,7 +76,11 @@ export type MockScenario =
   /** Only Pay Later is eligible. */
   | 'payment-paylater-only'
   /** The obligation is already Sales-Order-backed on first load. */
-  | 'payment-committed';
+  | 'payment-committed'
+  /** process_payment fails with `retryable: false` and no order - nothing committed. */
+  | 'payment-provider-unavailable'
+  /** verify_payment reports the obligation already settled by a different payment. */
+  | 'payment-already-processed';
 
 /**
  * Runtime knobs for the mock API.
@@ -129,7 +133,9 @@ export class MockApiScenario {
       scenario === 'payment-signature-invalid' ||
       scenario === 'payment-razorpay-only' ||
       scenario === 'payment-paylater-only' ||
-      scenario === 'payment-committed'
+      scenario === 'payment-committed' ||
+      scenario === 'payment-provider-unavailable' ||
+      scenario === 'payment-already-processed'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

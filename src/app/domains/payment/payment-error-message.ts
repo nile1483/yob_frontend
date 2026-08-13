@@ -11,6 +11,8 @@ export type PaymentFailureKind =
   | 'link-unusable'
   /** The cart changed before commitment; a new payment must be started from checkout. */
   | 'stale'
+  /** Finished or closed. Nothing to retry, and offering a retry would be wrong. */
+  | 'terminal'
   /** The method was refused. Re-read the authoritative method list and let them pick again. */
   | 'method-refused'
   /** The order exists and the provider call failed. Retry is safe and expected. */
@@ -50,15 +52,20 @@ export interface PaymentFailure {
 export function paymentFailure(error: YobApiError): PaymentFailure {
   switch (error.code) {
     case 'checkout_token_invalid':
+      // Also what a **revoked** token answers - the server clears it on settlement. So
+      // this is very often "you already paid", and the frontend cannot tell the two
+      // apart: same code, same status. Wording that told a paying customer their link
+      // was invalid would be wrong in the more common case, so it leads with the
+      // likely one and stays true for the other.
       return {
-        kind: 'link-unusable',
-        message: $localize`:@@payment.error.linkInvalid:This payment link is not valid. Please start checkout again.`,
+        kind: 'terminal',
+        message: $localize`:@@payment.error.linkClosed:This payment link is closed. If you have already paid, your order is confirmed - check your orders or contact us.`,
         salesOrder: null,
       };
 
     case 'checkout_token_expired':
       return {
-        kind: 'link-unusable',
+        kind: 'terminal',
         message: $localize`:@@payment.error.linkExpired:This payment link has expired. Please start checkout again.`,
         salesOrder: null,
       };
@@ -78,14 +85,45 @@ export function paymentFailure(error: YobApiError): PaymentFailure {
       };
 
     case 'payment_provider_error':
+    case 'payment_provider_not_configured':
+      // One code, three situations. The server says which by way of `retryable`, and
+      // guessing wrong is expensive in both directions: claiming a committed order
+      // failed invites a duplicate order, and offering a retry that can never succeed
+      // strands the buyer.
+      if (error.context.retryable === true) {
+        return {
+          kind: 'retryable-provider',
+          // Deliberately not "order failed". The order exists.
+          message: $localize`:@@payment.error.provider:We could not start the payment. Your order has been saved - please try paying again.`,
+          salesOrder: error.context.salesOrder ?? null,
+        };
+      }
+
+      if (error.context.salesOrder !== undefined) {
+        // retryable false *with* an order: the server wants a human to look at it.
+        return {
+          kind: 'terminal',
+          message: $localize`:@@payment.error.providerReview:This payment needs to be checked before it can continue. Your order has been saved - please contact us.`,
+          salesOrder: error.context.salesOrder,
+        };
+      }
+
+      // retryable false, nothing committed: this gateway cannot take the payment.
       return {
-        kind: 'retryable-provider',
-        // Deliberately not "order failed". The order exists.
-        message: $localize`:@@payment.error.provider:We could not start the payment. Your order has been saved - please try paying again.`,
-        salesOrder: readSalesOrder(error),
+        kind: 'method-refused',
+        message: $localize`:@@payment.error.providerUnavailable:That payment method is not available right now. Please choose another.`,
+        salesOrder: null,
       };
 
     case 'payment_signature_invalid':
+      // Verification failed against the provider's own signature. Not something a
+      // retry from this page can fix.
+      return {
+        kind: 'terminal',
+        message: $localize`:@@payment.error.verify:We could not confirm this payment. If money has left your account, contact support before paying again.`,
+        salesOrder: null,
+      };
+
     case 'payment_reference_invalid':
       return {
         kind: 'generic',
@@ -95,7 +133,7 @@ export function paymentFailure(error: YobApiError): PaymentFailure {
 
     case 'payment_already_processed':
       return {
-        kind: 'generic',
+        kind: 'terminal',
         message: $localize`:@@payment.error.alreadyProcessed:This order has already been paid.`,
         salesOrder: null,
       };
@@ -121,19 +159,7 @@ export function razorpayUnavailableMessage(): string {
   return $localize`:@@payment.error.razorpayUnavailable:We could not open the payment window. Check your connection and try again.`;
 }
 
-/**
- * The Sales Order name from a retryable provider failure.
- *
- * Read defensively - `details` is typed `Record<string, unknown>` because the envelope
- * allows anything there, and a wrong type must degrade to "not shown" rather than
- * putting an object into the page.
- */
-function readSalesOrder(error: YobApiError): string | null {
-  const value = error.details?.['sales_order'];
-  return typeof value === 'string' && value !== '' ? value : null;
-}
-
 /** Whether the server marked a provider failure as safe to retry. */
 export function isRetryableProviderFailure(error: YobApiError): boolean {
-  return error.code === 'payment_provider_error' && error.details?.['retryable'] === true;
+  return error.code === 'payment_provider_error' && error.context.retryable === true;
 }

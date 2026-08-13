@@ -380,9 +380,9 @@ describe('application routes', () => {
       const harness = await RouterTestingHarness.create();
       await harness.navigateByUrl('/catalog');
 
-      const accountLink = (harness.fixture.nativeElement as HTMLElement).querySelector<
-        HTMLAnchorElement
-      >('app-secure-nav a[href="/account"]');
+      const accountLink = (
+        harness.fixture.nativeElement as HTMLElement
+      ).querySelector<HTMLAnchorElement>('app-secure-nav a[href="/account"]');
       expect(accountLink).not.toBeNull();
 
       accountLink?.click();

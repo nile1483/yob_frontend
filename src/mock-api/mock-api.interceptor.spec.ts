@@ -165,7 +165,7 @@ describe('mockApiInterceptor', () => {
       expect(error?.kind).toBe('yob');
       expect(error?.httpStatus).toBe(500);
       expect(error?.code).toBe('internal_server_error');
-      expect(error?.details).toEqual({ correlation_id: 'mock000000000000' });
+      expect(error?.context.correlationId).toBe('mock000000000000');
     });
 
     it('fails loudly for an RPC method with no handler', () => {

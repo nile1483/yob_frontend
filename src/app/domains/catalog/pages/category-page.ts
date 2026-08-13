@@ -73,7 +73,9 @@ import { ItemCard } from '../parts/item-card';
 
       @if (subcategories().length > 0) {
         <section class="mt-8">
-          <h2 class="text-lg font-semibold" i18n="@@catalog.subcategories.heading">Subcategories</h2>
+          <h2 class="text-lg font-semibold" i18n="@@catalog.subcategories.heading">
+            Subcategories
+          </h2>
           <ul
             class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
             data-testid="subcategory-grid"
