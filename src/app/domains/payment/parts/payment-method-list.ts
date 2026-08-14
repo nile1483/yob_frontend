@@ -25,7 +25,7 @@ import type { PaymentMethodDto } from '../contracts/payment.types';
   selector: 'app-payment-method-list',
   template: `
     <fieldset [disabled]="disabled()" data-testid="payment-methods">
-      <legend class="text-lg font-semibold" i18n="@@payment.methods.heading">
+      <legend class="text-base font-semibold text-slate-900" i18n="@@payment.methods.heading">
         How would you like to pay?
       </legend>
 
@@ -38,12 +38,12 @@ import type { PaymentMethodDto } from '../contracts/payment.types';
           No payment methods are available for this order. Please contact us to continue.
         </p>
       } @else {
-        <ul class="mt-3 flex flex-col gap-2">
+        <ul class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
           @for (method of ordered(); track method.name) {
             <li>
               <label
-                class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200
-                       p-3 hover:bg-slate-50 has-checked:border-slate-900 has-checked:bg-slate-50"
+                class="flex cursor-pointer items-start gap-3 border-l-4 border-transparent p-3
+                       hover:bg-slate-50 has-checked:border-slate-900 has-checked:bg-slate-50"
               >
                 <input
                   type="radio"

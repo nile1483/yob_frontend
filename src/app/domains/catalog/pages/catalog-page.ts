@@ -4,6 +4,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { Alert } from '../../../design/alert/alert';
 import { EmptyState } from '../../../design/empty-state/empty-state';
 import { Spinner } from '../../../design/spinner/spinner';
+import { PageHeader } from '../../../design/page-header/page-header';
 import { CatalogApi } from '../data/catalog.api';
 import { toCategoryLink } from '../contracts/catalog.types';
 import { CategoryCard } from '../parts/category-card';
@@ -25,9 +26,14 @@ import { CategoryCard } from '../parts/category-card';
  */
 @Component({
   selector: 'app-catalog-page',
-  imports: [Alert, CategoryCard, EmptyState, Spinner],
+  imports: [PageHeader, Alert, CategoryCard, EmptyState, Spinner],
   template: `
-    <h1 class="text-2xl font-semibold tracking-tight" i18n="@@catalog.heading">Catalog</h1>
+    <app-page-header
+      heading="Catalog"
+      i18n-heading="@@catalog.heading"
+      lead="Browse everything available to your account."
+      i18n-lead="@@catalog.lead"
+    />
 
     @if (categories.isLoading()) {
       <div class="mt-8 flex justify-center" data-testid="catalog-loading">
@@ -50,11 +56,11 @@ import { CategoryCard } from '../parts/category-card';
       </div>
     } @else {
       <ul
-        class="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        class="mt-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
         data-testid="category-grid"
       >
         @for (link of links(); track link.slug) {
-          <li class="flex">
+          <li>
             <app-category-card [category]="link" />
           </li>
         }

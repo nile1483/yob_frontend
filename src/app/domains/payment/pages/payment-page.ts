@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { Alert } from '../../../design/alert/alert';
 import { Button } from '../../../design/button/button';
 import { Spinner } from '../../../design/spinner/spinner';
+import { PageHeader } from '../../../design/page-header/page-header';
 import { normalizeYobFailure } from '../../../foundation/network/yob-api-error';
 import {
   isCartBacked,
@@ -57,10 +58,10 @@ import {
  */
 @Component({
   selector: 'app-payment-page',
-  imports: [Alert, Button, PaymentMethodList, PaymentResult, PaymentSummary, RouterLink, Spinner],
+  imports: [PageHeader, Alert, Button, PaymentMethodList, PaymentResult, PaymentSummary, RouterLink, Spinner],
   template: `
     <div class="mx-auto w-full max-w-2xl" data-testid="payment-page">
-      <h1 class="text-2xl font-semibold tracking-tight" i18n="@@payment.heading">Payment</h1>
+      <app-page-header heading="Payment" i18n-heading="@@payment.heading" />
 
       @if (outcome(); as done) {
         <!-- Terminal. The summary and methods are gone on purpose: there is nothing
@@ -81,8 +82,8 @@ import {
                  fail forever. Checkout is the only place that can. -->
             <a
               routerLink="/checkout"
-              class="mt-4 inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2
-                     text-sm font-medium text-white hover:bg-slate-700"
+              class="mt-4 inline-flex min-h-11 items-center justify-center rounded-md bg-slate-900
+                     px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
               data-testid="payment-return-to-checkout"
               i18n="@@payment.returnToCheckout"
             >

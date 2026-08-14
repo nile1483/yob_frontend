@@ -52,9 +52,10 @@ import { Button } from '../../../design/button/button';
       <div class="flex flex-wrap gap-2">
         <!-- Cancel first: the safe choice is the one a reflexive Enter reaches. -->
         <button
+          yob-button
+          variant="secondary"
+          size="sm"
           type="button"
-          class="rounded-md px-3 py-1.5 text-sm font-medium text-slate-700 underline
-                 underline-offset-4"
           #cancel
           (click)="cancelled.emit()"
           [attr.data-testid]="testId() + '-cancel'"
@@ -65,6 +66,7 @@ import { Button } from '../../../design/button/button';
 
         <button
           yob-button
+          size="sm"
           type="button"
           class="bg-red-700 hover:bg-red-800 disabled:hover:bg-red-700"
           [loading]="pending()"
@@ -88,10 +90,13 @@ export class ConfirmDelete {
   readonly confirmed = output<void>();
   readonly cancelled = output<void>();
 
-  private readonly cancelButton = viewChild.required<ElementRef<HTMLButtonElement>>('cancel');
+  // `read: ElementRef` is required, not decoration: `#cancel` sits on an element that
+  // the `button[yob-button]` component matches, so a bare query would hand back the
+  // Button instance and `.nativeElement` would be undefined.
+  private readonly cancelButton = viewChild.required('cancel', { read: ElementRef });
 
   constructor() {
-    afterNextRender(() => this.cancelButton().nativeElement.focus());
+    afterNextRender(() => (this.cancelButton().nativeElement as HTMLButtonElement).focus());
   }
 
   protected readonly prompt = computed(

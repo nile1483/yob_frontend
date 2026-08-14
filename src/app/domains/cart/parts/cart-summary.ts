@@ -16,11 +16,11 @@ import type { CartDocDto } from '../contracts/cart.types';
   host: { class: 'contents' },
   template: `
     <section
-      class="rounded-lg border border-slate-200 p-4"
+      class="rounded-lg border border-slate-200 bg-slate-50/60 p-4"
       aria-labelledby="cart-summary-heading"
       data-testid="cart-summary"
     >
-      <h2 id="cart-summary-heading" class="text-lg font-semibold" i18n="@@cart.summary.heading">
+      <h2 id="cart-summary-heading" class="text-base font-semibold text-slate-900" i18n="@@cart.summary.heading">
         Order summary
       </h2>
 
@@ -67,7 +67,7 @@ import type { CartDocDto } from '../contracts/cart.types';
         }
 
         <div
-          class="mt-1 flex justify-between gap-4 border-t border-slate-200 pt-2 text-base font-semibold"
+          class="mt-2 flex justify-between gap-4 border-t border-slate-200 pt-3 text-base font-semibold"
         >
           <dt i18n="@@cart.summary.grandTotal">Total</dt>
           <dd data-testid="cart-grand-total">

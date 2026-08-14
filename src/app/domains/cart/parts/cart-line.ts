@@ -22,11 +22,11 @@ import type { CartLineDto } from '../contracts/cart.types';
       class="flex flex-col gap-3 border-b border-slate-200 py-4 sm:flex-row sm:items-start sm:gap-4"
       data-testid="cart-line"
     >
-      @if (line().image; as image) {
-        <img [src]="image" alt="" class="size-20 shrink-0 rounded-md object-cover" />
-      } @else {
-        <div class="size-20 shrink-0 rounded-md bg-slate-100" aria-hidden="true"></div>
-      }
+      <div class="size-20 shrink-0 overflow-hidden rounded-md bg-slate-50">
+        @if (line().image; as image) {
+          <img [src]="image" alt="" class="h-full w-full object-cover" />
+        }
+      </div>
 
       <div class="min-w-0 flex-1">
         <h3 class="font-medium break-words text-slate-900">
@@ -72,8 +72,13 @@ import type { CartLineDto } from '../contracts/cart.types';
           </p>
         }
 
+        <!-- Quiet, and deliberately not the same weight as Proceed to checkout. Remove
+             is a recovery action a buyer occasionally wants, not something the page
+             should be steering them towards. -->
         <button
           yob-button
+          variant="destructive"
+          size="sm"
           type="button"
           [loading]="removing()"
           [attr.aria-label]="removeLabel()"

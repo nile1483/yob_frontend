@@ -4,10 +4,12 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 
 import { Alert } from '../../../design/alert/alert';
+import { Badge } from '../../../design/badge/badge';
 import { EmptyState } from '../../../design/empty-state/empty-state';
+import { PageHeader } from '../../../design/page-header/page-header';
 import { Spinner } from '../../../design/spinner/spinner';
 import { OrdersApi } from '../data/orders.api';
-import { orderStatusLabel } from '../orders.status';
+import { orderStatusLabel, orderStatusTone } from '../orders.status';
 
 /**
  * Order history.
@@ -36,9 +38,14 @@ import { orderStatusLabel } from '../orders.status';
  */
 @Component({
   selector: 'app-orders-page',
-  imports: [Alert, CurrencyPipe, DatePipe, EmptyState, RouterLink, Spinner],
+  imports: [Alert, Badge, CurrencyPipe, DatePipe, EmptyState, PageHeader, RouterLink, Spinner],
   template: `
-    <h1 class="text-2xl font-semibold tracking-tight" i18n="@@orders.heading">Your orders</h1>
+    <app-page-header
+      heading="Your orders"
+      i18n-heading="@@orders.heading"
+      lead="Everything you have ordered, most recent first."
+      i18n-lead="@@orders.lead"
+    />
 
     @if (orders.isLoading()) {
       <div class="mt-8 flex justify-center" data-testid="orders-loading">
@@ -66,13 +73,21 @@ import { orderStatusLabel } from '../orders.status';
         </app-empty-state>
       </div>
     } @else {
-      <ul class="mt-6 flex flex-col gap-3" data-testid="orders-list">
+      <!-- A divided list rather than a stack of cards: these rows are the same kind of
+           thing repeated, and a border around each one adds no information while making
+           the page look like a settings screen. -->
+      <ul
+        class="mt-6 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200"
+        data-testid="orders-list"
+      >
         @for (order of orders.value(); track order.name) {
           <li>
+            <!-- Fixed columns on desktop, so status and amount line up down the list
+                 instead of floating after order numbers of different lengths. -->
             <a
               [routerLink]="['/orders', order.name]"
-              class="flex flex-col gap-2 rounded-lg border border-slate-200 p-4
-                     hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+              class="grid gap-2 p-4 hover:bg-slate-50
+                     sm:grid-cols-[minmax(0,1fr)_10rem_8rem] sm:items-center sm:gap-4"
               data-testid="order-row"
             >
               <span class="min-w-0">
@@ -82,23 +97,24 @@ import { orderStatusLabel } from '../orders.status';
                   {{ order.name }}
                 </span>
                 @if (order.transaction_date) {
-                  <span class="block text-sm text-slate-600" data-testid="order-row-date">
+                  <span class="mt-0.5 block text-sm text-slate-500" data-testid="order-row-date">
                     {{ order.transaction_date | date: 'mediumDate' }}
                   </span>
                 }
               </span>
 
-              <span class="flex flex-wrap items-center gap-x-4 gap-y-1 sm:justify-end">
-                <!-- Status as words. Colour alone would carry the meaning nowhere. -->
-                <span
-                  class="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-800"
-                  data-testid="order-row-status"
-                >
+              <!-- Status as words. Colour reinforces them and never replaces them. -->
+              <span class="sm:justify-self-start">
+                <app-badge [tone]="statusTone(order.status)" data-testid="order-row-status">
                   {{ statusLabel(order.status) }}
-                </span>
-                <span class="font-medium" data-testid="order-row-total">
-                  {{ order.grand_total | currency: order.currency }}
-                </span>
+                </app-badge>
+              </span>
+
+              <span
+                class="font-semibold tabular-nums sm:justify-self-end"
+                data-testid="order-row-total"
+              >
+                {{ order.grand_total | currency: order.currency }}
               </span>
             </a>
           </li>
@@ -117,5 +133,9 @@ export class OrdersPage {
 
   protected statusLabel(status: string): string {
     return orderStatusLabel(status);
+  }
+
+  protected statusTone(status: string) {
+    return orderStatusTone(status);
   }
 }

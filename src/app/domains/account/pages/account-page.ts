@@ -13,6 +13,7 @@ import type { Observable } from 'rxjs';
 import { Alert } from '../../../design/alert/alert';
 import { Button } from '../../../design/button/button';
 import { EmptyState } from '../../../design/empty-state/empty-state';
+import { PageHeader } from '../../../design/page-header/page-header';
 import { Spinner } from '../../../design/spinner/spinner';
 import { normalizeYobFailure } from '../../../foundation/network/yob-api-error';
 import { toAddressChoice, toContactChoice } from '../../checkout/checkout.choices';
@@ -91,12 +92,14 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
  */
 @Component({
   selector: 'app-account-page',
-  imports: [AddressForm, Alert, Button, ConfirmDelete, ContactForm, EmptyState, Spinner],
+  imports: [AddressForm, Alert, Button, ConfirmDelete, ContactForm, EmptyState, PageHeader, Spinner],
   template: `
-    <h1 class="text-2xl font-semibold tracking-tight" i18n="@@account.heading">Your account</h1>
-    <p class="mt-2 text-slate-600" i18n="@@account.intro">
-      Manage the addresses and contacts used when you place an order.
-    </p>
+    <app-page-header
+      heading="Your account"
+      i18n-heading="@@account.heading"
+      lead="Manage the addresses and contacts used when you place an order."
+      i18n-lead="@@account.intro"
+    />
 
     @if (notice(); as message) {
       <div class="mt-6" aria-live="polite" data-testid="account-notice">
@@ -107,11 +110,12 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
     <!-- ================================================================ addresses -->
     <section class="mt-8" aria-labelledby="account-addresses-heading">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="account-addresses-heading" class="text-lg font-semibold"
+        <h2 id="account-addresses-heading" class="text-base font-semibold text-slate-900"
             i18n="@@account.addresses.heading">Addresses</h2>
 
         @if (!creatingAddress()) {
-          <button yob-button type="button" (click)="openCreateAddress()"
+          <button yob-button variant="secondary" size="sm" type="button"
+                  (click)="openCreateAddress()"
                   data-testid="account-add-address" i18n="@@account.addresses.add">
             Add address
           </button>
@@ -152,9 +156,14 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
           </app-empty-state>
         </div>
       } @else {
-        <ul class="mt-4 flex flex-col gap-3" data-testid="address-list">
+        <!-- Divided rows, not a card each: these are the same kind of record repeated,
+             and a box around every one made the page read as an admin CRUD table. -->
+        <ul
+          class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200"
+          data-testid="address-list"
+        >
           @for (address of addresses.value(); track address.name) {
-            <li class="rounded-lg border border-slate-200 p-4" data-testid="address-item">
+            <li class="p-4" data-testid="address-item">
               @if (editingAddressValues(address.name); as initial) {
                 <app-address-form
                   heading="Edit address"
@@ -169,7 +178,7 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
                   (cancelled)="closeEditors()"
                 />
               } @else {
-                <div class="flex flex-wrap items-start justify-between gap-4">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div class="min-w-0">
                     <p class="font-medium break-words" data-testid="address-item-title">
                       {{ addressLabel(address) }}
@@ -189,10 +198,10 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
                     />
                   } @else {
                     <div class="flex shrink-0 flex-wrap gap-2">
-                      <button type="button" [class]="secondary"
+                      <button yob-button variant="secondary" size="sm" type="button"
                               (click)="openEditAddress(address)"
                               data-testid="address-edit" i18n="@@account.edit">Edit</button>
-                      <button type="button" [class]="destructive"
+                      <button yob-button variant="destructive" size="sm" type="button"
                               (click)="openConfirm('address', address.name)"
                               [attr.data-delete-for]="address.name"
                               data-testid="address-delete" i18n="@@account.delete">Delete</button>
@@ -209,11 +218,12 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
     <!-- ================================================================= contacts -->
     <section class="mt-10" aria-labelledby="account-contacts-heading">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="account-contacts-heading" class="text-lg font-semibold"
+        <h2 id="account-contacts-heading" class="text-base font-semibold text-slate-900"
             i18n="@@account.contacts.heading">Contacts</h2>
 
         @if (!creatingContact()) {
-          <button yob-button type="button" (click)="openCreateContact()"
+          <button yob-button variant="secondary" size="sm" type="button"
+                  (click)="openCreateContact()"
                   data-testid="account-add-contact" i18n="@@account.contacts.add">
             Add contact
           </button>
@@ -254,9 +264,12 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
           </app-empty-state>
         </div>
       } @else {
-        <ul class="mt-4 flex flex-col gap-3" data-testid="contact-list">
+        <ul
+          class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200"
+          data-testid="contact-list"
+        >
           @for (contact of contacts.value(); track contact.name) {
-            <li class="rounded-lg border border-slate-200 p-4" data-testid="contact-item">
+            <li class="p-4" data-testid="contact-item">
               @if (editingContactValues(contact.name); as initial) {
                 <app-contact-form
                   heading="Edit contact"
@@ -271,7 +284,7 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
                   (cancelled)="closeEditors()"
                 />
               } @else {
-                <div class="flex flex-wrap items-start justify-between gap-4">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <div class="min-w-0">
                     <p class="font-medium break-words" data-testid="contact-item-name">
                       {{ contactLabel(contact) }}
@@ -291,10 +304,10 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
                     />
                   } @else {
                     <div class="flex shrink-0 flex-wrap gap-2">
-                      <button type="button" [class]="secondary"
+                      <button yob-button variant="secondary" size="sm" type="button"
                               (click)="openEditContact(contact)"
                               data-testid="contact-edit" i18n="@@account.edit">Edit</button>
-                      <button type="button" [class]="destructive"
+                      <button yob-button variant="destructive" size="sm" type="button"
                               (click)="openConfirm('contact', contact.name)"
                               [attr.data-delete-for]="contact.name"
                               data-testid="contact-delete" i18n="@@account.delete">Delete</button>
@@ -314,11 +327,6 @@ export class AccountPage {
 
   protected readonly addresses = rxResource({ stream: () => this.api.getAddresses() });
   protected readonly contacts = rxResource({ stream: () => this.api.getContacts() });
-
-  protected readonly secondary =
-    'rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50';
-  protected readonly destructive =
-    'rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-50';
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);

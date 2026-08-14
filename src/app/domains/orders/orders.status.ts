@@ -1,3 +1,4 @@
+import type { BadgeTone } from '../../design/badge/badge';
 import type { OrderDetailDto, OrderPaymentLogDto } from './contracts/orders.types';
 
 /**
@@ -50,6 +51,37 @@ export function orderStatusLabel(status: string): string {
       // The vocabulary is closed, so this is unreachable in practice. If ERPNext ever
       // adds a value, a neutral word is safer than echoing an internal one.
       return $localize`:@@orders.status.processing:Processing`;
+  }
+}
+
+/**
+ * The tone a status badge should carry.
+ *
+ * Paired with `orderStatusLabel` and kept in the same file so the two cannot drift: a
+ * status whose word says "Cancelled" but whose colour says success would be worse than
+ * no colour at all.
+ *
+ * Colour is always redundant here - the badge shows the word too - so this is a scan
+ * aid, not the meaning. Before Phase 17 every status rendered in the same grey, which
+ * made `Completed` and `Cancelled` indistinguishable in a list a buyer scans precisely
+ * to tell them apart.
+ *
+ * Deliberately conservative: only genuinely finished and genuinely stopped states get
+ * a colour. Everything in flight stays neutral, because tinting five in-progress
+ * states five different colours is decoration, not information.
+ */
+export function orderStatusTone(status: string): BadgeTone {
+  switch (status) {
+    case 'Completed':
+      return 'success';
+    case 'Cancelled':
+    case 'Closed':
+      return 'danger';
+    case 'On Hold':
+    case 'To Pay':
+      return 'warning';
+    default:
+      return 'neutral';
   }
 }
 

@@ -38,13 +38,13 @@ interface SummaryLine {
   imports: [CurrencyPipe],
   template: `
     <section
-      class="rounded-lg border border-slate-200 p-4"
+      class="rounded-lg border border-slate-200 bg-slate-50/60 p-4"
       aria-labelledby="payment-summary-heading"
       data-testid="payment-summary"
     >
       <h2
         id="payment-summary-heading"
-        class="text-lg font-semibold"
+        class="text-base font-semibold text-slate-900"
         i18n="@@payment.summary.heading"
       >
         Order summary
@@ -91,13 +91,17 @@ interface SummaryLine {
           }
         }
 
-        <div class="flex justify-between gap-4 text-base font-semibold">
-          <dt i18n="@@payment.summary.amountDue">Amount due</dt>
-          <dd data-testid="payment-amount">{{ data().amount | currency: data().currency }}</dd>
+        <!-- The single number this page is about, so it is the largest thing on it.
+             Tabular figures keep the digits aligned with the rows above. -->
+        <div class="mt-2 flex items-baseline justify-between gap-4 border-t border-slate-200 pt-3">
+          <dt class="text-base font-semibold" i18n="@@payment.summary.amountDue">Amount due</dt>
+          <dd class="text-xl font-semibold tabular-nums" data-testid="payment-amount">
+            {{ data().amount | currency: data().currency }}
+          </dd>
         </div>
       </dl>
 
-      <div class="mt-4 flex flex-col gap-2 text-sm text-slate-600">
+      <div class="mt-4 flex flex-col gap-1 border-t border-slate-200 pt-4 text-sm text-slate-600">
         @if (billing(); as address) {
           <p data-testid="payment-billing">
             <ng-container i18n="@@payment.summary.billing">Billing</ng-container>: {{ address }}

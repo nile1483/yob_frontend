@@ -77,11 +77,11 @@ import { ItemCard } from '../parts/item-card';
             Subcategories
           </h2>
           <ul
-            class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            class="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
             data-testid="subcategory-grid"
           >
             @for (link of subcategories(); track link.slug) {
-              <li class="flex">
+              <li>
                 <app-category-card [category]="link" />
               </li>
             }
@@ -93,11 +93,11 @@ import { ItemCard } from '../parts/item-card';
         <section class="mt-10">
           <h2 class="text-lg font-semibold" i18n="@@catalog.items.heading">Items</h2>
           <ul
-            class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            class="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
             data-testid="item-grid"
           >
             @for (item of data.items; track item.name) {
-              <li class="flex">
+              <li>
                 <app-item-card [item]="item" />
               </li>
             }

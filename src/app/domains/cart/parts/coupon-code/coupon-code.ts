@@ -36,19 +36,20 @@ import { CartStore } from '../../state/cart.store';
   imports: [Alert, Button, Field],
   host: { class: 'contents' },
   template: `
+    <!-- No heading of its own: the field's label already says "Coupon code", and the
+         two together rendered it twice. Secondary to the totals and the checkout button
+         by construction - a bordered box rather than a filled panel, and no primary
+         action inside it. -->
     <section
       class="rounded-lg border border-slate-200 p-4"
-      aria-labelledby="cart-coupon-heading"
+      aria-label="Coupon code"
+      i18n-aria-label="@@cart.coupon.heading"
       data-testid="cart-coupon"
     >
-      <h2 id="cart-coupon-heading" class="text-sm font-medium text-slate-900" i18n="@@cart.coupon.heading">
-        Coupon code
-      </h2>
-
       @if (store.hasCoupon()) {
         <!-- Applied. The code shown is the server's, never what was typed: the backend
              upper-cases and trims it, and only the canonical cart says it stuck. -->
-        <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="flex items-center gap-2 text-sm text-slate-900" data-testid="cart-coupon-applied">
             <!-- Decorative: the adjacent text carries the meaning, so the state is
                  never colour- or glyph-only. -->
@@ -61,6 +62,8 @@ import { CartStore } from '../../state/cart.store';
 
           <button
             yob-button
+            variant="quiet"
+            size="sm"
             type="button"
             [loading]="store.couponPending() === 'remove'"
             [disabled]="store.couponPending() !== null"
@@ -76,7 +79,7 @@ import { CartStore } from '../../state/cart.store';
              submit button needs no click handler of its own. The native submit event
              is used rather than ngSubmit because ngSubmit is a FormsModule directive
              output, and this field needs no forms machinery. -->
-        <form class="mt-3 flex flex-wrap items-end gap-3" (submit)="onSubmit($event)" novalidate>
+        <form class="flex flex-wrap items-end gap-3" (submit)="onSubmit($event)" novalidate>
           <div class="min-w-0 flex-1">
             <app-field label="Coupon code" i18n-label="@@cart.coupon.label" [error]="errorMessage()">
               <!-- A plain native input bound to a signal, with no forms module.
@@ -103,6 +106,7 @@ import { CartStore } from '../../state/cart.store';
 
           <button
             yob-button
+            variant="secondary"
             type="submit"
             [loading]="store.couponPending() === 'apply'"
             [disabled]="!canApply()"

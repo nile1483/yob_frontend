@@ -22,7 +22,8 @@ import { Component } from '@angular/core';
   selector: 'app-empty-state',
   template: `
     <div
-      class="flex flex-col items-center gap-2 rounded-md border border-dashed border-slate-300 px-6 py-10 text-center"
+      class="flex flex-col items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60
+             px-6 py-12 text-center"
     >
       <div class="text-base font-semibold text-slate-900">
         <ng-content select="[emptyTitle]" />

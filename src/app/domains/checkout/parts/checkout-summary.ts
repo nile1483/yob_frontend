@@ -26,7 +26,7 @@ import { CartSummary } from '../../cart/parts/cart-summary';
       <section aria-labelledby="checkout-items-heading" data-testid="checkout-items">
         <h2
           id="checkout-items-heading"
-          class="text-lg font-semibold"
+          class="text-base font-semibold text-slate-900"
           i18n="@@checkout.items.heading"
         >
           Items

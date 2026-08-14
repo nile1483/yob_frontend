@@ -2,6 +2,7 @@ import { CurrencyPipe } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { Badge } from '../../../design/badge/badge';
 import { CATALOG_CURRENCY } from '../catalog.currency';
 import type { CatalogItemDto } from '../contracts/catalog.types';
 
@@ -24,68 +25,85 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
  */
 @Component({
   selector: 'app-item-card',
-  imports: [CurrencyPipe, RouterLink],
+  imports: [Badge, CurrencyPipe, RouterLink],
   host: { class: 'contents' },
   template: `
     <article
-      class="relative flex h-full flex-col gap-3 rounded-lg border border-slate-200 p-4
-             transition-colors focus-within:border-slate-400 hover:border-slate-400"
+      class="group relative flex h-full w-full flex-col rounded-lg border border-slate-200
+             transition-shadow focus-within:shadow-md hover:shadow-md"
       data-testid="item-card"
     >
-      @if (item().image; as image) {
-        <img
-          [src]="image"
-          [alt]="item().item_name"
-          class="aspect-square w-full rounded-md object-cover"
-        />
-      } @else {
-        <div class="aspect-square w-full rounded-md bg-slate-100" aria-hidden="true"></div>
-      }
+      <!-- Fixed aspect ratio, so a row of cards lines up whether or not any of them
+           actually has an image yet. -->
+      <div class="aspect-square w-full overflow-hidden rounded-t-lg bg-slate-50">
+        @if (item().image; as image) {
+          <img
+            [src]="image"
+            [alt]="item().item_name"
+            class="h-full w-full object-cover transition-transform duration-200
+                   group-hover:scale-[1.02]"
+          />
+        } @else {
+          <!-- Decorative: the name below already identifies the item, so this must not
+               be announced as an image with no accessible name. -->
+          <div class="h-full w-full" aria-hidden="true"></div>
+        }
+      </div>
 
-      <h3 class="text-base font-medium break-words text-slate-900">
+      <div class="flex flex-1 flex-col gap-1 p-4">
+        <h3 class="text-sm leading-snug font-medium break-words text-slate-900">
         <!-- Stretched link: the anchor is the only interactive element, but its
              ::after covers the card so the whole tile is clickable. A future
              add-to-cart button must sit above it with relative z-10. -->
-        <a
-          [routerLink]="['/catalog', 'item', item().slug]"
-          class="after:absolute after:inset-0 after:content-['']"
-          data-testid="item-link"
-          >{{ item().item_name }}</a
-        >
-      </h3>
-
-      <p class="text-xs text-slate-500 break-words">
-        <span class="sr-only" i18n="@@catalog.item.code">Item code</span>
-        {{ item().name }}
-      </p>
-
-      <div class="mt-auto flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span class="text-lg font-semibold text-slate-900" data-testid="item-rate">
-          {{ item().rate | currency: currency }}
-        </span>
-
-        @if (hasDiscount()) {
-          <s class="text-sm text-slate-500" data-testid="item-base-price">
-            {{ item().base_price | currency: currency }}
-          </s>
-          <span
-            class="rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-900"
-            data-testid="item-discount"
-            i18n="@@catalog.item.discount"
+          <a
+            [routerLink]="['/catalog', 'item', item().slug]"
+            class="after:absolute after:inset-0 after:content-['']"
+            data-testid="item-link"
+            >{{ item().item_name }}</a
           >
-            {{ item().discount_percentage }}% off
-          </span>
-        }
+        </h3>
 
-        <span class="text-xs text-slate-500" data-testid="item-uom">
-          <ng-container i18n="@@catalog.item.perUom">per</ng-container>
-          {{ item().stock_uom }}
-        </span>
+        <p class="text-xs break-words text-slate-500">
+          <span class="sr-only" i18n="@@catalog.item.code">Item code</span>
+          {{ item().name }}
+        </p>
+
+        <!-- mt-auto pins this block to the bottom, so prices line up across a row
+             however many lines each product name takes. The pricing-rule label sits
+             *above* the price rather than below it: as a trailing line it was optional,
+             which pushed the price down on any card that happened not to have one. -->
+        <div class="mt-auto pt-3">
+          @if (item().pricing_rule_label; as label) {
+            <p class="mb-1 text-xs text-slate-600" data-testid="item-pricing-rule">{{ label }}</p>
+          }
+
+          <div class="flex flex-wrap items-baseline gap-x-2">
+            <span class="text-lg font-semibold text-slate-900" data-testid="item-rate">
+              {{ item().rate | currency: currency }}
+            </span>
+
+            @if (hasDiscount()) {
+              <s class="text-sm text-slate-400" data-testid="item-base-price">
+                {{ item().base_price | currency: currency }}
+              </s>
+            }
+          </div>
+
+          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span class="text-xs text-slate-500" data-testid="item-uom">
+              <ng-container i18n="@@catalog.item.perUom">per</ng-container>
+              {{ item().stock_uom }}
+            </span>
+
+            @if (hasDiscount()) {
+              <app-badge tone="success" data-testid="item-discount" i18n="@@catalog.item.discount">
+                {{ item().discount_percentage }}% off
+              </app-badge>
+            }
+          </div>
+
+        </div>
       </div>
-
-      @if (item().pricing_rule_label; as label) {
-        <p class="text-xs text-slate-600" data-testid="item-pricing-rule">{{ label }}</p>
-      }
     </article>
   `,
 })

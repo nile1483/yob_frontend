@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { Alert } from '../../../design/alert/alert';
 import { Button } from '../../../design/button/button';
 import { Field } from '../../../design/field/field';
+import { PageHeader } from '../../../design/page-header/page-header';
 import { normalizeYobFailure, type YobApiError } from '../../../foundation/network/yob-api-error';
 import {
   DEFAULT_AUTHENTICATED_PATH,
@@ -35,13 +36,15 @@ interface Credentials {
  */
 @Component({
   selector: 'app-login-page',
-  imports: [Alert, Button, Field, FormField],
+  imports: [PageHeader, Alert, Button, Field, FormField],
   template: `
-    <div class="mx-auto w-full max-w-sm">
-      <h1 class="text-2xl font-semibold tracking-tight" i18n="@@login.heading">Sign in</h1>
-      <p class="mt-2 text-slate-600" i18n="@@login.intro">
-        Enter your details to continue to your account.
-      </p>
+    <div class="mx-auto w-full max-w-sm py-4 sm:py-10">
+      <app-page-header
+        heading="Sign in"
+        i18n-heading="@@login.heading"
+        lead="Enter your details to continue to your account."
+        i18n-lead="@@login.intro"
+      />
 
       @if (errorMessage(); as message) {
         <div class="mt-6">

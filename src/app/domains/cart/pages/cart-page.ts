@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { Alert } from '../../../design/alert/alert';
 import { EmptyState } from '../../../design/empty-state/empty-state';
 import { Spinner } from '../../../design/spinner/spinner';
+import { PageHeader } from '../../../design/page-header/page-header';
 import { CartLine } from '../parts/cart-line';
 import { CartSummary } from '../parts/cart-summary';
 import { CouponCode } from '../parts/coupon-code/coupon-code';
@@ -18,9 +19,9 @@ import { CartStore } from '../state/cart.store';
  */
 @Component({
   selector: 'app-cart-page',
-  imports: [Alert, CartLine, CartSummary, CouponCode, EmptyState, RouterLink, Spinner],
+  imports: [PageHeader, Alert, CartLine, CartSummary, CouponCode, EmptyState, RouterLink, Spinner],
   template: `
-    <h1 class="text-2xl font-semibold tracking-tight" i18n="@@cart.heading">Your cart</h1>
+    <app-page-header heading="Your cart" i18n-heading="@@cart.heading" />
 
     <!-- Outside the state branches on purpose: when the server withdraws every line
          the cart becomes empty, and "your cart is empty" with no explanation is

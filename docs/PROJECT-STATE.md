@@ -128,6 +128,91 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Storefront UX & visual design (Phase 17, 2026-08-14)
+
+A styling pass over the whole buyer journey. No business logic, no contract changes, no
+structural rewrites of passing pages. Every page was inspected in a real browser at
+390x844, 768x1024 and 1440x900 before anything was edited.
+
+### The defect that mattered most
+
+**The product grid was not a grid.** Catalog and category pages wrapped each card in
+`<li class="flex">`, and the card component's host is `display: contents` - so the
+card's own root became a *flex item*, which shrinks to its content instead of filling
+the grid cell. Every product card was a different width, image placeholders were
+different sizes, and prices landed at different heights. It was worst at 390px, where
+one card was full-width and the next was half.
+
+The fix is `w-full` on the card root and a plain `<li>`. It is one word per card, and it
+is the single largest visible change in this phase.
+
+### Design decisions worth keeping
+
+**Button variants exist now, and are chosen by meaning.** `yob-button` carried one
+treatment on the rule that a second gets added when a screen needs one. Three did: the
+cart rendered **Remove** at the same weight as **Proceed to checkout**, checkout rendered
+three **Add new address** buttons heavier than **Proceed to Payment**, and account had
+given up and hand-written `secondary`/`destructive` class strings as page fields. There
+are four - `primary`, `secondary`, `destructive`, `quiet` - and two sizes. No `colour`
+or `width` input; restyling means editing the class table in the component.
+
+**One primary action per view.** Everything supporting is secondary, and destructive
+actions are outlined rather than filled - a list of filled red buttons reads as a page
+full of errors.
+
+**Two new primitives, both earning their place.** `PageHeader` replaced the same title
+markup hand-written on eleven pages, which had already drifted so pages did not start at
+the same height. `Badge` replaced ad-hoc pills and gave order status semantic tones -
+before it, `Completed` and `Cancelled` rendered in identical grey in a list a buyer scans
+precisely to tell them apart. Colour is always redundant: every badge shows its word.
+
+**Deliberately *not* extracted:** card containers, summary panels and list rows. Those
+legitimately differ per page, and wrapping them would force pages to fight the
+abstraction. The rule applied throughout: extract what is genuinely identical, leave what
+differs in the page where a designer can edit it.
+
+**Repeated records are divided lists, not stacks of cards.** Orders, account addresses
+and contacts, address choices and payment methods. A border around every row of the same
+kind of thing adds no information and makes a storefront look like an admin screen. The
+selected choice is marked with a tint and a left accent that reserves its own space, so
+selecting does not shift the row.
+
+**`SHELL_CONTAINER` is shared by both shells.** The public shell used to centre its own
+narrower container while the pages inside centred theirs, so sign-in and payment visibly
+did not line up with the brand above them.
+
+### Two real gaps closed
+
+- **There was no way to sign out.** `SessionStore.signOut()` existed and was tested from
+  Phase 3 but had no UI. The header now has one.
+- **The active nav link was visual only.** `routerLinkActive` swaps classes and does not
+  set `aria-current`; `ariaCurrentWhenActive="page"` was missing.
+
+### The cart count never triggers a request
+
+The nav badge reads whatever `CartStore` already holds. Fetching from the shell would put
+a cart request on every navigation, including pages unrelated to the cart, purely to
+decorate a link. So it appears once something has genuinely loaded the cart and is absent
+before that - a wrong number would be worse than none.
+
+### Visual tests assert outcomes, never classes
+
+`e2e/design.visual.spec.ts` checks grid alignment by measured width, hierarchy by
+measured control width, navigation by role and accessible name, and `aria-current` rather
+than styling. A test asserting `bg-slate-900` would fail the moment a copied client
+restyled the storefront - which is the point of a master project - while proving nothing
+a buyer can perceive.
+
+### Known trap, hit again
+
+A backtick inside an HTML comment **inside a component template literal** terminates the
+literal and produces baffling errors elsewhere in the file (`NG1001: Decorator argument
+must be literal`). It has now caught three phases. The repo-wide sweep is:
+
+```bash
+python3 -c "import pathlib,re;[print(f) for f in pathlib.Path('src').rglob('*.ts') for m in re.finditer(r'<!--.*?-->',f.read_text(),re.S) if '\`' in m.group(0)]"
+```
+
 ## CONFIRMED - Account address & contact management (Phase 15, 2026-08-14)
 
 Buyers can now add, edit and delete their own addresses and contacts at `/account`.
@@ -784,6 +869,7 @@ until the backend ships it.
 | Frontend Phase 14 - Buyer orders | **PASS** |
 | Frontend Phase 14.6 - Order contract synchronization | **PASS** |
 | Frontend Phase 15 - Account address & contact management | **PASS** |
+| Frontend Phase 17 - Storefront UX & visual design | **PASS** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

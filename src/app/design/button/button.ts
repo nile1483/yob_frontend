@@ -2,11 +2,19 @@ import { Component, booleanAttribute, computed, input } from '@angular/core';
 
 import { Spinner } from '../spinner/spinner';
 
+/** How much weight a button carries on the page. */
+export type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'quiet';
+
+/** Physical size. `sm` is for actions that sit inside a row rather than under a form. */
+export type ButtonSize = 'md' | 'sm';
+
 /**
  * The application's button styling and busy state, applied to a real `<button>`.
  *
  * ```html
  * <button yob-button type="submit" [loading]="signingIn()">Sign in</button>
+ * <button yob-button variant="secondary" type="button">Add new address</button>
+ * <button yob-button variant="destructive" size="sm" type="button">Remove</button>
  * ```
  *
  * ## Why an attribute-selector component rather than a directive
@@ -29,11 +37,26 @@ import { Spinner } from '../spinner/spinner';
  * shadowing it with a friendlier one would mean this button behaved differently from
  * every other button on the page.
  *
- * ## One treatment
+ * ## Variants exist because real screens needed them (Phase 17)
  *
- * No `variant`, `size`, `colour` or `width` inputs. Restyling means editing the
- * classes below, which is the point of a master project meant to be copied. A second
- * treatment gets added when a real screen needs one.
+ * This component carried one treatment until Phase 17, on the rule that a second gets
+ * added when a screen actually needs it. Three did, and the single treatment was
+ * actively misleading by then:
+ *
+ * - the cart rendered **Remove** at the same weight as **Proceed to checkout**
+ * - checkout rendered three **Add new address/contact** buttons heavier than
+ *   **Proceed to Payment**, which is the entire point of the page
+ * - account had given up and hand-written `secondary` and `destructive` class strings
+ *   as page fields, which is the duplication a design layer exists to prevent
+ *
+ * So there are exactly four, chosen by what an action *means* rather than how it should
+ * look: one primary action per view, `secondary` for supporting actions, `destructive`
+ * for actions that remove something, and `quiet` for actions that must be available
+ * without competing for attention. Sizes are two, and no more: `md` under a form,
+ * `sm` inside a list row.
+ *
+ * There is no `colour` or `width` input. Restyling means editing the classes below,
+ * which is the point of a master project meant to be copied.
  */
 @Component({
   selector: 'button[yob-button]',
@@ -43,10 +66,7 @@ import { Spinner } from '../spinner/spinner';
     // `[disabled]` binds the input rather than racing this host binding.
     '[disabled]': 'isDisabled()',
     '[attr.aria-busy]': 'loading() ? "true" : null',
-    class: `inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2
-            text-sm font-medium text-white transition-colors
-            hover:bg-slate-700
-            disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-slate-900`,
+    '[class]': 'classes()',
   },
   template: `
     @if (loading()) {
@@ -72,6 +92,32 @@ export class Button {
    */
   readonly loading = input(false, { transform: booleanAttribute });
 
+  readonly variant = input<ButtonVariant>('primary');
+  readonly size = input<ButtonSize>('md');
+
   /** A loading button is also a disabled one - it must not fire twice. */
   protected readonly isDisabled = computed(() => this.disabled() || this.loading());
+
+  protected readonly classes = computed(() => `${BASE} ${SIZES[this.size()]} ${VARIANTS[this.variant()]}`);
 }
+
+// `min-h` rather than padding alone: a 44px target is the floor for a thumb, and
+// padding stops guaranteeing it the moment a caller shortens the label to one word.
+const BASE = `inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium
+              transition-colors disabled:cursor-not-allowed disabled:opacity-50`;
+
+const SIZES: Record<ButtonSize, string> = {
+  md: 'min-h-11 px-4 py-2',
+  sm: 'min-h-9 px-3 py-1.5',
+};
+
+const VARIANTS: Record<ButtonVariant, string> = {
+  primary: 'bg-slate-900 text-white hover:bg-slate-700 disabled:hover:bg-slate-900',
+  secondary: `border border-slate-300 bg-white text-slate-900
+              hover:border-slate-400 hover:bg-slate-50 disabled:hover:bg-white`,
+  // Red on the border and text, not a filled red block: a delete is a normal thing to
+  // want, and a wall of red buttons in a list reads as a page full of errors.
+  destructive: `border border-red-300 bg-white text-red-700
+                hover:border-red-400 hover:bg-red-50 disabled:hover:bg-white`,
+  quiet: 'text-slate-700 underline underline-offset-4 hover:text-slate-900',
+};

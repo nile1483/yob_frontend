@@ -50,7 +50,7 @@ export interface ChoiceOption {
   imports: [Spinner],
   template: `
     <fieldset [attr.aria-busy]="busy() ? 'true' : null" [attr.data-testid]="testId()">
-      <legend class="text-lg font-semibold">
+      <legend class="text-base font-semibold text-slate-900">
         {{ legend() }}
         @if (busy()) {
           <span class="ml-2 align-middle" data-testid="choice-busy">
@@ -62,12 +62,16 @@ export interface ChoiceOption {
       @if (options().length === 0) {
         <p class="mt-3 text-sm text-slate-600" data-testid="choice-empty">{{ emptyText() }}</p>
       } @else {
-        <ul class="mt-3 flex flex-col gap-2">
+        <!-- One bordered group with divided rows, rather than a card per option. With
+             five saved addresses, a card each turns a simple choice into a wall of
+             boxes; the selected row is the only one that needs emphasis, and it gets it
+             from a tint and an inset ring instead of yet another border. -->
+        <ul class="mt-3 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
           @for (option of options(); track option.value) {
             <li>
               <label
-                class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200
-                       p-3 hover:bg-slate-50 has-checked:border-slate-900 has-checked:bg-slate-50"
+                class="flex cursor-pointer items-start gap-3 border-l-4 border-transparent p-3
+                       hover:bg-slate-50 has-checked:border-slate-900 has-checked:bg-slate-50"
               >
                 <input
                   type="radio"

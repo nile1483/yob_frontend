@@ -6,6 +6,7 @@ import { Alert } from '../../../design/alert/alert';
 import { Button } from '../../../design/button/button';
 import { EmptyState } from '../../../design/empty-state/empty-state';
 import { Spinner } from '../../../design/spinner/spinner';
+import { PageHeader } from '../../../design/page-header/page-header';
 import { normalizeYobFailure } from '../../../foundation/network/yob-api-error';
 import { CartStore } from '../../cart/state/cart.store';
 import {
@@ -78,7 +79,7 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
  */
 @Component({
   selector: 'app-checkout-page',
-  imports: [
+  imports: [PageHeader, 
     AddressForm,
     Alert,
     Button,
@@ -90,7 +91,7 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
     Spinner,
   ],
   template: `
-    <h1 class="text-2xl font-semibold tracking-tight" i18n="@@checkout.heading">Checkout</h1>
+    <app-page-header heading="Checkout" i18n-heading="@@checkout.heading" />
 
     <!-- Outside every state branch: a selection failure must survive the cart being
          reloaded underneath it, exactly as the cart page's reconciliation notice does. -->
@@ -177,6 +178,8 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
               } @else {
                 <button
                   yob-button
+                  variant="secondary"
+                  size="sm"
                   type="button"
                   class="mt-3"
                   (click)="openContactForm()"
@@ -226,6 +229,8 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
               } @else {
                 <button
                   yob-button
+                  variant="secondary"
+                  size="sm"
                   type="button"
                   class="mt-3"
                   (click)="openAddressForm('billing')"
@@ -292,6 +297,8 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
                 } @else {
                   <button
                     yob-button
+                    variant="secondary"
+                    size="sm"
                     type="button"
                     class="mt-3"
                     (click)="openAddressForm('shipping')"
@@ -322,10 +329,13 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
             <!-- Disabled rather than hidden: a button that vanishes leaves the buyer
                  wondering where checkout continues. The readiness line above says what
                  is missing. Backend validation remains authoritative either way. -->
+            <!-- The only primary action on the page. Full width on a phone so it is a
+                 thumb target, and never competing with the supporting "Add new"
+                 buttons above, which are secondary for exactly that reason. -->
             <button
               yob-button
               type="button"
-              class="w-full sm:w-auto"
+              class="w-full sm:w-auto sm:min-w-56"
               [disabled]="!isReady()"
               [loading]="proceeding()"
               (click)="onProceedToPayment()"

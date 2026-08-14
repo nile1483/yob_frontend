@@ -4,6 +4,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 
 import { Alert } from '../../../design/alert/alert';
+import { Badge } from '../../../design/badge/badge';
 import { Button } from '../../../design/button/button';
 import { Field } from '../../../design/field/field';
 import { EmptyState } from '../../../design/empty-state/empty-state';
@@ -45,7 +46,7 @@ import { CatalogApi } from '../data/catalog.api';
  */
 @Component({
   selector: 'app-item-page',
-  imports: [Alert, Button, CurrencyPipe, EmptyState, Field, RouterLink, Spinner],
+  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, RouterLink, Spinner],
   template: `
     <nav aria-label="Breadcrumb" i18n-aria-label="@@item.breadcrumb.label">
       <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
@@ -80,30 +81,33 @@ import { CatalogApi } from '../data/catalog.api';
         </app-alert>
       </div>
     } @else if (detail(); as detail) {
-      <article class="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2">
-        <div>
-          @if (detail.image; as image) {
-            <img
-              [src]="image"
-              [alt]="detail.item_name"
-              class="w-full rounded-lg border border-slate-200 object-cover"
-              data-testid="item-image"
-            />
-          } @else {
-            <div
-              class="aspect-square w-full rounded-lg bg-slate-100"
-              aria-hidden="true"
-              data-testid="item-image-placeholder"
-            ></div>
-          }
+      <article class="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2 md:items-start lg:gap-12">
+        <!-- Sticky on desktop so the product stays in view while the buy box and the
+             specifications below it are read. -->
+        <div class="md:sticky md:top-24">
+          <div class="aspect-square w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+            @if (detail.image; as image) {
+              <img
+                [src]="image"
+                [alt]="detail.item_name"
+                class="h-full w-full object-cover"
+                data-testid="item-image"
+              />
+            } @else {
+              <div class="h-full w-full" aria-hidden="true" data-testid="item-image-placeholder"></div>
+            }
+          </div>
         </div>
 
-        <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-5">
           <header>
-            <h1 class="text-2xl font-semibold tracking-tight break-words" data-testid="item-title">
+            <h1
+              class="text-2xl font-semibold tracking-tight break-words sm:text-3xl"
+              data-testid="item-title"
+            >
               {{ detail.item_name }}
             </h1>
-            <p class="mt-1 text-sm text-slate-500 break-words">
+            <p class="mt-1 text-sm break-words text-slate-500">
               <span class="sr-only" i18n="@@item.code">Item code</span>
               {{ detail.name }}
             </p>
@@ -121,27 +125,25 @@ import { CatalogApi } from '../data/catalog.api';
             }
 
             @if (hasDiscount()) {
-              <s class="text-base text-slate-500" data-testid="item-base-price">
+              <s class="text-base text-slate-400" data-testid="item-base-price">
                 {{ detail.base_price | currency: currency }}
               </s>
-              <span
-                class="rounded bg-green-100 px-2 py-0.5 text-sm font-medium text-green-900"
-                data-testid="item-discount"
-                i18n="@@item.discount"
-              >
+              <app-badge tone="success" data-testid="item-discount" i18n="@@item.discount">
                 {{ detail.discount_percentage }}% off
-              </span>
+              </app-badge>
             }
           </div>
 
-          <p class="text-sm text-slate-600" data-testid="item-uom">
-            <ng-container i18n="@@item.pricedPer">Priced per</ng-container>
-            {{ detail.uom }}
-          </p>
+          <div class="-mt-3 flex flex-col gap-1">
+            <p class="text-sm text-slate-600" data-testid="item-uom">
+              <ng-container i18n="@@item.pricedPer">Priced per</ng-container>
+              {{ detail.uom }}
+            </p>
 
-          @if (detail.pricing_rule_label; as label) {
-            <p class="text-sm text-slate-700" data-testid="item-pricing-rule">{{ label }}</p>
-          }
+            @if (detail.pricing_rule_label; as label) {
+              <p class="text-sm text-slate-700" data-testid="item-pricing-rule">{{ label }}</p>
+            }
+          </div>
 
           <!-- Only worth showing when tax actually applies; with no tax the breakdown
                would just repeat the price on three lines. -->
@@ -171,7 +173,14 @@ import { CatalogApi } from '../data/catalog.api';
             </dl>
           }
 
-          <form class="flex flex-col gap-3" (submit)="addToCart($event, detail.name)">
+          <!-- The one thing this page exists for, so it is grouped and separated from
+               the description rather than being another paragraph in the stack. Still a
+               plain bordered block: an oversized hero treatment on a functional buy box
+               would be decoration competing with the price above it. -->
+          <form
+            class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-4"
+            (submit)="addToCart($event, detail.name)"
+          >
             <app-field
               label="Quantity to add"
               i18n-label="@@item.quantity.label"
@@ -195,6 +204,7 @@ import { CatalogApi } from '../data/catalog.api';
               <button
                 yob-button
                 type="submit"
+                class="w-full sm:w-auto sm:min-w-48"
                 [loading]="cart.isAdding()"
                 [disabled]="!isQuantityValid()"
                 data-testid="add-to-cart"
