@@ -1,23 +1,26 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, computed, input, linkedSignal, output } from '@angular/core';
 import { FormField, form, required, submit } from '@angular/forms/signals';
 
 import { Alert } from '../../../design/alert/alert';
 import { Button } from '../../../design/button/button';
 import { Field } from '../../../design/field/field';
-import type { AddAddressRequest } from '../contracts/checkout.types';
+import type { AddressFormValues } from '../contracts/checkout.types';
 
 const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-base sm:text-sm';
 
 /**
- * Add a new address, from either the billing or the shipping section.
+ * The address form, used for creating and for editing.
  *
- * One form for both. The only difference between the two cases is which setter runs
- * after the record is created, and that is the page's business - so a
- * `BillingAddressForm` and a `ShippingAddressForm` would be the same file twice.
+ * One component serves Checkout's billing and shipping sections and Account's edit
+ * flow. It collects and validates; it never calls an API. It emits the values it
+ * holds, and the page decides what they mean:
  *
- * The form collects and validates; it does not create. It emits the request and the
- * page performs create → refresh the list → select into the right slot, which keeps
- * every network step for this flow in one readable place.
+ * - Checkout sends them as a create, then selects the new record into a cart slot.
+ * - Account compares them against {@link initial} and sends only what changed, because
+ *   the update endpoint treats a present key as an instruction and `""` as a clear.
+ *
+ * Emitting *values* rather than a request payload is what avoids a `mode` flag and the
+ * branching that comes with it.
  *
  * ## Which fields are required, and why only those
  *
@@ -46,7 +49,7 @@ const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-
       novalidate
       data-testid="address-form"
     >
-      <h3 class="text-base font-semibold" i18n="@@checkout.address.form.heading">New address</h3>
+      <h3 class="text-base font-semibold">{{ heading() }}</h3>
 
       @if (error()) {
         <app-alert tone="error" data-testid="address-form-error">{{ error() }}</app-alert>
@@ -179,20 +182,51 @@ export class AddressForm {
    */
   readonly fieldErrors = input<Readonly<Record<string, string>>>({});
 
-  readonly submitted = output<AddAddressRequest>();
+  /**
+   * The record's current values, when editing.
+   *
+   * Absent for a create, where every field starts empty. The caller keeps this
+   * snapshot too: it is what `changedFields` compares against to build a partial
+   * update, so the form itself needs no notion of create-versus-edit beyond seeding.
+   */
+  readonly initial = input<AddressFormValues | null>(null);
+  /** Overrides the form heading; the default suits creating. */
+  readonly heading = input($localize`:@@checkout.address.form.heading:New address`);
+  /** Overrides the submit label; the default suits creating. */
+  readonly submitLabel = input($localize`:@@checkout.address.form.submit:Save address`);
+
+  /**
+   * The form's values as typed.
+   *
+   * Emitting values rather than a request payload is what lets one component serve
+   * both flows: Checkout sends them as a create, Account diffs them against
+   * {@link initial} and sends only what changed.
+   */
+  readonly submitted = output<AddressFormValues>();
   readonly cancelled = output<void>();
 
   protected readonly control = CONTROL_CLASS;
 
-  private readonly draft = signal<AddAddressRequest>({
-    address_title: '',
-    address_line1: '',
-    address_line2: '',
-    city: '',
-    state: '',
-    pincode: '',
-    country: '',
-  });
+  /**
+   * The values being edited.
+   *
+   * A `linkedSignal` rather than a plain one because `initial` is an input: a field
+   * initializer runs before Angular has bound it, so seeding from `this.initial()`
+   * there would always see `null` and the editor would open empty over a populated
+   * record. This re-seeds when the input arrives and stays writable for typing.
+   */
+  private readonly draft = linkedSignal<AddressFormValues>(
+    () =>
+      this.initial() ?? {
+        address_title: '',
+        address_line1: '',
+        address_line2: '',
+        city: '',
+        state: '',
+        pincode: '',
+        country: '',
+      },
+  );
 
   protected readonly addressForm = form(this.draft, (path) => {
     required(path.address_line1, {

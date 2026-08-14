@@ -80,7 +80,14 @@ export type MockScenario =
   /** process_payment fails with `retryable: false` and no order - nothing committed. */
   | 'payment-provider-unavailable'
   /** verify_payment reports the obligation already settled by a different payment. */
-  | 'payment-already-processed';
+  | 'payment-already-processed'
+  /**
+   * Deleting an Address or Contact answers 409 `*_in_use`.
+   *
+   * A knob because the refusal comes from links a mock cart and mock order do not
+   * have, and simulating those links would be more backend than this needs.
+   */
+  | 'account-record-in-use';
 
 /**
  * Runtime knobs for the mock API.
@@ -135,7 +142,8 @@ export class MockApiScenario {
       scenario === 'payment-paylater-only' ||
       scenario === 'payment-committed' ||
       scenario === 'payment-provider-unavailable' ||
-      scenario === 'payment-already-processed'
+      scenario === 'payment-already-processed' ||
+      scenario === 'account-record-in-use'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

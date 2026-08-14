@@ -189,6 +189,207 @@ console.log('\n== 6. Non-JSON edge failure (421) ==');
   check('edge 421 with a non-JSON body -> client_unreadable_response', res.status === 421 && json === null && c.code === 'client_unreadable_response', `status=${res.status}`);
 }
 
+console.log('\n== 6b. Account address book (Phase 15) ==');
+//
+// READ-ONLY BY DEFAULT. The lists below are the real customer's real records, so this
+// section only looks at them: it proves the shapes the Account page relies on, and the
+// two field-presence rules that a wrong request would use to destroy data.
+//
+// The write cycle underneath is gated behind YOB_SMOKE_ACCOUNT_WRITE=1 because it does
+// mutate the bench. Even then it only ever touches a record it created itself, named so
+// it is obviously disposable, and it deletes it again - no pre-existing address or
+// contact is edited or removed to prove a frontend behaviour.
+let smokeAddress = null;
+let existingAddresses = [];
+{
+  const r = await call('yob_storefront.api.address.get_addresses', { headers: auth });
+  const env = unwrap(r.json);
+  check('get_addresses 200', r.status === 200, `status=${r.status} ${r.text.slice(0, 160)}`);
+  check('data is an array', Array.isArray(env?.data));
+  existingAddresses = Array.isArray(env?.data) ? env.data : [];
+
+  const first = env?.data?.[0];
+  if (first) {
+    check('address rows carry a name to address them by', typeof first.name === 'string');
+    check('address_line1 and city are present as the page renders them', 'address_line1' in first && 'city' in first);
+    // The page deliberately has no phone/email input on the address form because these
+    // are absent here. If they ever appear, the form is out of date.
+    check('no phone/email on an address row (documented API gap the form matches)', !('phone' in first) && !('email_id' in first), JSON.stringify(Object.keys(first)));
+  }
+}
+{
+  const r = await call('yob_storefront.api.address.get_contacts', { headers: auth });
+  const env = unwrap(r.json);
+  check('get_contacts 200', r.status === 200, `status=${r.status}`);
+  check('data is an array', Array.isArray(env?.data));
+
+  const first = env?.data?.[0];
+  if (first) {
+    check('contact rows carry name/first_name/email/phone as the form edits them', typeof first.name === 'string' && 'first_name' in first && 'email' in first && 'phone' in first, JSON.stringify(Object.keys(first)));
+  }
+}
+{
+  // Someone else's record, or one that never existed, must answer the same way - the
+  // page shows one wording for both because it genuinely cannot tell them apart.
+  const r = await call('yob_storefront.api.address.update_address', {
+    verb: 'POST',
+    body: { name: 'ADDR-DOES-NOT-EXIST-0000', city: 'Nowhere' },
+    headers: { ...auth, 'X-Frappe-CSRF-Token': csrf },
+  });
+  const c = classify(r.status, r.json, r.text);
+  check('update_address on an unknown name -> address_not_found', c.code === 'address_not_found', `${r.status} ${JSON.stringify(c)}`);
+  check('the refusal names no Desk URL or doctype internals', !/\/app\//.test(r.text) && !/Traceback/.test(r.text));
+}
+
+if (process.env.YOB_SMOKE_ACCOUNT_WRITE === '1') {
+  const mutate = (method, body) =>
+    call(`yob_storefront.api.address.${method}`, {
+      verb: 'POST',
+      body,
+      headers: { ...auth, 'X-Frappe-CSRF-Token': csrf },
+    });
+
+  // GEOGRAPHY COMES FROM THE BENCH, NOT FROM THIS FILE.
+  //
+  // Address geography is validated as a unit, and every part of it is site-specific:
+  //
+  //   state    checked against a country's list. `Testing` was refused with
+  //            "Please select a valid State from available options".
+  //   pincode  checked for format - 6 digits, not starting with 0, so `000000` failed -
+  //            and then checked for *association with the state*: "Postal Code 999999
+  //            for address is not associated with Gujarat."
+  //
+  // So the postal code is a validation-bearing field here too, not decoration, and no
+  // synthetic value can satisfy a rule that ties it to a state this script did not
+  // choose. An existing Address is already known-good geography for this site, so the
+  // smoke record borrows exactly the validated triple from one and nothing else.
+  //
+  // Everything that is *not* validated stays obviously synthetic - title, street, city -
+  // so the record can never be mistaken for real data. The source record is read only:
+  // it is never updated, never deleted, and is checked afterwards to prove it.
+  const isGeoUsable = (a) =>
+    ['country', 'state', 'pincode'].every(
+      (k) => typeof a?.[k] === 'string' && a[k].trim() !== '',
+    );
+  const geoSource = existingAddresses.find(isGeoUsable);
+
+  if (!geoSource) {
+    // No guessing. A wrong triple would either fail the same way or, worse, quietly
+    // create a record with geography nobody intended.
+    console.log('  SKIP  write cycle: no existing Address carries all of country, state');
+    console.log('        and pincode, so no valid fixture geography could be derived for');
+    console.log('        this site. The postal code must be one the backend already');
+    console.log('        associates with the state, and this script will not invent one.');
+    console.log('        Add one valid Address to the smoke customer, or run read-only.');
+  } else {
+    console.log(`  (write cycle enabled: one disposable record, geography borrowed from ${geoSource.name})`);
+    const geo = {
+      country: geoSource.country,
+      state: geoSource.state,
+      pincode: geoSource.pincode,
+    };
+
+    // ---------------------------------------------------------------- 422 sibling
+    // A deliberate refusal, to read what rides alongside the clean YOB envelope.
+    // Nothing is created: the state is invalid by construction.
+    {
+      const r = await mutate('add_address', {
+        address_title: 'ZZ SMOKE TEST - SHOULD NOT BE CREATED',
+        address_line1: '1 Rejected Road',
+        city: 'Refusedville',
+        ...geo,
+        state: 'ZZ NOT A REAL STATE',
+      });
+      const c = classify(r.status, r.json, r.text);
+      check('add_address with an invalid state -> 422 validation_failed', r.status === 422 && c.code === 'validation_failed', `${r.status} ${JSON.stringify(c)} ${r.text.slice(0, 200)}`);
+
+      // Frappe attaches `_server_messages` beside the YOB envelope. The browser client
+      // ignores every sibling key, but "ignored by the client" is not the same as "safe
+      // to send", so this asserts what the sibling may contain.
+      const sibling = r.json?._server_messages;
+      if (sibling !== undefined) {
+        check('_server_messages carries no HTML markup', !/<[a-z/][^>]*>/i.test(sibling), sibling.slice(0, 300));
+        check('_server_messages carries no URL or Desk path', !/https?:\/\/|\/app\//.test(sibling), sibling.slice(0, 300));
+        check('_server_messages carries no traceback or internal frames', !/Traceback|File "|frappe\/|\.py['"]?[,:]/.test(sibling), sibling.slice(0, 300));
+        check('_server_messages repeats the same sanitized validation wording', /valid State/i.test(sibling), sibling.slice(0, 300));
+      } else {
+        console.log('  note: no _server_messages sibling on this response');
+      }
+
+      // If the backend ever stops validating state, this would have created a record.
+      if (r.status === 200 || r.status === 201) {
+        const stray = unwrap(r.json)?.data?.name;
+        if (stray) {
+          await mutate('delete_address', { name: stray });
+          check('the probe record was not left behind', true);
+        }
+      }
+    }
+
+    // ------------------------------------------------------------------- create
+    const created = await mutate('add_address', {
+      address_title: 'ZZ SMOKE TEST - DELETE ME',
+      address_line1: '1 Smoke Lane',
+      address_line2: 'Second line',
+      city: 'Smoketown',
+      ...geo,
+    });
+    const createdEnv = unwrap(created.json);
+    smokeAddress = createdEnv?.data?.name ?? null;
+    // 201, not 200 - a creation. The client treats the whole 2xx range as success, as
+    // Phase 12 established for `proceed_to_payment`, so both are correct here.
+    check('add_address 2xx and returns the new name', (created.status === 200 || created.status === 201) && typeof smokeAddress === 'string', `status=${created.status} ${created.text.slice(0, 200)}`);
+
+    const listAddresses = async () =>
+      unwrap((await call('yob_storefront.api.address.get_addresses', { headers: auth })).json)?.data ?? [];
+    const findSmoke = async () => (await listAddresses()).find((a) => a.name === smokeAddress);
+
+    if (smokeAddress) {
+      const afterCreate = await findSmoke();
+      check('the new address is in the list immediately', afterCreate !== undefined);
+      check('it was stored as sent', afterCreate?.address_line1 === '1 Smoke Lane' && afterCreate?.city === 'Smoketown', JSON.stringify(afterCreate));
+
+      // --------------------------------------------------------------- partial
+      // THE RULE THE WHOLE CHANGED-FIELDS DIFF EXISTS FOR: an omitted key is left
+      // alone. If this ever starts failing, a partial update becomes data loss.
+      const updated = await mutate('update_address', { name: smokeAddress, city: 'Smokeville' });
+      check('update_address 200 on a partial body', updated.status === 200, `status=${updated.status} ${updated.text.slice(0, 200)}`);
+
+      const after = await findSmoke();
+      check('the changed field changed', after?.city === 'Smokeville', JSON.stringify(after));
+      check('OMITTED FIELDS SURVIVED - a partial update is not a wipe', after?.address_line1 === '1 Smoke Lane' && after?.address_line2 === 'Second line', JSON.stringify(after));
+
+      // ----------------------------------------------------------------- clear
+      const cleared = await mutate('update_address', { name: smokeAddress, address_line2: '' });
+      check('update_address 200 clearing a field', cleared.status === 200, `status=${cleared.status}`);
+      const afterClear = await findSmoke();
+      check('an empty string clears rather than being ignored', !afterClear?.address_line2, JSON.stringify(afterClear?.address_line2));
+      check('and clearing one field left the others alone', afterClear?.address_line1 === '1 Smoke Lane', JSON.stringify(afterClear));
+
+      // ---------------------------------------------------------------- delete
+      const removed = await mutate('delete_address', { name: smokeAddress });
+      check('delete_address 200 - the disposable record is cleaned up', removed.status === 200, `status=${removed.status} ${removed.text.slice(0, 200)}`);
+      check('it is really gone from the list', (await findSmoke()) === undefined);
+
+      // A repeated delete answers not_found - which is exactly why the page never
+      // retries one and re-reads the list instead. This is a deliberate second call
+      // to observe that answer, not a retry of a failed delete.
+      const again = await mutate('delete_address', { name: smokeAddress });
+      const c = classify(again.status, again.json, again.text);
+      check('deleting it a second time -> address_not_found (so a retry would mislead)', c.code === 'address_not_found', `${again.status} ${JSON.stringify(c)}`);
+      smokeAddress = null;
+    }
+
+    // The borrowed record was only ever read from. Prove it came through untouched.
+    const sourceNow = (await listAddresses()).find((a) => a.name === geoSource.name);
+    check('the address the geography was borrowed from is unchanged', sourceNow?.country === geoSource.country && sourceNow?.state === geoSource.state && sourceNow?.address_line1 === geoSource.address_line1 && sourceNow?.city === geoSource.city, JSON.stringify(sourceNow));
+
+    check('no disposable smoke record is left behind', (await listAddresses()).every((a) => !String(a.address_title ?? '').startsWith('ZZ SMOKE TEST')), JSON.stringify((await listAddresses()).map((a) => a.address_title)));
+  }
+} else {
+  console.log('  (write cycle skipped - set YOB_SMOKE_ACCOUNT_WRITE=1 to run it)');
+}
+
 console.log('\n== 7. Session lifecycle (Phase 3) ==');
 {
   // Restore with a live session: the exact call SessionStore.restore() makes.

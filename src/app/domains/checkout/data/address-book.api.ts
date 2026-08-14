@@ -7,12 +7,18 @@ import type {
   AddContactRequest,
   AddressDto,
   ContactDto,
+  UpdateAddressRequest,
+  UpdateContactRequest,
 } from '../contracts/checkout.types';
 
 const GET_ADDRESSES = 'yob_storefront.api.address.get_addresses';
 const GET_CONTACTS = 'yob_storefront.api.address.get_contacts';
 const ADD_ADDRESS = 'yob_storefront.api.address.add_address';
 const ADD_CONTACT = 'yob_storefront.api.address.add_contact';
+const UPDATE_ADDRESS = 'yob_storefront.api.address.update_address';
+const UPDATE_CONTACT = 'yob_storefront.api.address.update_contact';
+const DELETE_ADDRESS = 'yob_storefront.api.address.delete_address';
+const DELETE_CONTACT = 'yob_storefront.api.address.delete_contact';
 
 /**
  * The customer's Address and Contact master records.
@@ -29,9 +35,11 @@ const ADD_CONTACT = 'yob_storefront.api.address.add_contact';
  * Depends on `YobApiClient` and nothing else: no `HttpClient`, no envelope handling,
  * no mock awareness, no navigation.
  *
- * Lives in the checkout domain because checkout is its only consumer today. A later
- * Account phase that manages the address book should lift it into that domain rather
- * than import it across domains.
+ * Shared master-data access: Checkout selects from these records, Account manages
+ * them. It stayed in the checkout folder when Account arrived because moving it is a
+ * mechanical import change with no behavioural benefit, and Phase 11's flow is the
+ * more delicate of the two consumers. Worth relocating the day a third consumer
+ * appears.
  */
 @Service()
 export class AddressBookApi {
@@ -82,5 +90,59 @@ export class AddressBookApi {
    */
   addContact(request: AddContactRequest): Observable<ContactDto> {
     return this.api.post<ContactDto>(ADD_CONTACT, { ...request }).pipe(map((r) => r.data));
+  }
+
+  /**
+   * Update an address, sending **only** what changed.
+   *
+   * ## The request must not be padded
+   *
+   * The backend applies a field when the key is *present*, whatever it holds. So
+   * `""` clears a field and an omitted key preserves it. Serialising every input -
+   * including the ones the buyer never touched - would clear all of them, which is
+   * precisely the data loss backend Phase 15B removed. `changedFields` builds the
+   * payload from a real before/after comparison; nothing here uses truthiness.
+   *
+   * Answers with the **saved** address, not an acknowledgement - but the canonical
+   * Account collection is still the list read, so callers refresh rather than
+   * splicing this into local state.
+   *
+   * Failures: 422 `validation_failed` with `field` naming the offending input
+   * (including an explicit clear of a required field), 404 `address_not_found` for an
+   * unknown or another customer's record.
+   */
+  updateAddress(request: UpdateAddressRequest): Observable<AddressDto> {
+    return this.api.post<AddressDto>(UPDATE_ADDRESS, { ...request }).pipe(map((r) => r.data));
+  }
+
+  /** Update a contact. Same presence semantics; answers with the saved fields. */
+  updateContact(request: UpdateContactRequest): Observable<ContactDto> {
+    return this.api.post<ContactDto>(UPDATE_CONTACT, { ...request }).pipe(map((r) => r.data));
+  }
+
+  /**
+   * Delete an address.
+   *
+   * ## Never retry this automatically
+   *
+   * A delete that succeeded but whose response was lost answers `404
+   * address_not_found` on a second attempt - indistinguishable from "that was never
+   * yours". An automatic retry would therefore turn a completed deletion into an
+   * apparent failure. There is no retry operator in this path, and a test pins that.
+   *
+   * A referenced address answers **409 `address_in_use`**: a Cart, a historical Sales
+   * Order or the Customer default still points at it. Nothing is detached
+   * automatically, so this is a definite refusal rather than something to retry, and
+   * the referring document is deliberately not named.
+   *
+   * Answers `{}` on success - re-read the list.
+   */
+  deleteAddress(name: string): Observable<void> {
+    return this.api.post<void>(DELETE_ADDRESS, { name }).pipe(map(() => undefined));
+  }
+
+  /** Delete a contact. Mirrors `deleteAddress`, including 409 `contact_in_use`. */
+  deleteContact(name: string): Observable<void> {
+    return this.api.post<void>(DELETE_CONTACT, { name }).pipe(map(() => undefined));
   }
 }

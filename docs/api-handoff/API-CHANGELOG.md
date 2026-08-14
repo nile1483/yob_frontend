@@ -309,6 +309,99 @@ same-day orders.
 client-side sort of the order list. There is still no paging, filter or search
 parameter; `get_orders` takes none.
 
+## 21. `update_address` is a partial update — stop padding the payload ⚠️
+
+**OLD** — `update_address` assigned **every** field unconditionally from the
+request. A field you did not send was written as blank, so an edit form that
+posted only the inputs it rendered destroyed `address_line2`, `phone`,
+`email_id` and the `is_primary_address` / `is_shipping_address` flags. The call
+returned **success**, so nothing indicated data had been lost.
+
+The only defence was to resend a complete Address object on every edit.
+
+**CURRENT** — a genuine partial update, keyed on request **presence**:
+
+| You send | Result |
+|---|---|
+| field omitted | unchanged |
+| field with a value | validated and applied |
+| explicit `""` (optional field) | cleared |
+| invalid value | `validation_failed`, record untouched |
+
+**FRONTEND ACTION — and this reverses previous advice:**
+
+1. **Send only the fields your form edits.** Do not resend untouched optional
+   fields to preserve them; that workaround is obsolete.
+2. **Do not pad the payload with `""`.** An explicit empty value is now a
+   deliberate *clear*. Padding would destroy exactly the data the old workaround
+   existed to protect.
+3. A partial payload no longer fails: `{name, address_line1}` used to answer
+   `internal_server_error` (blanking the India-Compliance-mandatory
+   `gst_category`), and now succeeds.
+
+`update_contact` already behaved this way and still does — the two are now
+consistent, and both are idempotent.
+
+## 22. Deleting an address or contact can be refused — 409, not 500 ⚠️
+
+**OLD** — a delete blocked by link integrity produced:
+
+- `delete_address` → generic **500 `internal_server_error`** — indistinguishable
+  from a backend crash;
+- `delete_contact` → **no envelope at all**: a raw Frappe `LinkExistsError` at
+  **HTTP 417**, with `_server_messages` carrying HTML, the referring document's
+  name, and an absolute Desk URL (`http://<host>/desk/cart/CART-…`).
+
+**CURRENT** — one business error on both:
+
+```json
+{ "message": { "errors": [
+  { "code": "address_in_use", "field": "name",
+    "detail": "This address is currently in use and can't be deleted." } ] } }
+```
+
+**409**, `address_in_use` / `contact_in_use`. Refused when a Cart has the record
+selected, a historical Sales Order references it, or it is the Customer default.
+No Desk HTML, no `_server_messages`, no referring docname.
+
+**FRONTEND ACTION** — handle 409 as its own outcome:
+
+1. It is **not** 404. The record still exists and stays in the list.
+2. It is **not** retryable — nothing is detached automatically. The user must
+   change the Cart selection first.
+3. Render your own copy from the code; the body has nothing to parse.
+
+## 23. Do not auto-retry a delete
+
+**OLD** — not specified, so a generic mutation-retry layer would cover deletes.
+
+**CURRENT** — unchanged behaviour, now stated: these endpoints have no
+request-deduplication.
+
+```
+delete succeeds -> response lost -> retry -> 404 not_found
+```
+
+A retry turns a **success** into what looks like an error.
+
+**FRONTEND ACTION** — on an uncertain delete, **re-read the list** and check
+whether the record is gone. Updates are safe to repeat; deletes are not. Exclude
+these endpoints from any blanket retry policy.
+
+## 24. Account list caches now invalidate on write
+
+**OLD** — `get_addresses` / `get_contacts` are cached for 30 minutes, and the
+invalidation was broken: the cache-clear helper received the Customer *document*
+where the key is built from the customer *name*, so the key never matched. A
+list read after a write returned **stale data until the TTL expired**.
+
+**CURRENT** — every mutation invalidates the list. A read immediately after a
+write returns the new state.
+
+**FRONTEND ACTION** — re-read the list after a successful mutation and trust the
+result. Remove any cache-busting parameter, forced delay or optimistic-state
+workaround added to compensate.
+
 ---
 
 ## Explicitly unchanged

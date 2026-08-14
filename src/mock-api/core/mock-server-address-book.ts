@@ -75,6 +75,67 @@ export class MockServerAddressBook {
    * `address_type` is not accepted from the caller: the backend defaults it to
    * `Billing`, and so does this.
    */
+  /**
+   * Apply a **partial** update: only the keys present in the patch are touched.
+   *
+   * Mirrors the backend's `supplied(data, key) -> key in data`. A key holding `""` is
+   * a deliberate clear; an absent key preserves the stored value. Reproducing this
+   * exactly is the point - a mock that merged truthy values only would let a client
+   * that pads its payload pass every test and then destroy real data.
+   */
+  updateAddress(name: string, patch: Readonly<Record<string, string>>): AddressDto | null {
+    const existing = this.addressList().find((a) => a.name === name);
+    if (existing === undefined) {
+      return null;
+    }
+
+    const merged: Record<string, unknown> = { ...existing };
+    for (const [key, value] of Object.entries(patch)) {
+      if (key === 'name') {
+        continue;
+      }
+      // `email` is the request key; the record stores it under `email` too here.
+      merged[key] = value === '' ? null : value;
+    }
+
+    const updated = merged as unknown as AddressDto;
+    this.addressList.set(this.addressList().map((a) => (a.name === name ? updated : a)));
+    return updated;
+  }
+
+  /** The contact equivalent, same presence semantics. */
+  updateContact(name: string, patch: Readonly<Record<string, string>>): ContactDto | null {
+    const existing = this.contactList().find((c) => c.name === name);
+    if (existing === undefined) {
+      return null;
+    }
+
+    const merged: Record<string, unknown> = { ...existing };
+    for (const [key, value] of Object.entries(patch)) {
+      if (key === 'name') {
+        continue;
+      }
+      merged[key] = value === '' ? null : value;
+    }
+
+    // `full_name` is composed by the backend on save, not sent by the client.
+    const first = (merged['first_name'] as string | null) ?? '';
+    const last = (merged['last_name'] as string | null) ?? '';
+    merged['full_name'] = [first, last].filter((part) => part !== '').join(' ') || null;
+
+    const updated = merged as unknown as ContactDto;
+    this.contactList.set(this.contactList().map((c) => (c.name === name ? updated : c)));
+    return updated;
+  }
+
+  removeAddress(name: string): void {
+    this.addressList.set(this.addressList().filter((a) => a.name !== name));
+  }
+
+  removeContact(name: string): void {
+    this.contactList.set(this.contactList().filter((c) => c.name !== name));
+  }
+
   createAddress(request: AddAddressRequest): AddressDto {
     const title = request.address_title.trim() || 'Mock Trading Co';
     const created: AddressDto = {

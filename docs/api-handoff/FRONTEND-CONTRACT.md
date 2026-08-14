@@ -240,6 +240,90 @@ Notes:
 
 There are no other address/contact endpoints in the storefront contract.
 
+### 4.1 `update_address` / `update_contact` are PARTIAL updates
+
+**Send the fields your form edits. Nothing else.** Both endpoints key on whether
+a field was **present in the request**, not on whether its value is truthy:
+
+| You send | Result |
+|---|---|
+| field omitted | **unchanged** — the stored value is preserved |
+| field with a value | validated and applied |
+| field with an explicit empty value (`""`) | **cleared**, where the field is optional |
+| field with an invalid value | `validation_failed`, and the record is untouched |
+
+```jsonc
+// The address has address_line2, phone, email_id and both default flags set.
+{ "name": "Example Billing-Billing", "address_line1": "2 New Road" }
+// -> address_line1 changes. Everything else is exactly as it was.
+```
+
+**Do not resend untouched optional fields to protect them.** That was a real
+workaround for a real bug — `update_address` used to assign every field
+unconditionally, so an omitted field was written as blank and silently
+destroyed. It no longer behaves that way, and padding the payload now risks the
+opposite mistake: sending `""` for a field the user never touched will **clear**
+it, because an explicit empty value is a deliberate instruction.
+
+`name` is required and identifies the record. It is **not** editable — changing
+`address_title` renames nothing, so document names and every link pointing at
+them stay stable.
+
+Both are **idempotent**: sending the same payload twice converges on the same
+record.
+
+Errors: `validation_failed` (422, with `field` where the failing field can be
+identified), `address_not_found` / `contact_not_found` (404).
+
+### 4.2 Deleting may legitimately be refused
+
+`delete_address` / `delete_contact` take `name` and return an empty `data` on
+success. Deletion is **conditional**: Frappe refuses to delete a record another
+document still points at.
+
+| Outcome | Status | Code |
+|---|---|---|
+| deleted | 200 | — |
+| unknown, or not yours | 404 | `address_not_found` / `contact_not_found` |
+| still referenced | **409** | **`address_in_use` / `contact_in_use`** |
+
+An address or contact is "in use" when a **Cart** has it selected, a
+**historical Sales Order** references it, or it is the **Customer's default**.
+
+**Nothing is detached automatically.** The backend will not clear a Cart's
+selection or rewrite an order so a delete can proceed — that would either break
+a live checkout or alter history. The customer must change the selection
+themselves first.
+
+The 409 carries **only the code and a plain sentence**. It deliberately does not
+name the referring documents: identifying which order or cart blocks the delete
+is internal information, and Frappe's own message for this case embeds an
+absolute Desk URL. Show your own message from the code; there is nothing to
+parse.
+
+> **404 and 409 mean different things.** 404 is terminal — remove the row.
+> 409 means the record still exists and is still valid; leave it in the list.
+
+### 4.3 After a mutation: re-read, never auto-retry
+
+**Re-read the list after every successful mutation.** The server invalidates its
+own list cache on write, so a `get_addresses` / `get_contacts` immediately after
+a write returns the new state — you do not need to wait, poll, or bust a cache.
+
+**Do not automatically retry a delete whose response you did not receive.**
+Update is safe to repeat; delete is not, and the danger is not a double
+deletion:
+
+```
+delete succeeds -> response lost -> client retries -> 404 not_found
+```
+
+That 404 is indistinguishable from "this never existed", so an automatic retry
+turns a **success** into what looks like an error. On an uncertain delete,
+**re-read the list** and see whether the record is gone. The same applies to any
+generic mutation-retry layer: there is no server-side request-deduplication for
+these endpoints, so do not add a blanket client-side retry either.
+
 ---
 
 ## 5. Checkout cart selections — authenticated

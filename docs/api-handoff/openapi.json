@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "YOB Storefront & Auth API \u2014 frontend contract",
-    "version": "3.1.0",
+    "version": "3.2.0",
     "description": "Frappe RPC API. Every response is wrapped by Frappe in an outer `message` object; inside is the YOB envelope (`data` plus optional `notice`/`meta` on success, `errors[]` on failure). There is no `success` boolean: branch on HTTP status, then `errors[0].code`.\n\nAuthenticated storefront endpoints need the HttpOnly `sid` cookie and, for non-GET, `X-Frappe-CSRF-Token`.\n\nThe three payment endpoints are PUBLIC. `/payment/<token>` requires NO storefront session: `get_checkout_data` and `process_payment` are authorized by the checkout token, and `verify_payment` by Razorpay's HMAC signature. Do not place them behind a session guard.\n\nSee FRONTEND-CONTRACT.md for prose that this document cannot fully express."
   },
   "servers": [
@@ -781,7 +781,7 @@
             }
           }
         },
-        "description": "**AUTHENTICATED STOREFRONT**",
+        "description": "**AUTHENTICATED STOREFRONT**\n\nA value rejected by ERPNext or India Compliance answers `validation_failed` (422) naming the field where it can be identified -- not a generic 500.\n\nThe address list cache is invalidated on success, so a `get_addresses` / `get_addresss` immediately afterwards includes the new record.",
         "requestBody": {
           "required": false,
           "content": {
@@ -841,7 +841,7 @@
             }
           }
         },
-        "description": "**AUTHENTICATED STOREFRONT**",
+        "description": "**AUTHENTICATED STOREFRONT**\n\nA value rejected by ERPNext or India Compliance answers `validation_failed` (422) naming the field where it can be identified -- not a generic 500.\n\nThe contact list cache is invalidated on success, so a `get_contactes` / `get_contacts` immediately afterwards includes the new record.",
         "requestBody": {
           "required": false,
           "content": {
@@ -886,6 +886,13 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "_comment": "`data` is an empty object. Re-read get_addresses; the list cache is already invalidated server-side.",
+                  "message": {
+                    "data": {},
+                    "notice": "Address deleted"
+                  }
                 }
               }
             }
@@ -896,12 +903,43 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "address_in_use": {
+                    "summary": "409 -- still referenced; not retryable",
+                    "value": {
+                      "_comment": "HTTP 409. A Cart, a historical Sales Order, or the Customer default still references this address. It still EXISTS -- keep it in the list. Nothing is detached automatically, so this is not retryable. The referring document is deliberately not named.",
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "address_in_use",
+                            "detail": "This address is currently in use and can't be deleted.",
+                            "field": "name"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "address_not_found": {
+                    "summary": "404 -- unknown, or not this customer's",
+                    "value": {
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "address_not_found",
+                            "detail": "Address not found.",
+                            "field": "name"
+                          }
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }
           }
         },
-        "description": "**AUTHENTICATED STOREFRONT**",
+        "description": "**AUTHENTICATED STOREFRONT**\n\nDeletion is CONDITIONAL. Frappe refuses to delete a record another document still references.\n\n- 200 -> deleted (`data` is `{}`)\n- 404 `address_not_found` -> unknown, or not this customer's. Terminal.\n- 409 `address_in_use` -> still referenced by a Cart, a historical Sales Order, or the Customer's default address. The record STILL EXISTS -- keep it in the list.\n\nNothing is detached automatically, so a 409 is NOT retryable: the user must change the selection first. The response carries only the code and a plain sentence; the referring document is deliberately not named.\n\nDO NOT auto-retry a delete whose response was lost: the retry answers 404 and turns a success into an apparent error. Re-read the list instead.",
         "requestBody": {
           "required": true,
           "content": {
@@ -950,6 +988,12 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "message": {
+                    "data": {},
+                    "notice": "Contact deleted"
+                  }
                 }
               }
             }
@@ -960,12 +1004,43 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "contact_in_use": {
+                    "summary": "409 -- still referenced; not retryable",
+                    "value": {
+                      "_comment": "HTTP 409, the Contact mirror of delete-address-in-use-409. Previously this escaped as a raw Frappe LinkExistsError at HTTP 417 with Desk HTML in _server_messages.",
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "contact_in_use",
+                            "detail": "This contact is currently in use and can't be deleted.",
+                            "field": "name"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "contact_not_found": {
+                    "summary": "404 -- unknown, or not this customer's",
+                    "value": {
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "contact_not_found",
+                            "detail": "Contact not found.",
+                            "field": "name"
+                          }
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }
           }
         },
-        "description": "**AUTHENTICATED STOREFRONT**",
+        "description": "**AUTHENTICATED STOREFRONT**\n\nDeletion is CONDITIONAL. Frappe refuses to delete a record another document still references.\n\n- 200 -> deleted (`data` is `{}`)\n- 404 `contact_not_found` -> unknown, or not this customer's. Terminal.\n- 409 `contact_in_use` -> still referenced by a Cart, a historical Sales Order. The record STILL EXISTS -- keep it in the list.\n\nNothing is detached automatically, so a 409 is NOT retryable: the user must change the selection first. The response carries only the code and a plain sentence; the referring document is deliberately not named.\n\nDO NOT auto-retry a delete whose response was lost: the retry answers 404 and turns a success into an apparent error. Re-read the list instead.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1209,6 +1284,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "message": {
+                    "data": {
+                      "name": "Example Billing-Billing",
+                      "address_title": "Example Billing",
+                      "address_type": "Billing",
+                      "address_line1": "2 Example House, Example Road",
+                      "address_line2": "Suite 4",
+                      "city": "Exampleton",
+                      "state": "Gujarat",
+                      "pincode": "000000",
+                      "country": "India",
+                      "phone": "+91 00000 00000",
+                      "email": "buyer@example.com",
+                      "is_primary_address": 1,
+                      "is_shipping_address": 0,
+                      "display": "2 Example House, Example Road<br>Suite 4<br>Exampleton<br>\nGujarat, State Code: 24<br>PIN Code: 000000<br>India<br>\n"
+                    },
+                    "notice": "Address updated"
+                  }
                 }
               }
             }
@@ -1219,12 +1315,43 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "validation_failed": {
+                    "summary": "422 -- a required field was cleared, or a value rejected",
+                    "value": {
+                      "_comment": "Sent { name, city: \"\" } -- an explicit clear of a REQUIRED field. The record is untouched. `field` names what to fix; previously this was a generic 500 with no field.",
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "validation_failed",
+                            "detail": "City/Town is required.",
+                            "field": "city"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "address_not_found": {
+                    "summary": "404 -- unknown, or not this customer's",
+                    "value": {
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "address_not_found",
+                            "detail": "Address not found.",
+                            "field": "name"
+                          }
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }
           }
         },
-        "description": "**AUTHENTICATED STOREFRONT**",
+        "description": "**AUTHENTICATED STOREFRONT**\n\n**PARTIAL UPDATE.** Send `name` plus only the fields you are editing.\n\nSemantics are keyed on request PRESENCE, not truthiness:\n- omitted -> UNCHANGED (the stored value is preserved)\n- supplied value -> validated and applied\n- explicit empty string on an optional field -> CLEARED\n- invalid value -> `validation_failed` (422), record untouched\n\nDO NOT resend untouched optional fields to preserve them. That was a workaround for a real bug (this endpoint used to assign every field unconditionally and blanked whatever was omitted) and it is now HARMFUL: an explicit empty value is a deliberate clear.\n\nIdempotent -- the same payload applied twice converges. `name` identifies the record and is not editable; changing the title renames nothing, so links from historical documents stay stable.",
         "requestBody": {
           "required": false,
           "content": {
@@ -1269,6 +1396,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                },
+                "example": {
+                  "_comment": "email/phone are read back from the SAVED record. They previously echoed the request, so an omitted email reported null while the contact still had one.",
+                  "message": {
+                    "data": {
+                      "name": "Example Contact-Example Buyer Ltd",
+                      "full_name": "Example Contact",
+                      "email": "buyer@example.com",
+                      "phone": "+91 00000 00000",
+                      "designation": "Manager",
+                      "company_name": null,
+                      "gender": null,
+                      "salutation": null,
+                      "first_name": "Example",
+                      "last_name": "Contact"
+                    },
+                    "notice": "Contact updated"
+                  }
                 }
               }
             }
@@ -1279,12 +1424,42 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "validation_failed": {
+                    "summary": "422 -- e.g. an explicitly empty first_name",
+                    "value": {
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "validation_failed",
+                            "detail": "First name is required.",
+                            "field": "first_name"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "contact_not_found": {
+                    "summary": "404 -- unknown, or not this customer's",
+                    "value": {
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "contact_not_found",
+                            "detail": "Contact not found.",
+                            "field": "name"
+                          }
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }
           }
         },
-        "description": "**AUTHENTICATED STOREFRONT**",
+        "description": "**AUTHENTICATED STOREFRONT**\n\n**PARTIAL UPDATE.** Send `name` plus only the fields you are editing.\n\nSemantics are keyed on request PRESENCE, not truthiness:\n- omitted -> UNCHANGED (the stored value is preserved)\n- supplied value -> validated and applied\n- explicit empty string on an optional field -> CLEARED\n- invalid value -> `validation_failed` (422), record untouched\n\nDO NOT resend untouched optional fields to preserve them. That was a workaround for a real bug (this endpoint used to assign every field unconditionally and blanked whatever was omitted) and it is now HARMFUL: an explicit empty value is a deliberate clear.\n\nIdempotent -- the same payload applied twice converges. `name` identifies the record and is not editable; changing the title renames nothing, so links from historical documents stay stable.\n\n`email` / `phone` in the response are read back from the SAVED record, not echoed from the request.",
         "requestBody": {
           "required": false,
           "content": {

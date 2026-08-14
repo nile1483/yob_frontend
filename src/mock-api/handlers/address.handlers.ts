@@ -130,6 +130,191 @@ const addContact: MockHandler = (ctx) => {
   );
 };
 
+/**
+ * Update an address, applying only the supplied keys.
+ *
+ * Presence, not truthiness: a key holding `""` clears the field, and an absent key
+ * leaves the stored value alone. This is the whole partial-update contract, and it is
+ * reproduced exactly so a client that pads its payload with blanks fails here rather
+ * than in production.
+ */
+const updateAddress: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  const body = readBody(ctx);
+  const name = readString(body, 'name');
+
+  if (name === '') {
+    return mockYobError('validation_failed', 'Address name is required.', {
+      field: 'name',
+      status: 422,
+    });
+  }
+
+  if (!ctx.addressBook.hasAddress(name)) {
+    return mockYobError('address_not_found', 'Address not found.', {
+      field: 'name',
+      status: 404,
+    });
+  }
+
+  // An explicit clear of a required field is refused, with the field named. The
+  // record is left untouched.
+  for (const required of ['address_line1', 'city', 'country'] as const) {
+    if (required in body && readString(body, required) === '') {
+      return mockYobError('validation_failed', `${LABELS[required]} is required.`, {
+        field: required,
+        status: 422,
+      });
+    }
+  }
+
+  const patch: Record<string, string> = {};
+  for (const key of EDITABLE_ADDRESS_KEYS) {
+    if (key in body) {
+      patch[key] = readString(body, key);
+    }
+  }
+
+  const updated = ctx.addressBook.updateAddress(name, patch);
+  return mockSuccess(updated, { notice: 'Address updated' });
+};
+
+/** Update a contact. Same presence semantics; `first_name` may not be cleared. */
+const updateContact: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  const body = readBody(ctx);
+  const name = readString(body, 'name');
+
+  if (name === '') {
+    return mockYobError('validation_failed', 'Contact name is required.', {
+      field: 'name',
+      status: 422,
+    });
+  }
+
+  if (!ctx.addressBook.hasContact(name)) {
+    return mockYobError('contact_not_found', 'Contact not found.', {
+      field: 'name',
+      status: 404,
+    });
+  }
+
+  if ('first_name' in body && readString(body, 'first_name') === '') {
+    return mockYobError('validation_failed', 'First name is required.', {
+      field: 'first_name',
+      status: 422,
+    });
+  }
+
+  const patch: Record<string, string> = {};
+  for (const key of EDITABLE_CONTACT_KEYS) {
+    if (key in body) {
+      patch[key] = readString(body, key);
+    }
+  }
+
+  const updated = ctx.addressBook.updateContact(name, patch);
+  return mockSuccess(updated, { notice: 'Contact updated' });
+};
+
+/**
+ * Delete an address.
+ *
+ * A referenced record answers 409 `address_in_use` and stays put - nothing is
+ * detached. Which records count as in use is driven by the scenario, because a mock
+ * cart and a mock order are not worth simulating for this.
+ */
+const deleteAddress: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  const name = readString(readBody(ctx), 'name');
+
+  if (name === '') {
+    return mockYobError('validation_failed', 'Address name is required.', {
+      field: 'name',
+      status: 422,
+    });
+  }
+
+  if (!ctx.addressBook.hasAddress(name)) {
+    return mockYobError('address_not_found', 'Address not found.', {
+      field: 'name',
+      status: 404,
+    });
+  }
+
+  if (ctx.scenario === 'account-record-in-use') {
+    return mockYobError(
+      'address_in_use',
+      "This address is currently in use and can't be deleted.",
+      { field: 'name', status: 409 },
+    );
+  }
+
+  ctx.addressBook.removeAddress(name);
+  return mockSuccess({}, { notice: 'Address deleted' });
+};
+
+/** Delete a contact. Mirrors `deleteAddress`, including 409 `contact_in_use`. */
+const deleteContact: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  const name = readString(readBody(ctx), 'name');
+
+  if (name === '') {
+    return mockYobError('validation_failed', 'Contact name is required.', {
+      field: 'name',
+      status: 422,
+    });
+  }
+
+  if (!ctx.addressBook.hasContact(name)) {
+    return mockYobError('contact_not_found', 'Contact not found.', {
+      field: 'name',
+      status: 404,
+    });
+  }
+
+  if (ctx.scenario === 'account-record-in-use') {
+    return mockYobError(
+      'contact_in_use',
+      "This contact is currently in use and can't be deleted.",
+      { field: 'name', status: 409 },
+    );
+  }
+
+  ctx.addressBook.removeContact(name);
+  return mockSuccess({}, { notice: 'Contact deleted' });
+};
+
+/** Request keys the storefront may edit. Deliberately excludes the default flags. */
+const EDITABLE_ADDRESS_KEYS = [
+  'address_title', 'address_line1', 'address_line2',
+  'city', 'state', 'pincode', 'country', 'phone', 'email',
+] as const;
+
+const EDITABLE_CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
+
+const LABELS: Readonly<Record<string, string>> = {
+  address_line1: 'Address Line 1',
+  city: 'City/Town',
+  country: 'Country',
+};
+
 /** Mirror the scenario onto the mock server's master data. */
 function applyStaleScenario(ctx: MockContext): void {
   ctx.addressBook.setIncludeStale(ctx.scenario === 'checkout-stale-records');
@@ -154,4 +339,8 @@ export const ADDRESS_HANDLERS: Readonly<Record<string, MockHandler>> = {
   'yob_storefront.api.address.get_contacts': getContacts,
   'yob_storefront.api.address.add_address': addAddress,
   'yob_storefront.api.address.add_contact': addContact,
+  'yob_storefront.api.address.update_address': updateAddress,
+  'yob_storefront.api.address.update_contact': updateContact,
+  'yob_storefront.api.address.delete_address': deleteAddress,
+  'yob_storefront.api.address.delete_contact': deleteContact,
 };

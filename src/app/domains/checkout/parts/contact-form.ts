@@ -1,10 +1,10 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, computed, input, linkedSignal, output } from '@angular/core';
 import { FormField, form, required, submit } from '@angular/forms/signals';
 
 import { Alert } from '../../../design/alert/alert';
 import { Button } from '../../../design/button/button';
 import { Field } from '../../../design/field/field';
-import type { AddContactRequest } from '../contracts/checkout.types';
+import type { ContactFormValues } from '../contracts/checkout.types';
 
 const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-base sm:text-sm';
 
@@ -31,7 +31,7 @@ const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-
       novalidate
       data-testid="contact-form"
     >
-      <h3 class="text-base font-semibold" i18n="@@checkout.contact.form.heading">New contact</h3>
+      <h3 class="text-base font-semibold">{{ heading() }}</h3>
 
       @if (error()) {
         <app-alert tone="error" data-testid="contact-form-error">{{ error() }}</app-alert>
@@ -114,17 +114,20 @@ export class ContactForm {
   readonly error = input('');
   readonly fieldErrors = input<Readonly<Record<string, string>>>({});
 
-  readonly submitted = output<AddContactRequest>();
+  readonly heading = input($localize`:@@checkout.contact.form.heading:New contact`);
+  /** The record's current values when editing; absent for a create. */
+  readonly initial = input<ContactFormValues | null>(null);
+  readonly submitLabel = input($localize`:@@checkout.contact.form.submit:Save contact`);
+
+  readonly submitted = output<ContactFormValues>();
   readonly cancelled = output<void>();
 
   protected readonly control = CONTROL_CLASS;
 
-  private readonly draft = signal<AddContactRequest>({
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
-  });
+  /** See the note in `AddressForm`: seeded from an input, so it must be linked. */
+  private readonly draft = linkedSignal<ContactFormValues>(
+    () => this.initial() ?? { first_name: '', last_name: '', email: '', phone: '' },
+  );
 
   protected readonly contactForm = form(this.draft, (path) => {
     required(path.first_name, {

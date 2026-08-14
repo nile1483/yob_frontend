@@ -4,6 +4,6 @@ export const ACCOUNT_ROUTES: Routes = [
   {
     path: '',
     loadComponent: () => import('./pages/account-page').then((m) => m.AccountPage),
-    title: 'Account',
+    title: 'Your account',
   },
 ];

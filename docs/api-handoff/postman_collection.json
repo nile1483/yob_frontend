@@ -721,7 +721,7 @@
               ],
               "query": []
             },
-            "description": "AUTH",
+            "description": "AUTH\n\n200 deleted | 404 address_not_found | 409 address_in_use (Cart, historical Sales Order, or Customer default still references it). 409 is NOT retryable and detaches nothing. Never auto-retry a delete whose response was lost -- re-read the list.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"\"\n}"
@@ -754,7 +754,7 @@
               ],
               "query": []
             },
-            "description": "AUTH",
+            "description": "AUTH\n\n200 deleted | 404 contact_not_found | 409 contact_in_use. As delete_address: not retryable, nothing auto-detached.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"\"\n}"
@@ -837,10 +837,10 @@
               ],
               "query": []
             },
-            "description": "AUTH",
+            "description": "AUTH\n\nPARTIAL UPDATE: send `name` + only the fields you edit. Omitted = unchanged. Explicit \"\" = CLEARED. Do not pad the payload to preserve fields -- that now clears them. Idempotent.",
             "body": {
               "mode": "raw",
-              "raw": "{}"
+              "raw": "{\n  \"name\": \"{{billing_address_name}}\",\n  \"address_line1\": \"2 Example House, Example Road\"\n}"
             }
           }
         },
@@ -870,7 +870,7 @@
               ],
               "query": []
             },
-            "description": "AUTH",
+            "description": "AUTH\n\nPARTIAL UPDATE, same semantics as update_address. email/phone in the response come from the saved record.",
             "body": {
               "mode": "raw",
               "raw": "{}"

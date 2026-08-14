@@ -28,6 +28,130 @@ Update it only for durable project-level facts or important unresolved contract 
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Account address & contact management (Phase 15, 2026-08-14)
+
+Buyers can now add, edit and delete their own addresses and contacts at `/account`.
+The forms are the existing checkout `parts/` doing double duty - `address-form` and
+`contact-form` gained `initial`, `heading` and `submitLabel` inputs rather than the
+domain growing a second, nearly identical pair.
+
+### Field presence is the write contract, and it is load-bearing
+
+`update_address` and `update_contact` apply a field **because the key is present**,
+whatever its value:
+
+| In the request | Effect |
+| --- | --- |
+| key omitted | the stored value is kept |
+| `"value"` | set |
+| `""` | **deliberately cleared** |
+
+Wire-verified. This is why the page never submits the form object: a form serialises
+every input it renders, and the ones the buyer never touched arrive as `""`. Sending
+that whole object would clear the customer's second address line, phone and email - the
+same data loss backend Phase 15B was written to stop, reintroduced from the client.
+
+`account.changed-fields.ts` therefore diffs the form against the record **as it was when
+the editor opened** and sends only what differs. The comparison is strict inequality
+after trimming, never truthiness: `""` is a change the buyer asked for, and dropping it
+would make the UI appear to save and then show the old value back.
+
+When nothing changed, no request is sent at all.
+
+### Deletes are confirmed once, sent once, and never retried
+
+A referenced record cannot be deleted; the server refuses with `address_in_use` /
+`contact_in_use` at 409 and detaches nothing. **That is the system working, not a
+fault** - so the page says so plainly, keeps the record, and offers no retry for
+something that can never succeed. The referring document is deliberately not named: it
+would leak order and cart identifiers onto the account page.
+
+Failures are split by whether the outcome is actually known:
+
+| Outcome | Response |
+| --- | --- |
+| `*_in_use` (409) | definite refusal - keep the record, no re-read |
+| `*_not_found` (404) | the record is gone - re-read the list, which becomes the truth |
+| status 0 or 5xx | **unknown** - re-read the list and report what it shows |
+
+The recovery for an unknown outcome is a **read**, never another delete: a delete that
+succeeded and lost its response answers `404` the second time, so a retry would report a
+failure for something that worked. Wire-verified.
+
+`address_not_found` is also the answer for another customer's record, so the wording
+covers both - the frontend genuinely cannot tell them apart and must not imply it can.
+
+### Not a session problem
+
+A business refusal on one record is not a lost login. Nothing in this domain clears
+`SessionStore`, redirects to sign-in, or suggests the buyer is signed out.
+
+### Documented API gap: no phone or email on an address
+
+`get_addresses` does not return `phone` or `email_id`, so `AddressFormValues` has no such
+fields and the address form has no such inputs. Adding them would mean rendering blanks
+over data the frontend cannot see and clearing it on the next save. Contact details are
+edited on the contact form, which does carry them. The live smoke asserts their absence,
+so the day the backend adds them, the gap is reported rather than silently persisting.
+
+### Focus, because a confirmation destroys the button that opened it
+
+The delete confirmation replaces the row's actions. A focused element that leaves the
+document takes focus to `<body>` with it, and the next Tab restarts from the top of the
+page - stranding a keyboard user mid-way through a destructive action. So the
+confirmation takes focus when it appears (on **Cancel**, which is also first in the DOM,
+so the reflexive Enter keeps the record) and hands it back to the Delete button when
+dismissed. Found by the Phase 15 E2E keyboard test, not by review.
+
+### Verification level (Phase 15)
+
+| Endpoint | Level |
+| --- | --- |
+| `get_addresses`, `get_contacts` | **wire** |
+| `add_address`, `add_contact` | **wire** |
+| `update_address`, `update_contact` | **wire**, including presence semantics both ways |
+| `delete_address`, `delete_contact` | **wire**, including the repeated-delete 404 |
+
+The live smoke covers Account read-only by default (45 checks). Its write cycle is gated
+behind `YOB_SMOKE_ACCOUNT_WRITE=1` (64 checks, all passing 2026-08-14), creates a record
+named `ZZ SMOKE TEST - DELETE ME`, edits and deletes only that record, and never touches
+a pre-existing one. `add_address` answers **201**, not 200.
+
+#### Address geography is validated as a unit, and the fixture must not invent it
+
+The write cycle borrows `country`, `state` and `pincode` from an existing Address rather
+than hardcoding them. All three are site-specific and validated together:
+
+- `state` is checked against the country's list - `Testing` was refused with
+  "Please select a valid State from available options".
+- `pincode` is checked for format (6 digits, not starting with `0`, so `000000` failed)
+  **and then for association with the state** - "Postal Code 999999 for address is not
+  associated with Gujarat."
+
+So the postal code is a validation-bearing field on this site, not decoration, and no
+invented value can satisfy a rule that ties it to a state the script did not choose. The
+title, street and city stay obviously synthetic. If no existing Address carries all
+three fields the write cycle skips with a diagnostic rather than guessing.
+
+#### `_server_messages` beside a 422 - checked, and safe
+
+A YOB `validation_failed` envelope arrives with a Frappe `_server_messages` sibling. The
+browser client ignores every sibling key, but that is not the same as it being safe to
+send, so it was inspected on the wire:
+
+```json
+{"message":"Please select a valid State from available options","as_table":false,
+ "title":"Invalid State","indicator":"red","raise_exception":1,
+ "__frappe_exc_id":"c6e0f6a1…"}
+```
+
+It repeats the **same sanitized wording** already in `errors[0].detail`, plus display
+hints and an opaque exception id. No HTML, no URLs or Desk paths, no traceback, no
+doctype internals, no SQL. `exc` and `exc_type` are absent entirely. **No backend change
+is warranted.** The smoke now asserts all four of those properties, so a future backend
+change that starts leaking markup or internals into the sibling is reported rather than
+discovered later.
+
 ## CONFIRMED - Order contract synchronization (Phase 14.6, 2026-08-14)
 
 Backend Phase 14.5 fixed the historical-data defect Phase 14 uncovered. This phase
@@ -559,6 +683,7 @@ until the backend ships it.
 | Frontend Phase 13.5 - Backend contract synchronization | **PASS** |
 | Frontend Phase 14 - Buyer orders | **PASS** |
 | Frontend Phase 14.6 - Order contract synchronization | **PASS** |
+| Frontend Phase 15 - Account address & contact management | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |
 | API reference 2.0.0 (2026-08-13) | in use |
