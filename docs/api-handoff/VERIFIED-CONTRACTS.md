@@ -116,6 +116,28 @@ strongest *truthful* evidence.
 | One canonical provider order per PR across retries | **REAL PROVIDER VERIFIED + TEST VERIFIED** |
 | Abandoned state: provider order, no payment, live token | **REAL PROVIDER VERIFIED** (observed) |
 
+## Orders
+
+| Fact | Evidence |
+|---|---|
+| `get_orders` rows carry the order's own `currency` | **TEST VERIFIED** + confirmed read-only against real orders (all INR) |
+| `get_orders` takes no parameters; row is exactly 6 fields | **SOURCE VERIFIED** + observed against real orders |
+| `get_orders` is ordered **`creation` desc** (newest first) | **REAL DATA VERIFIED** — read-only: returned order matches descending `creation` while all three real orders share one `transaction_date`, so the sort key is distinguishable |
+| Order detail returns exactly **26 keys** | **REAL DATA VERIFIED** (read-only, enumerated) |
+| `get_order_details` without `order_id` → 422 `validation_failed`, `field: "order_id"` | **TEST VERIFIED** (executed) |
+| Order detail exposes `billing_address_display` / `shipping_address_display` as plain text | **TEST VERIFIED** — `tests/test_order_address_history.py` |
+| **Editing the Address master does NOT change a past order (billing)** | **TEST VERIFIED** — historical regression |
+| **Editing the Address master does NOT change a past order (shipping)** | **TEST VERIFIED** — historical regression |
+| A snapshot-backed order never reads the Address master (proven by deleting it) | **TEST VERIFIED** |
+| Display fields are `string \| null` in every branch, never objects | **TEST VERIFIED** |
+| Legacy blank snapshot falls back to the current master, same type | **TEST VERIFIED** |
+| Legacy blank snapshot + deleted Address returns `null` safely | **TEST VERIFIED** |
+| Real orders carry both snapshots and render from them | **REAL DATA VERIFIED** (read-only) |
+| Order detail does **not** query the Contact master; contact fields come from stored Sales Order fields | **SOURCE VERIFIED** |
+| `items[]` row shape (12 fields) | **REAL DATA VERIFIED** (read-only) |
+| `payment_logs[]` row shape (10 fields); `payment_method` is the PROVIDER's method string, not the YOB Payment Method name | **REAL DATA VERIFIED** — observed `"netbanking"` on real settled orders |
+| `taxes[]` row shape | **NOT VERIFIED** — raw ERPNext child table, passed through unprojected. Every real order observed has `taxes: []`, so no row has ever been seen |
+
 ## Security
 
 | Fact | Evidence |
@@ -141,6 +163,7 @@ strongest *truthful* evidence.
 | True parallel two-connection race on commitment | **NOT VERIFIED** — proven by serialised replay + source-asserted lock ordering only. The test runner cannot open two blocking connections without self-deadlocking |
 | Orphaned provider order after a total network partition | **OPEN** — possible in principle; inert and unpaid. Reconciliation tooling not built |
 | Razorpay webhook path | **NOT VERIFIED** — the frontend callback is the only settlement path in use |
+| Order detail `taxes[]` row columns | **NOT VERIFIED** — no real order has a tax row yet. Do not build required DTO fields on it |
 | Refunds, partial payments, multi-currency | **NOT IMPLEMENTED** |
 
 ---
@@ -148,9 +171,9 @@ strongest *truthful* evidence.
 ## Test suite totals at generation
 
 ```
-yob_storefront   279 tests   OK
+yob_storefront   287 tests   OK
 yob_core          32 tests   OK
 yob_auth          21 tests   OK
                  ───────────
-                 332 tests   OK
+                 340 tests   OK
 ```

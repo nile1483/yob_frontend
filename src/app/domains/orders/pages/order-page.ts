@@ -241,18 +241,17 @@ import { OrderAddress } from '../parts/order-address';
               heading="Billing address"
               i18n-heading="@@order.billing.heading"
               testId="order-billing"
-              [address]="detail.billing_address"
-              [addressName]="detail.billing_address_name"
+              [display]="detail.billing_address_display"
             />
 
-            <!-- Only when the order actually carries one. -->
-            @if (detail.shipping_address_name || detail.shipping_address) {
+            <!-- Keyed on the snapshot, not the reference: an order with a shipping
+                 link but no recorded address has nothing to show here. -->
+            @if (detail.shipping_address_display) {
               <app-order-address
                 heading="Shipping address"
                 i18n-heading="@@order.shipping.heading"
                 testId="order-shipping"
-                [address]="detail.shipping_address"
-                [addressName]="detail.shipping_address_name"
+                [display]="detail.shipping_address_display"
               />
             }
           </div>

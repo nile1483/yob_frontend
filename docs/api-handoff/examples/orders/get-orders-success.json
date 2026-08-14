@@ -1,0 +1,34 @@
+{
+  "message": {
+    "data": [
+      {
+        "name": "SAL-ORD-2026-00003",
+        "status": "Draft",
+        "grand_total": 1350.0,
+        "currency": "INR",
+        "transaction_date": "2026-08-13",
+        "delivery_date": "2026-08-13"
+      },
+      {
+        "name": "SAL-ORD-2026-00002",
+        "status": "Draft",
+        "grand_total": 1350.0,
+        "currency": "INR",
+        "transaction_date": "2026-08-13",
+        "delivery_date": "2026-08-13"
+      },
+      {
+        "name": "SAL-ORD-2026-00001",
+        "status": "Draft",
+        "grand_total": 8910.0,
+        "currency": "INR",
+        "transaction_date": "2026-08-13",
+        "delivery_date": "2026-08-13"
+      }
+    ],
+    "meta": {
+      "count": 3
+    },
+    "notice": "Orders fetched successfully"
+  }
+}

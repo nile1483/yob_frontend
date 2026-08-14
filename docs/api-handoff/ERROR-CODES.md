@@ -152,6 +152,14 @@ All from `verify_payment`.
 | Code | Endpoints | Meaning | Category |
 |---|---|---|---|
 | `order_not_found` | `get_order_details` | unknown or not this customer's order | not_found |
+| `validation_failed` | `get_order_details` | `order_id` was not sent (`field: "order_id"`, **422**) | validation |
+
+`get_orders` takes no parameters and has no endpoint-specific error code.
+
+> **`order_not_found` is deliberately ambiguous.** Another customer's order and
+> a non-existent order return the identical 404, so the response cannot be used
+> to probe for orders that are not yours. Do not present it as "access denied" —
+> "order not found" is the correct user-facing message for both.
 
 ## Platform
 

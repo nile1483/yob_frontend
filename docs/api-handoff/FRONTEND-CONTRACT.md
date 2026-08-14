@@ -441,7 +441,133 @@ instead — same shape, no session needed.
 
 ---
 
-## 8. Razorpay — the frontend's part
+## 8. Orders — all authenticated
+
+| Endpoint | Method | Params |
+|---|---|---|
+| `order.get_orders` | GET | **none** |
+| `order.get_order_details` | GET | `order_id` (**required**) |
+
+Both are scoped to the authenticated Customer server-side. A non-existent order
+and someone else's order answer **identically** (`order_not_found`, 404), so the
+response cannot be used to probe for other customers' orders.
+
+### `GET order.get_orders`
+
+**Takes no parameters.** There is no filter, search, date range, page or limit —
+sending any of them changes nothing. The whole list is returned every time.
+
+Array of rows plus `meta.count`. A row has **exactly** these six fields:
+
+```json
+{ "name": "SAL-ORD-2026-00001", "status": "Draft", "grand_total": 1350.0,
+  "currency": "INR", "transaction_date": "2026-08-13", "delivery_date": "2026-08-13" }
+```
+
+**Ordering: `creation` descending — newest order first.** The server sorts;
+do not re-sort client-side.
+
+> The sort key is the record's **creation timestamp**, not `transaction_date`.
+> These differ: several orders placed on the same day share one
+> `transaction_date` but still come back newest-first. Sorting the array by
+> `transaction_date` in the client would scramble that order, and `creation`
+> is **not** in the response, so the server order is the only way to know it.
+
+> **`currency` is per row.** Each order carries its own stored currency. Never
+> format an order-list amount using a store default or environment config — an
+> order placed in another currency would render as the wrong money.
+
+### `GET order.get_order_details`
+
+`order_id` is **required**. Omitting it answers **422 `validation_failed`** with
+`field: "order_id"` — it is not treated as "list all".
+
+The response object has **exactly these 26 keys**:
+
+| Group | Fields |
+|---|---|
+| Identity | `name`, `customer`, `status` |
+| Dates | `transaction_date`, `delivery_date` (`"YYYY-MM-DD"`) |
+| Money | `currency`, `original_total`, `discount`, `subtotal`, `net_total`, `tax`, `grand_total`, `rounded_total` |
+| Contact | `contact_person`, `contact_email`, `contact_mobile` |
+| Address | `billing_address_name`, `shipping_address_name`, `billing_address_display`, `shipping_address_display` |
+| Terms | `payment_terms_template`, `tc_name`, `terms` |
+| Collections | `items[]`, `taxes[]`, `payment_logs[]` |
+
+Every scalar above may be `null` except `name`, `customer`, `status` and
+`currency`. The three collections are always arrays, possibly empty.
+
+`items[]` rows:
+
+```
+item_code  item_name  description  image  qty  uom
+price_list_rate  rate  discount_percentage  discount_amount  amount  net_amount
+```
+
+`payment_logs[]` rows (Razorpay Payment Log, newest first; empty for an unpaid
+or Pay Later order):
+
+```
+name  payment_status  payment_method  payment_amount  currency
+razorpay_order_id  razorpay_payment_id  email  contact  creation
+```
+
+> `payment_method` here is the **provider's** method string (`"netbanking"`,
+> `"card"`, …) — Razorpay's value for how the payer actually paid. It is not
+> the YOB Payment Method `name` you send to `process_payment`.
+
+> **`taxes[]` is passed through raw** from ERPNext's `Sales Taxes and Charges`
+> child table, not projected into a YOB shape. Its columns are ERPNext's and are
+> **not pinned by this contract** — treat them as display-only and do not build
+> required DTO fields on them. Every real order observed on the backend so far
+> has `taxes: []`, so no row shape has been verified against live data.
+
+#### Contact fields come from the order, not the Contact master
+
+`contact_person` / `contact_email` / `contact_mobile` are read from the Sales
+Order's own stored fields, so editing a Contact does not rewrite past orders —
+the same guarantee the addresses have below.
+
+They are, however, **frequently `null`** on orders placed through storefront
+checkout: only `contact_person` is populated at commitment today. Render them
+defensively and do not require them.
+
+#### Addresses — historical snapshot, stable types
+
+```json
+{
+  "billing_address_name":     "Example Billing-Billing",
+  "shipping_address_name":    "Example Shipping-Shipping",
+  "billing_address_display":  "A401 Example House\nExampleton\nGujarat...",
+  "shipping_address_display": null
+}
+```
+
+Two clearly separated concerns:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `*_address_name` | `string \| null` | **identifier** — the linked Address master. For "use this again" style actions. Points at the CURRENT master, which may since have been edited or deleted. **Never render this as the order's address.** |
+| `*_address_display` | `string \| null` | **historical display** — plain text, from the order's own immutable order-time snapshot. This is what the order was placed against, and what an invoice must show. |
+
+**`*_address_display` is plain text with real newlines — never HTML.** Render it
+as text (e.g. `white-space: pre-line`, or split on `\n`). You must not need
+`[innerHTML]`, and you should not use it: the value is data, not markup.
+
+**The type never changes.** It is `string | null` in every case — normal,
+legacy-fallback, and missing. It is never an object.
+
+Where the value comes from:
+
+- **normal orders** — the immutable Sales Order snapshot. The Address master is
+  **not read at all**. Editing or deleting the address afterwards does not
+  change the order.
+- **legacy orders with a blank snapshot** — best-effort projection of the
+  currently linked Address, as the same plain-text string.
+- **legacy with the linked Address also gone** — `null`, and the rest of the
+  order still renders.
+
+## 9. Razorpay — the frontend's part
 
 ```
 process_payment (razorpay)
@@ -474,7 +600,7 @@ rolled back** — offer a retry, do not report "order failed".
 
 ---
 
-## 9. Security contract
+## 10. Security contract
 
 **The frontend must NEVER:**
 

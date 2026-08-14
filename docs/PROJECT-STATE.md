@@ -28,6 +28,62 @@ Update it only for durable project-level facts or important unresolved contract 
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Order contract synchronization (Phase 14.6, 2026-08-14)
+
+Backend Phase 14.5 fixed the historical-data defect Phase 14 uncovered. This phase
+synchronised the frontend to it. **Verified on the wire against the running backend**,
+which is the authority here - the packaged handoff in `docs/api-handoff/` predates the
+change and does not describe these endpoints.
+
+### The two address models, which must not be confused
+
+| | Historical orders | Live cart & checkout |
+| --- | --- | --- |
+| Source | the Sales Order's **order-time snapshot** | the **current** Address master |
+| Shape | plain-text `*_address_display` | structured `AddressDto` objects |
+| Endpoint | `order.get_order_details` | `address.get_addresses` |
+| Editable? | never - it is a record of what was true | yes, it is the customer's live data |
+
+An order shows what was true when it was placed. Editing an address today changes the
+customer's master record and every future order; it does **not** rewrite the past. The
+frontend never resolves the Address master to build an order, and a test asserts no
+`get_addresses` / `get_contacts` / `/api/resource/Address` call is made from either
+order page - confirmed in a real browser too.
+
+### Contract changes adopted
+
+```text
+removed   billing_address  / shipping_address   (structured objects, resolved live)
+added     billing_address_display / shipping_address_display   (string | null)
+added     currency   on every get_orders row
+retained  billing_address_name / shipping_address_name   (identifiers only)
+```
+
+- `*_address_display` is **plain text with real newlines - not HTML.** The backend
+  converts the snapshot before sending it. The frontend interpolates it into an
+  `<address>` and lets `white-space: pre-line` show the breaks: there is no
+  `[innerHTML]`, no sanitizer and no markup parsing anywhere in the orders domain. Not
+  caution about this payload - an order page has no reason to own an HTML rendering
+  path, and one added "just in case" is one that can be reached later. A fixture whose
+  address text *looks* like markup proves it renders as characters.
+- `*_address_name` are **identifiers**. They are not passed to the address component at
+  all, so a record name can never appear where a postal address belongs, and cannot be
+  used to fetch current data.
+- A `null` display shows the unavailable treatment. Shipping is keyed on the snapshot
+  rather than the reference, so an order with a shipping link but no recorded address
+  renders no shipping section instead of an empty one.
+- **The environment-currency fallback is gone.** Each row formats from its own
+  `currency`. On a financial record a plausible-looking wrong currency is worse than an
+  unformatted number, and a mock row in USD proves the value is read per row.
+
+### Verification
+
+525 unit and 657 Playwright tests pass. Two mutations confirm the guarantees bite:
+rendering the snapshot via `[innerHTML]` fails a test, and hardcoding the currency
+fails two. Read-only against the real bench at two viewports - 22 checks - covering the
+real snapshot text, preserved line breaks, absence of `<br>`, backend currency on list
+and detail, the paid order, and no Address master call.
+
 ## CONFIRMED - Buyer orders (Phase 14, 2026-08-13)
 
 The authoritative handoff (`docs/api-handoff/`) covers these two endpoints only in the
@@ -104,9 +160,8 @@ clickable divs.
 
 ### API gaps (frontend limitations, not defects to fix here)
 
-1. **The list returns no `currency`** - only a bare `grand_total`. The detail endpoint
-   does return one. The list reuses the environment-configured `CATALOG_CURRENCY`
-   fallback already established for the catalog, which has the same gap.
+1. ~~**The list returns no `currency`**~~ - **CLOSED by backend Phase 14.5.** Every row
+   now carries `currency` and the frontend fallback was removed in Phase 14.6.
 2. **The list returns no payment information**, so payment state appears only on the
    detail page.
 3. `contact_email` and `contact_mobile` were **null on every real order** despite
@@ -115,10 +170,9 @@ clickable divs.
 4. Order lines expose **no slug**, and `item_code` is the item name, so item names
    render as plain text. Building a catalog route from a display string would be a
    guess.
-5. The backend resolves addresses from the **current** Address master rather than a
-   stored snapshot, so editing an address changes how past orders display. That is the
-   backend's design; the frontend renders what it is given and never fetches master
-   data to reconstruct history.
+5. ~~The backend resolves addresses from the **current** Address master~~ - **CLOSED by
+   backend Phase 14.5**, which was raised from this finding. Orders now project the
+   Sales Order's immutable order-time snapshot; see the Phase 14.6 entry above.
 
 ### Verification
 
@@ -504,6 +558,7 @@ until the backend ships it.
 | Frontend Phase 13 - Public payment, methods, Razorpay, verification | **PASS** |
 | Frontend Phase 13.5 - Backend contract synchronization | **PASS** |
 | Frontend Phase 14 - Buyer orders | **PASS** |
+| Frontend Phase 14.6 - Order contract synchronization | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |
 | API reference 2.0.0 (2026-08-13) | in use |

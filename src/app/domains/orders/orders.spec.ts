@@ -6,7 +6,9 @@ import { RouterTestingHarness } from '@angular/router/testing';
 
 import { MockServerSession } from '../../../mock-api/core/mock-server-session';
 import {
+  MOCK_MARKUP_SNAPSHOT,
   MOCK_ORDER_CANCELLED,
+  MOCK_ORDER_LEGACY,
   MOCK_ORDER_PAID,
   MOCK_ORDER_UNPAID,
 } from '../../../mock-api/fixtures/orders.fixture';
@@ -170,7 +172,7 @@ describe('Orders', () => {
       const view = await open('/orders');
 
       expect(view.testId('orders-list')).not.toBeNull();
-      expect(view.all('order-row')).toHaveLength(3);
+      expect(view.all('order-row')).toHaveLength(4);
       expect(view.testId('order-row-name')?.textContent).toContain(MOCK_ORDER_PAID);
     });
 
@@ -221,7 +223,7 @@ describe('Orders', () => {
       expect(view.testId('order-payment-status')?.textContent).toContain('Paid');
       expect(view.all('order-line')).toHaveLength(1);
       expect(view.testId('order-grand-total')?.textContent).toContain('1,350');
-      expect(view.testId('order-billing')).not.toBeNull();
+      expect(view.testId('order-billing')?.textContent).toContain('Sanand Industrial Estate');
     });
 
     it('shows the server totals, not sums of the lines', async () => {
@@ -280,6 +282,92 @@ describe('Orders', () => {
       expect(name?.textContent).toContain('Hex Bolt');
       // Constructing a catalog route from a display name would be a guess.
       expect(name?.querySelector('a')).toBeNull();
+    });
+
+    // ------------------------------------------- historical address snapshots
+
+    it('renders the order-time billing snapshot', async () => {
+      const view = await open(`/orders/${MOCK_ORDER_PAID}`);
+
+      const billing = view.testId('order-billing');
+      // The immutable snapshot the backend stored, not today's Address master.
+      expect(billing?.textContent).toContain('Plot 19, Sanand Industrial Estate');
+      expect(billing?.textContent).toContain('PIN Code: 382110');
+    });
+
+    it('renders the order-time shipping snapshot, which differs from billing', async () => {
+      const view = await open(`/orders/${MOCK_ORDER_PAID}`);
+
+      const shipping = view.testId('order-shipping');
+      expect(shipping?.textContent).toContain('Kandivali Industrial Estate');
+      // Distinct from billing, so a page rendering one field twice would fail here.
+      expect(shipping?.textContent).not.toContain('Sanand');
+    });
+
+    it('preserves the snapshot line breaks without markup', async () => {
+      const view = await open(`/orders/${MOCK_ORDER_PAID}`);
+      const billing = view.testId('order-billing');
+
+      const address = billing?.querySelector('address');
+      expect(address).not.toBeNull();
+      // The newlines survive in the text, and are shown by CSS rather than by <br>.
+      expect(address?.textContent).toContain('\n');
+      expect(address?.innerHTML).not.toContain('<br');
+    });
+
+    it('renders markup-shaped snapshot text as characters', async () => {
+      // Address lines are customer-entered. If anything ever rendered this as markup,
+      // the tags would disappear from the visible text.
+      const view = await open(`/orders/${MOCK_ORDER_CANCELLED}`);
+      const billing = view.testId('order-billing');
+
+      expect(billing?.textContent).toContain('<script>alert(1)</script> & Co');
+      expect(billing?.textContent).toContain('Unit <b>4</b>, Trade Park');
+      expect(billing?.querySelector('script')).toBeNull();
+      expect(billing?.querySelector('b')).toBeNull();
+      expect(MOCK_MARKUP_SNAPSHOT).toContain('<script>');
+    });
+
+    it('shows the unavailable treatment when an order has no snapshot', async () => {
+      const view = await open(`/orders/${MOCK_ORDER_LEGACY}`);
+
+      expect(view.testId('order-billing')?.textContent).toContain('Not recorded for this order');
+      // The record reference is an identifier, not a postal address, so it is not shown.
+      expect(view.testId('order-billing')?.textContent).not.toContain('Mock Trading Co-Billing');
+      expect(view.testId('order-shipping')).toBeNull();
+    });
+
+    it('never reads the Address master to build an order', async () => {
+      const http = TestBed.inject(HttpTestingController);
+      await open(`/orders/${MOCK_ORDER_PAID}`);
+
+      // Historical orders are rendered from their own snapshot. Reaching for current
+      // master data is exactly the bug backend Phase 14.5 removed.
+      http.expectNone((r) => r.url.includes('get_addresses'));
+      http.expectNone((r) => r.url.includes('get_contacts'));
+      http.expectNone((r) => r.url.includes('/api/resource/Address'));
+    });
+
+    // ------------------------------------------------------------- currency
+
+    it('formats each row in the currency the backend sent', async () => {
+      const view = await open('/orders');
+      const totals = view.all('order-row-total').map((el) => el.textContent ?? '');
+
+      // INR rows and the USD row are formatted differently, from row.currency alone.
+      expect(totals.some((t) => t.includes('₹'))).toBe(true);
+      expect(totals.some((t) => t.includes('$'))).toBe(true);
+    });
+
+    it('does not fall back to the environment currency', async () => {
+      const view = await open('/orders');
+      const legacyRow = view
+        .all('order-row')
+        .find((row) => row.textContent?.includes(MOCK_ORDER_LEGACY));
+
+      // The environment default is INR. This row is USD, so a fallback would show ₹.
+      expect(legacyRow?.textContent).toContain('$');
+      expect(legacyRow?.textContent).not.toContain('₹');
     });
 
     // -------------------------------------------------------------- security

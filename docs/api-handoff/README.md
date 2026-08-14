@@ -1,6 +1,8 @@
 # YOB Storefront — Frontend API Handoff
 
 **Generated:** 2026-08-13
+**Last refreshed:** 2026-08-14 — Orders (Phase 14.5): immutable order-time
+address snapshots, per-row order currency, documented list ordering
 **Backend state:** Checkout + Razorpay payment lifecycle complete and verified
 **Application code:** `STOREFRONT`
 
@@ -164,6 +166,13 @@ Run through this after importing the package:
 - [ ] Confirm Razorpay loader URL, options, and that `amount` is passed
       unchanged (it is already in paise)
 - [ ] Confirm the token is never written to `localStorage` / `sessionStorage`
+- [ ] **Orders:** remove any `billing_address.*` / `shipping_address.*` object
+      binding — those objects no longer exist. Bind `*_address_display` and
+      render as **plain text** (`white-space: pre-line`), never `[innerHTML]`
+- [ ] **Orders:** format each list row with `row.currency`; delete any
+      environment/default-currency fallback
+- [ ] **Orders:** remove any client-side sort of the order list — the server
+      returns `creation` desc, and `creation` is not in the response
 - [ ] Compare error mappings against `ERROR-CODES.md`
 - [ ] Update mock/fixture data to match `examples/`
 - [ ] Run unit + E2E + build

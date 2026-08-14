@@ -13,6 +13,7 @@ import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout'
 const PAID = 'SAL-ORD-MOCK-0001';
 const UNPAID = 'SAL-ORD-MOCK-0002';
 const CANCELLED = 'SAL-ORD-MOCK-0003';
+const LEGACY = 'SAL-ORD-MOCK-0004';
 
 const ordersLink = (page: Page) =>
   page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Orders' });
@@ -23,7 +24,7 @@ test.describe('reaching orders', () => {
 
     await ordersLink(page).click();
     await expect(page).toHaveURL('/orders');
-    await expect(page.getByTestId('order-row')).toHaveCount(3);
+    await expect(page.getByTestId('order-row')).toHaveCount(4);
 
     await page.getByTestId('order-row').first().click();
 
@@ -110,6 +111,15 @@ test.describe('order history', () => {
     await expect(page).toHaveURL(`/orders/${PAID}`);
   });
 
+  test('formats each row in its own currency', async ({ page }) => {
+    const totals = await page.getByTestId('order-row-total').allInnerTexts();
+
+    // Rows carry their own currency; a hardcoded or environment fallback would make
+    // every row identical.
+    expect(totals.some((t) => t.includes('₹'))).toBe(true);
+    expect(totals.some((t) => t.includes('$'))).toBe(true);
+  });
+
   test('has no horizontal overflow', async ({ page }) => {
     await expectShellUsable(page);
     await expectNoHorizontalOverflow(page);
@@ -156,14 +166,51 @@ test.describe('order detail', () => {
     await expect(page.getByTestId('order-discount')).toContainText('150');
   });
 
-  test('shows billing and shipping for a shipped order', async ({ page }) => {
+  test('shows the order-time billing and shipping snapshots', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: `/orders/${PAID}` });
 
-    await expect(page.getByTestId('order-billing')).toBeVisible();
-    await expect(page.getByTestId('order-shipping')).toBeVisible();
+    // The immutable snapshot the order was placed with - not today's Address master.
+    await expect(page.getByTestId('order-billing')).toContainText('Sanand Industrial Estate');
+    await expect(page.getByTestId('order-shipping')).toContainText('Kandivali Industrial Estate');
     // Each is its own labelled section rather than an unlabelled block.
     await expect(page.getByRole('heading', { name: 'Billing address' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Shipping address' })).toBeVisible();
+  });
+
+  test('renders the snapshot line breaks without markup', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: `/orders/${PAID}` });
+
+    const address = page.locator('[data-testid="order-billing"] address');
+    // Line breaks come from CSS, so the text keeps its newlines and no <br> exists.
+    expect(await address.innerHTML()).not.toContain('<br');
+    expect(await address.innerText()).toContain('\n');
+  });
+
+  test('renders markup-shaped address text as characters', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: `/orders/${CANCELLED}` });
+
+    const billing = page.getByTestId('order-billing');
+    await expect(billing).toContainText('<script>alert(1)</script> & Co');
+    // If it were ever rendered as markup these would exist and the text would not.
+    await expect(billing.locator('script')).toHaveCount(0);
+    await expect(billing.locator('b')).toHaveCount(0);
+  });
+
+  test('shows the unavailable treatment for an order with no snapshot', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: `/orders/${LEGACY}` });
+
+    await expect(page.getByTestId('order-billing')).toContainText('Not recorded for this order');
+    // The address reference is an identifier, never shown as a postal address.
+    await expect(page.getByTestId('order-billing')).not.toContainText('Mock Trading Co-Billing');
+    await expect(page.getByTestId('order-shipping')).toHaveCount(0);
+  });
+
+  test('uses the currency the backend sent for that order', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: `/orders/${LEGACY}` });
+
+    // This order is USD while the environment default is INR.
+    await expect(page.getByTestId('order-grand-total')).toContainText('$');
+    await expect(page.getByTestId('order-grand-total')).not.toContainText('₹');
   });
 
   test('an unpaid order says so and hides the payment block', async ({ page }) => {

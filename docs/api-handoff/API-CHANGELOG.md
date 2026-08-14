@@ -235,6 +235,80 @@ identity, immutable line quantity, per-line expiry.
 **FRONTEND ACTION** — none. Listed so the deferred design is not mistaken for
 current contract.
 
+## 18. Order detail: live Address objects replaced by immutable snapshots ⚠️
+
+**OLD** — `get_order_details` returned resolved objects built by reading the
+linked Address **master** live:
+
+```json
+{ "billing_address":  { "address_title": "...", "address_line1": "...", ... },
+  "shipping_address": { ... } }
+```
+
+That made order history **mutable**: editing an address rewrote the address on
+every past order. For an invoice-grade record that is silent data corruption —
+nothing errors and the totals still agree.
+
+**CURRENT** — explicit historical display fields, from the order's own
+order-time snapshot (`Sales Order.address_display` and
+`Sales Order.shipping_address`):
+
+```json
+{ "billing_address_name":     "Example Billing-Billing",
+  "shipping_address_name":    "Example Shipping-Shipping",
+  "billing_address_display":  "A401 Example House\nExampleton\n...",
+  "shipping_address_display": null }
+```
+
+`billing_address` and `shipping_address` **are removed**. This is a deliberate
+pre-deployment contract correction, not a compatibility break to work around: we
+are not carrying historically mutable data forward for a frontend we control.
+
+**FRONTEND ACTION:**
+
+1. Stop binding `billing_address.*` / `shipping_address.*` object fields.
+2. Render `*_address_display` as **plain text** — it contains real newlines
+   (`white-space: pre-line`, or split on `\n`). It is **not** HTML; do not use
+   `[innerHTML]`.
+3. Keep using `*_address_name` only as an identifier (e.g. "reuse this
+   address"), never as the order's rendered address.
+4. Both display fields are `string | null` in **every** case — normal, legacy
+   fallback, and missing. They never become objects, so no union type is needed.
+
+> Order-time snapshots exist on all current real orders, so normal orders need
+> no Address read at all. A legacy order with a blank snapshot falls back to the
+> current master as best effort — still as the same string type. If that Address
+> is gone too, the field is `null` and the rest of the order still renders.
+
+## 19. `get_orders` rows now carry `currency`
+
+**OLD** — order-list rows had no currency, so the client had to infer it from
+environment configuration.
+
+**CURRENT** — every row includes the Sales Order's own stored `currency`.
+
+**FRONTEND ACTION** — format each row with `row.currency`. Remove any
+environment-derived currency fallback in the order list: an order placed in a
+different currency would otherwise render as the wrong money.
+
+## 20. `get_orders` ordering is server-owned: `creation` desc
+
+**OLD** — the ordering was never documented, so a client could reasonably sort
+the array itself, most plausibly by `transaction_date`.
+
+**CURRENT** — the server returns rows **newest first, by `creation`**. Confirmed
+by observation against real orders.
+
+The distinction matters: `creation` is a timestamp, `transaction_date` is a
+date. Orders placed on the same day share a `transaction_date` but still have a
+correct newest-first order — and **`creation` is not in the response**, so a
+client sorting by `transaction_date` cannot reproduce it and will scramble
+same-day orders.
+
+**FRONTEND ACTION** — render the array in the order received. Remove any
+client-side sort of the order list. There is still no paging, filter or search
+parameter; `get_orders` takes none.
+
 ---
 
 ## Explicitly unchanged
@@ -243,5 +317,10 @@ current contract.
   `errors[]` inner model.
 - CSRF on non-GET authenticated calls.
 - HttpOnly `sid`, browser-managed.
-- Catalog, auth, and orders request/response shapes.
+- Catalog and auth request/response shapes.
 - All pre-existing error codes keep their published values.
+
+> **Orders are NOT in this list.** An earlier revision of this file listed
+> "catalog, auth, and orders" as unchanged, which contradicted items 18–19 on
+> the same page. Order detail and the order list both changed — see those two
+> entries.

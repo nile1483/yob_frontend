@@ -6,7 +6,6 @@ import { RouterLink } from '@angular/router';
 import { Alert } from '../../../design/alert/alert';
 import { EmptyState } from '../../../design/empty-state/empty-state';
 import { Spinner } from '../../../design/spinner/spinner';
-import { injectCatalogCurrency } from '../../catalog/catalog.currency';
 import { OrdersApi } from '../data/orders.api';
 import { orderStatusLabel } from '../orders.status';
 
@@ -28,6 +27,12 @@ import { orderStatusLabel } from '../orders.status';
  * something a buyer scans in columns. Each row is a real `<a>` wrapping the order -
  * not a clickable `div` with a click handler - so it is keyboard reachable, focusable
  * and openable in a new tab for free.
+ *
+ * ## Currency comes from the row
+ *
+ * Backend Phase 14.5 added `currency` to each row. The environment-default fallback
+ * this page needed while the field was absent is gone: on a financial record, a
+ * plausible-looking wrong currency is worse than an unformatted number.
  */
 @Component({
   selector: 'app-orders-page',
@@ -92,7 +97,7 @@ import { orderStatusLabel } from '../orders.status';
                   {{ statusLabel(order.status) }}
                 </span>
                 <span class="font-medium" data-testid="order-row-total">
-                  {{ order.grand_total | currency: currency }}
+                  {{ order.grand_total | currency: order.currency }}
                 </span>
               </span>
             </a>
@@ -104,17 +109,6 @@ import { orderStatusLabel } from '../orders.status';
 })
 export class OrdersPage {
   private readonly api = inject(OrdersApi);
-
-  /**
-   * The currency the list is rendered in.
-   *
-   * `get_orders` returns `grand_total` as a bare number with **no currency field** -
-   * unlike the detail endpoint, which does return one. Rather than print an unlabelled
-   * figure or hardcode a symbol, this reuses the environment-configured code already
-   * established for the catalog, which has the same gap. Recorded as an API gap in
-   * `docs/PROJECT-STATE.md`.
-   */
-  protected readonly currency = injectCatalogCurrency();
 
   protected readonly orders = rxResource({ stream: () => this.api.getOrders() });
 

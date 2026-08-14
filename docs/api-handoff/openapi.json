@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "YOB Storefront & Auth API \u2014 frontend contract",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "description": "Frappe RPC API. Every response is wrapped by Frappe in an outer `message` object; inside is the YOB envelope (`data` plus optional `notice`/`meta` on success, `errors[]` on failure). There is no `success` boolean: branch on HTTP status, then `errors[0].code`.\n\nAuthenticated storefront endpoints need the HttpOnly `sid` cookie and, for non-GET, `X-Frappe-CSRF-Token`.\n\nThe three payment endpoints are PUBLIC. `/payment/<token>` requires NO storefront session: `get_checkout_data` and `process_payment` are authorized by the checkout token, and `verify_payment` by Razorpay's HMAC signature. Do not place them behind a session guard.\n\nSee FRONTEND-CONTRACT.md for prose that this document cannot fully express."
   },
   "servers": [
@@ -82,6 +82,394 @@
                     }
                   }
                 }
+              }
+            }
+          }
+        }
+      },
+      "OrderListRow": {
+        "type": "object",
+        "description": "One row of `order.get_orders`. Exactly these six fields.",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "status",
+          "grand_total",
+          "currency",
+          "transaction_date",
+          "delivery_date"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Sales Order id; pass as `order_id`"
+          },
+          "status": {
+            "type": "string"
+          },
+          "grand_total": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string",
+            "description": "the order's OWN stored currency -- never infer from environment configuration"
+          },
+          "transaction_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "delivery_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "OrderItem": {
+        "type": "object",
+        "required": [
+          "item_code",
+          "item_name",
+          "qty",
+          "uom",
+          "price_list_rate",
+          "rate",
+          "discount_percentage",
+          "discount_amount",
+          "amount",
+          "net_amount"
+        ],
+        "properties": {
+          "item_code": {
+            "type": "string"
+          },
+          "item_name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qty": {
+            "type": "number"
+          },
+          "uom": {
+            "type": "string"
+          },
+          "price_list_rate": {
+            "type": "number"
+          },
+          "rate": {
+            "type": "number",
+            "description": "the price actually charged"
+          },
+          "discount_percentage": {
+            "type": "number"
+          },
+          "discount_amount": {
+            "type": "number",
+            "description": "(price_list_rate - rate) * qty, computed by the API"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "net_amount": {
+            "type": "number"
+          }
+        }
+      },
+      "OrderPaymentLog": {
+        "type": "object",
+        "description": "Razorpay Payment Log row, newest first. Empty for an unpaid or Pay Later order.",
+        "required": [
+          "name",
+          "payment_status",
+          "payment_amount",
+          "currency"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "payment_status": {
+            "type": "string",
+            "description": "e.g. \"captured\""
+          },
+          "payment_method": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the PROVIDER's method string (\"netbanking\", \"card\", ...). NOT the YOB Payment Method name sent to process_payment."
+          },
+          "payment_amount": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "razorpay_order_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "razorpay_payment_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creation": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OrderDetail": {
+        "type": "object",
+        "description": "`order.get_order_details` data. Exactly these 26 keys.",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "customer",
+          "status",
+          "transaction_date",
+          "delivery_date",
+          "currency",
+          "original_total",
+          "discount",
+          "subtotal",
+          "net_total",
+          "tax",
+          "grand_total",
+          "rounded_total",
+          "contact_person",
+          "contact_email",
+          "contact_mobile",
+          "billing_address_name",
+          "shipping_address_name",
+          "billing_address_display",
+          "shipping_address_display",
+          "payment_terms_template",
+          "tc_name",
+          "terms",
+          "items",
+          "taxes",
+          "payment_logs"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "customer": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "transaction_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "delivery_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "original_total": {
+            "type": "number",
+            "description": "subtotal + discount"
+          },
+          "discount": {
+            "type": "number",
+            "description": "total item-level discount"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "net_total": {
+            "type": "number"
+          },
+          "tax": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "grand_total": {
+            "type": "number"
+          },
+          "rounded_total": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "contact_person": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "from the Sales Order's stored field, NOT the Contact master. Frequently null on storefront orders."
+          },
+          "contact_mobile": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "as contact_email -- frequently null."
+          },
+          "billing_address_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IDENTIFIER ONLY -- the linked Address master, which points at CURRENT data and may have been edited or deleted. Never render as the order's address."
+          },
+          "shipping_address_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "identifier only; see billing_address_name."
+          },
+          "billing_address_display": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "HISTORICAL. Plain text with real newlines -- never HTML, do not use [innerHTML]. Taken from the order's immutable order-time snapshot, so editing the Address master does not change a past order. `string | null` in every branch, never an object."
+          },
+          "shipping_address_display": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "as billing_address_display."
+          },
+          "payment_terms_template": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tc_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "terms": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderItem"
+            }
+          },
+          "taxes": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "RAW ERPNext `Sales Taxes and Charges` child rows, passed through unprojected. Columns are ERPNext's and are NOT pinned by this contract; no real order observed so far has a tax row. Display only."
+          },
+          "payment_logs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderPaymentLog"
+            }
+          }
+        }
+      },
+      "OrderListResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OrderListRow"
+                }
+              },
+              "notice": {
+                "type": "string"
+              },
+              "meta": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "OrderDetailResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/OrderDetail"
+              },
+              "notice": {
+                "type": "string"
               }
             }
           }
@@ -1998,7 +2386,68 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Success"
+                  "$ref": "#/components/schemas/OrderDetailResponse"
+                },
+                "example": {
+                  "message": {
+                    "data": {
+                      "name": "SAL-ORD-2026-00003",
+                      "customer": "Example Buyer Ltd",
+                      "status": "Draft",
+                      "transaction_date": "2026-08-13",
+                      "delivery_date": "2026-08-13",
+                      "currency": "INR",
+                      "original_total": 1500.0,
+                      "discount": 150.0,
+                      "subtotal": 1350.0,
+                      "net_total": 1350.0,
+                      "tax": 0.0,
+                      "grand_total": 1350.0,
+                      "rounded_total": 1350.0,
+                      "contact_person": "Storefront",
+                      "contact_email": null,
+                      "contact_mobile": null,
+                      "billing_address_name": "Example Billing-Billing",
+                      "shipping_address_name": "Example Shipping-Shipping",
+                      "billing_address_display": "1 Example House, Example Road\nExampleton\nGujarat, State Code: 24\nPIN Code: 000000\nIndia\nGSTIN: 24AAAAA0000A1Z5",
+                      "shipping_address_display": "1 Example House, Example Road\nExampleton\nGujarat, State Code: 24\nPIN Code: 000000\nIndia",
+                      "payment_terms_template": null,
+                      "tc_name": null,
+                      "terms": null,
+                      "items": [
+                        {
+                          "item_code": "EXAMPLE-ITEM-001",
+                          "item_name": "Hex Bolt M10 x 50mm",
+                          "description": "Hex Bolt M10 x 50mm -- demo catalogue item.",
+                          "image": "",
+                          "qty": 1.0,
+                          "uom": "Nos",
+                          "price_list_rate": 1500.0,
+                          "rate": 1350.0,
+                          "discount_percentage": 10.0,
+                          "discount_amount": 150.0,
+                          "amount": 1350.0,
+                          "net_amount": 1350.0
+                        }
+                      ],
+                      "taxes": [],
+                      "payment_logs": [
+                        {
+                          "name": "EXAMPLE-RZP-LOG-0001",
+                          "payment_status": "captured",
+                          "payment_method": "netbanking",
+                          "payment_amount": 1350.0,
+                          "currency": "INR",
+                          "razorpay_order_id": "order_EXAMPLE0001",
+                          "razorpay_payment_id": "pay_EXAMPLE0001",
+                          "email": "buyer@example.com",
+                          "contact": "+91 00000 00000",
+                          "creation": "2026-08-13 19:24:11.000000"
+                        }
+                      ]
+                    },
+                    "notice": "Order fetched successfully"
+                  }
                 }
               }
             }
@@ -2009,17 +2458,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "order_not_found": {
+                    "summary": "404 -- unknown order, or not this customer's",
+                    "value": {
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "order_not_found",
+                            "detail": "Order not found.",
+                            "field": "order_id"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "validation_failed": {
+                    "summary": "422 -- order_id not sent",
+                    "value": {
+                      "message": {
+                        "errors": [
+                          {
+                            "code": "validation_failed",
+                            "detail": "Order ID is required.",
+                            "field": "order_id"
+                          }
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }
           }
         },
-        "description": "**AUTHENTICATED STOREFRONT**",
+        "description": "**AUTHENTICATED STOREFRONT**\n\n`order_id` is REQUIRED. Omitting it answers 422 `validation_failed` with `field: \"order_id\"` -- it is not treated as \"list all\".\n\nScoped to the authenticated Customer server-side. Another customer's order and a non-existent order both answer 404 `order_not_found`, identically, so the response cannot be used to probe for other customers' orders.\n\n**Addresses are historical snapshots.** `billing_address_display` and `shipping_address_display` are `string | null` PLAIN TEXT (real newlines, never HTML) taken from the order's immutable order-time snapshot -- editing the Address master does not change a past order. `billing_address_name` / `shipping_address_name` are identifiers only and point at the CURRENT master. The former `billing_address` / `shipping_address` OBJECTS were removed: they read the master live and made order history mutable.\n\n`contact_*` likewise come from the order's stored fields, not the Contact master, and are frequently null.",
         "parameters": [
           {
             "name": "order_id",
             "in": "query",
-            "required": false,
+            "required": true,
+            "description": "Sales Order id, from `get_orders[].name`.",
             "schema": {
               "type": "string"
             }
@@ -2045,7 +2525,41 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Success"
+                  "$ref": "#/components/schemas/OrderListResponse"
+                },
+                "example": {
+                  "message": {
+                    "data": [
+                      {
+                        "name": "SAL-ORD-2026-00003",
+                        "status": "Draft",
+                        "grand_total": 1350.0,
+                        "currency": "INR",
+                        "transaction_date": "2026-08-13",
+                        "delivery_date": "2026-08-13"
+                      },
+                      {
+                        "name": "SAL-ORD-2026-00002",
+                        "status": "Draft",
+                        "grand_total": 1350.0,
+                        "currency": "INR",
+                        "transaction_date": "2026-08-13",
+                        "delivery_date": "2026-08-13"
+                      },
+                      {
+                        "name": "SAL-ORD-2026-00001",
+                        "status": "Draft",
+                        "grand_total": 8910.0,
+                        "currency": "INR",
+                        "transaction_date": "2026-08-13",
+                        "delivery_date": "2026-08-13"
+                      }
+                    ],
+                    "meta": {
+                      "count": 3
+                    },
+                    "notice": "Orders fetched successfully"
+                  }
                 }
               }
             }
@@ -2061,7 +2575,7 @@
             }
           }
         },
-        "description": "**AUTHENTICATED STOREFRONT**",
+        "description": "**AUTHENTICATED STOREFRONT**\n\n**Takes no parameters.** No filter, search, date range, page or limit exists; the whole list is returned every time.\n\n**Ordered by `creation` DESCENDING -- newest order first.** The server sorts; render the array as received and do not re-sort client-side. The sort key is the creation timestamp, NOT `transaction_date`: same-day orders share a `transaction_date`, and `creation` is not in the response, so a client sort cannot reproduce the correct order.\n\nEach row carries the Sales Order's OWN stored `currency`. Never infer order-list currency from environment configuration.",
         "parameters": []
       }
     },
