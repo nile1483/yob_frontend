@@ -247,10 +247,17 @@ describe('CartPage', () => {
 
       // The backend Add endpoint can set a quantity, but that capability is not
       // exposed as cart editing - there is no input, no stepper, no inline update.
-      expect(view.root.querySelectorAll('input')).toHaveLength(0);
-      expect(view.root.querySelectorAll('select')).toHaveLength(0);
+      //
+      // Scoped to the LINES, not the whole page. This used to assert the page held
+      // no control at all, which was incidentally true and stopped being true when
+      // the coupon field arrived - a field that has nothing to do with quantity.
+      // The claim being made is about cart lines, so that is what is queried; the
+      // coupon has its own tests.
+      const lines = view.testId('cart-lines') as HTMLElement;
+      expect(lines.querySelectorAll('input')).toHaveLength(0);
+      expect(lines.querySelectorAll('select')).toHaveLength(0);
 
-      const buttonLabels = [...view.root.querySelectorAll('button')].map((b) =>
+      const buttonLabels = [...lines.querySelectorAll('button')].map((b) =>
         (b.textContent ?? '').trim(),
       );
       expect(buttonLabels).toEqual(['Remove']);

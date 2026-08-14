@@ -44,6 +44,21 @@ import type { CartDocDto } from '../contracts/cart.types';
           </div>
         }
 
+        <!-- Separate from the discount row above because the backend keeps them
+             separate: total_discount is the item/pricing-rule discount and applies with
+             or without a coupon, while coupon_discount is the transaction-level amount
+             the coupon produced. Verified against the running backend - applying a
+             coupon moved coupon_discount 0 -> 27.00 while total_discount stayed 15.00.
+             Two rows, never combined here. -->
+        @if (cart().coupon_discount !== 0) {
+          <div class="flex justify-between gap-4 text-green-900">
+            <dt i18n="@@cart.summary.couponDiscount">Coupon discount</dt>
+            <dd data-testid="cart-coupon-discount">
+              {{ cart().coupon_discount | currency: cart().currency }}
+            </dd>
+          </div>
+        }
+
         @if (cart().tax_total !== 0) {
           <div class="flex justify-between gap-4">
             <dt i18n="@@cart.summary.tax">Tax</dt>

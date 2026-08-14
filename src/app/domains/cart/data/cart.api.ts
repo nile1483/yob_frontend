@@ -10,6 +10,8 @@ const REMOVE_FROM_CART = 'yob_storefront.api.cart.remove_from_cart';
 const SET_CART_CONTACT = 'yob_storefront.api.cart.set_cart_contact';
 const SET_CART_BILLING_ADDRESS = 'yob_storefront.api.cart.set_cart_billing_address';
 const SET_CART_SHIPPING_ADDRESS = 'yob_storefront.api.cart.set_cart_shipping_address';
+const APPLY_COUPON = 'yob_storefront.api.cart.apply_coupon';
+const REMOVE_COUPON = 'yob_storefront.api.cart.remove_coupon';
 
 /**
  * What a `set_cart_*` endpoint actually replies with.
@@ -161,5 +163,56 @@ export class CartApi {
     return this.api
       .post<CartSelectionAckDto>(SET_CART_SHIPPING_ADDRESS, { shipping_address: addressName })
       .pipe(map((response) => response.data));
+  }
+
+  /**
+   * Apply a coupon to the cart.
+   *
+   * ## The parameter is `code`
+   *
+   * Not `coupon_code`. Backend signature is `apply_coupon(code=None)`; the cart *field*
+   * is `coupon_code`, and confusing the two answers 422 `coupon_code_required`.
+   *
+   * ## The server normalises the code, so we do not
+   *
+   * It does `(code or "").strip().upper()`, so `"  demo10 "` and `"DEMO10"` are the
+   * same coupon and the stored value is upper-cased. Verified by execution against the
+   * running backend. The buyer's text is therefore sent trimmed but otherwise
+   * untouched: re-casing their input in the field would be a visible edit of something
+   * they typed, to achieve something the server already does.
+   *
+   * ## One coupon, and no replacement flow
+   *
+   * `Cart.coupon_code` is a single field, so applying a second coupon *overwrites* the
+   * first. The UI does not offer that today - the buyer removes before applying
+   * another - but the endpoint would allow it.
+   *
+   * ## Never retried, and never trusted
+   *
+   * The reply carries `{cart, coupon_code, removed_items, price_updated_items}` and is
+   * deliberately **discarded**: it is a different shape from `get_cart`, and there is a
+   * known backend defect where an empty cart answers "Coupon applied successfully"
+   * while `cart.coupon_code` stays `null`. Only the canonical read decides whether a
+   * coupon is applied. See `CartStore.applyCoupon`.
+   *
+   * Verified failures, all 422 with `field: "code"`: `coupon_code_required`,
+   * `coupon_invalid`, `coupon_not_active`, `coupon_expired`,
+   * `coupon_usage_limit_reached`, `coupon_not_applicable`, `coupon_minimum_not_met`,
+   * `coupon_maximum_exceeded`.
+   */
+  applyCoupon(code: string): Observable<unknown> {
+    return this.api.post<unknown>(APPLY_COUPON, { code }).pipe(map((response) => response.data));
+  }
+
+  /**
+   * Remove the cart's coupon.
+   *
+   * Takes **no** fields - the cart holds at most one coupon, so there is nothing to
+   * identify. Verified failure: 422 `coupon_not_applied` when none is applied.
+   *
+   * As with apply, the reply is discarded in favour of the canonical read.
+   */
+  removeCoupon(): Observable<unknown> {
+    return this.api.post<unknown>(REMOVE_COUPON, {}).pipe(map((response) => response.data));
   }
 }

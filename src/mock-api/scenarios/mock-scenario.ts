@@ -56,6 +56,16 @@ export type MockScenario =
    * tab, another device - which a browser test cannot otherwise arrange.
    */
   | 'payment-refused'
+  /**
+   * `apply_coupon` and `remove_coupon` answer 500 while `get_cart` keeps working.
+   *
+   * A knob because it is unreachable by behaving correctly, and because the *pair*
+   * matters: the mutation's outcome has to be genuinely unknown while the canonical
+   * read still succeeds, so the client's recovery - re-read, never re-apply - is
+   * observable rather than inferred. A blanket `server-error` would break the read too
+   * and could only ever exercise the "could not confirm anything" branch.
+   */
+  | 'coupon-uncertain'
   /** get_checkout_data and process_payment answer 409 payment_request_stale. */
   | 'payment-stale'
   /** The checkout credential has expired: 422 checkout_token_expired. */
@@ -130,6 +140,7 @@ export class MockApiScenario {
       scenario === 'cart-repriced' ||
       scenario === 'cart-item-removed' ||
       scenario === 'cart-not-shippable' ||
+      scenario === 'coupon-uncertain' ||
       scenario === 'checkout-stale-records' ||
       scenario === 'payment-reused' ||
       scenario === 'payment-refused' ||

@@ -13,6 +13,7 @@ import {
   MOCK_INTERSTATE_SURCHARGE_RATE,
 } from '../fixtures/address-book.fixture';
 import { MOCK_ITEM_DETAILS_BY_SLUG } from '../fixtures/catalog.fixture';
+import { couponDiscountRate } from '../fixtures/coupon.fixture';
 import { MockServerAddressBook } from './mock-server-address-book';
 
 /**
@@ -176,6 +177,28 @@ export class MockServerCart {
     this.shippingAddress.set(null);
   }
 
+  /**
+   * The applied coupon, upper-cased.
+   *
+   * Server-side state like everything else here. The real backend stores
+   * `(code or "").strip().upper()`, so this does too - which is what makes "the
+   * applied code shown is the server's, not what the buyer typed" testable.
+   */
+  private readonly couponCode = signal<string | null>(null);
+
+  currentCouponCode(): string | null {
+    return this.couponCode();
+  }
+
+  /** Apply a coupon. The handler has already validated it against the fixtures. */
+  setCoupon(code: string): void {
+    this.couponCode.set(code.trim().toUpperCase());
+  }
+
+  clearCoupon(): void {
+    this.couponCode.set(null);
+  }
+
   currentContactPerson(): string | null {
     return this.contactPerson();
   }
@@ -258,7 +281,21 @@ export class MockServerCart {
       });
     }
 
-    const netTotal = round(lines.reduce((sum, line) => sum + line.amount, 0));
+    const grossNet = round(lines.reduce((sum, line) => sum + line.amount, 0));
+
+    // The coupon's transaction-level discount.
+    //
+    // A flat percentage from the fixture, NOT a reimplementation of ERPNext's Pricing
+    // Rule engine - the frontend is being tested against the contract (a server-owned
+    // `coupon_discount` that moves the totals), not against ERPNext's arithmetic.
+    //
+    // It reduces `net_total` and therefore `grand_total`, which is what the real
+    // backend was observed doing: applying a coupon moved net 135.00 -> 108.00 and
+    // coupon_discount 0 -> 27.00, while item-level `total_discount` stayed 15.00.
+    const couponRate = couponDiscountRate(this.couponCode());
+    const couponDiscount = round(grossNet * couponRate);
+    const netTotal = round(grossNet - couponDiscount);
+
     const lineTax = round(lines.reduce((sum, line) => sum + line.tax_amount, 0));
 
     // Destination-based surcharge: shipping out of the company's own state costs more.
@@ -300,8 +337,10 @@ export class MockServerCart {
         tax_total: taxTotal,
         grand_total: round(netTotal + taxTotal),
         total_discount: totalDiscount,
-        coupon_code: null,
-        coupon_discount: 0,
+        // Two separate fields, kept separate: item-level discount above, the coupon's
+        // transaction-level discount here. Never merged.
+        coupon_code: this.couponCode(),
+        coupon_discount: couponDiscount,
         items: lines,
       },
       // Resolved blocks, as `build_cart_response` returns them: a summary of the

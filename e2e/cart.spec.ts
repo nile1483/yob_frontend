@@ -396,9 +396,14 @@ test.describe('removing from the cart', () => {
     await addAndOpenCart(page, BOLT);
 
     await expect(page.getByTestId('cart-line-quantity')).toBeVisible();
-    // No quantity input, stepper or inline update anywhere on the cart.
-    await expect(page.locator('main input')).toHaveCount(0);
-    await expect(page.locator('main select')).toHaveCount(0);
+    // No quantity input, stepper or inline update on the cart LINES.
+    //
+    // Scoped to the lines rather than to `main`. The page-wide form was true by
+    // coincidence until the coupon field arrived - a field that has nothing to do
+    // with quantity - and a coincidence is not what this test is about. The coupon
+    // has its own spec.
+    await expect(page.getByTestId('cart-lines').locator('input')).toHaveCount(0);
+    await expect(page.getByTestId('cart-lines').locator('select')).toHaveCount(0);
   });
 
   test('stays usable with no horizontal overflow', async ({ page }) => {

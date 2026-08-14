@@ -3,6 +3,106 @@
 Use this file to keep assumptions visible without turning normal development into heavy documentation.
 Update it only for durable project-level facts or important unresolved contract issues.
 
+## CONFIRMED - Cart coupon (Phase 16, 2026-08-14)
+
+**Where it lives.** Coupon UI exists **only on the cart**, in the summary column
+directly above Proceed to Checkout, and is **hidden when the cart is empty**. Not on
+catalog, item detail, checkout, payment, account or orders. Component:
+`domains/cart/parts/coupon-code/`. It is not in `design/` and not a shared widget - it
+reads `CartStore` directly and has exactly one caller; it moves if that changes.
+
+**No CouponStore, and none should be added.** The applied coupon *is* cart state. The
+backend re-evaluates eligibility on every reprice, so adding an item or a plain
+reconciliation can drop or change a coupon; a second copy would be free to disagree
+with the totals rendered beside it. `couponCode` / `couponDiscount` are `computed` over
+the cart payload.
+
+**The backend owns all money.** Coupon -> Pricing Rule -> item pricing -> discounts ->
+taxes -> grand total. The frontend submits a code and renders the cart that comes back.
+No percentage, no subtraction, no eligibility rule, no minimum-spend check and no
+optimistic total anywhere.
+
+**Two discount fields, never combined:**
+
+| Field | Meaning |
+|---|---|
+| `total_discount` | item / pricing-rule discount; applies with or without a coupon |
+| `coupon_discount` | transaction-level amount the coupon produced |
+
+Verified on the running backend: a genuine coupon moved `coupon_discount` 0 -> 27.00
+and `net_total` 135.00 -> 108.00 while `total_discount` stayed 15.00. Rendered as two
+rows in the cart summary.
+
+**Canonical synchronisation is mandatory.** `apply_coupon` -> `get_cart` -> ingest;
+`remove_coupon` -> `get_cart` -> ingest. A coupon is **never** marked applied from the
+mutation reply. Not stylistic: there is a verified backend defect where applying to an
+empty cart answers `"Coupon applied successfully"` while the stored `coupon_code` stays
+`null`, so believing the mutation would show a coupon that does not exist.
+Canonical-read-only makes that defect harmless.
+
+**Exact wire contract** (established by executing the endpoints, not from ERPNext
+documentation):
+
+- `yob_storefront.api.cart.apply_coupon` - POST, authenticated, CSRF, body `{ code }`.
+  **The parameter is `code`, not `coupon_code`** - the latter is the cart *field*, and
+  sending it answers `coupon_code_required`.
+- `yob_storefront.api.cart.remove_coupon` - POST, **no fields** (one coupon per cart).
+- The server does `(code or "").strip().upper()`, so codes are case-insensitive and
+  trimmed. The client sends the buyer's text trimmed but **not** re-cased.
+- Applying a second coupon **overwrites** the first. No replacement UX is offered: the
+  buyer removes, then applies.
+- Checkout inherits the coupon from the cart - `create_sales_order_from_cart` resolves
+  `cart.coupon_code` onto the Sales Order. Nothing extra is sent at checkout.
+
+**Backend error codes actually used** (all 422, all `field: "code"`):
+`coupon_code_required`, `coupon_invalid`, `coupon_not_active`, `coupon_expired`,
+`coupon_usage_limit_reached`, `coupon_not_applicable`, `coupon_minimum_not_met`,
+`coupon_maximum_exceeded`, plus `coupon_not_applied` on remove. Each maps to a localized
+message; the server's own `detail` is never rendered.
+
+`coupon_minimum_not_met` / `coupon_maximum_exceeded` carry the threshold in
+`details.minimum_amount` / `maximum_amount`. **Deliberately not surfaced**:
+`YobApiError.context` is a three-key allow-list, and widening a security boundary for a
+nicety was not worth it. The message says what to do without the figure. Revisit only if
+buyers actually need the number.
+
+**Retry policy - no retries.** No RxJS `retry()` on either mutation. Explicit pending
+guard, so a double click or a held Enter produces one request.
+
+- definite business rejection (YOB envelope) -> keep the cart, show the message, **no**
+  re-read;
+- uncertain outcome (transport failure or 5xx) -> **`get_cart`, never a second
+  apply/remove**. If the read succeeds the buyer is told the change could not be
+  confirmed and is shown the canonical state; if it also fails they are told the cart
+  could not be confirmed at all. Never "that coupon failed" unless it is known.
+
+**Real-backend verification (2026-08-14, `test.localhost`, rolled back).** The full SPA
+sequence was executed: apply -> `get_cart` -> remove -> `get_cart`. Applied state,
+upper-casing, `coupon_invalid` and removal all behaved as contracted.
+
+**`DEMO10` changes no totals, and that is a fixture problem rather than a bug.** It is
+the only "valid" seeded coupon and its Pricing Rule is `coupon_code_based: 0` and
+item-level, so it applies with or without the coupon - `coupon_discount` stays `0.00`
+and `grand_total` does not move. Proving that totals change is therefore the mock's job.
+**Making it verifiable on a real bench needs a `coupon_code_based` transaction-level
+Pricing Rule, which is production-like discount configuration and was deliberately NOT
+created.** Raise it before relying on real-backend coupon pricing.
+
+**Known non-blocking backend defects** (recorded, not worked around here):
+
+- `apply_coupon` on an empty cart can report success while `coupon_code` stays `null`.
+- `apply_coupon` lacks its own `ValidationError` boundary - its `try/except` is
+  commented out in `cart.py` - so uncommon `ValidationError` subclasses can escape as
+  raw Frappe responses. `remove_coupon` has the boundary; the two are inconsistent.
+
+**Cart semantics unchanged.** `add_to_cart.qty` is still a positive delta, still one row
+per `item_code`, still non-idempotent, and cart quantity is still display-only.
+
+**Two pre-existing tests were narrowed, not deleted.** `cart-page.spec.ts` and
+`cart.spec.ts` each asserted the cart page contained no `input` at all, as a proxy for
+"quantity is not editable". That was true by coincidence until a coupon field existed.
+Both are now scoped to `cart-lines`, which is what they were actually claiming.
+
 ## CONFIRMED - Product/Architecture
 
 - Project name is `yob-frontend`.
@@ -684,6 +784,7 @@ until the backend ships it.
 | Frontend Phase 14 - Buyer orders | **PASS** |
 | Frontend Phase 14.6 - Order contract synchronization | **PASS** |
 | Frontend Phase 15 - Account address & contact management | **PASS** |
+| Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |
 | API reference 2.0.0 (2026-08-13) | in use |

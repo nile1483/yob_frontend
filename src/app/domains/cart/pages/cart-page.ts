@@ -6,6 +6,7 @@ import { EmptyState } from '../../../design/empty-state/empty-state';
 import { Spinner } from '../../../design/spinner/spinner';
 import { CartLine } from '../parts/cart-line';
 import { CartSummary } from '../parts/cart-summary';
+import { CouponCode } from '../parts/coupon-code/coupon-code';
 import { CartStore } from '../state/cart.store';
 
 /**
@@ -17,7 +18,7 @@ import { CartStore } from '../state/cart.store';
  */
 @Component({
   selector: 'app-cart-page',
-  imports: [Alert, CartLine, CartSummary, EmptyState, RouterLink, Spinner],
+  imports: [Alert, CartLine, CartSummary, CouponCode, EmptyState, RouterLink, Spinner],
   template: `
     <h1 class="text-2xl font-semibold tracking-tight" i18n="@@cart.heading">Your cart</h1>
 
@@ -87,6 +88,12 @@ import { CartStore } from '../state/cart.store';
 
         <div class="flex flex-col gap-4">
           <app-cart-summary [cart]="cart" />
+
+          <!-- Directly above checkout, and inside this branch on purpose: the branch
+               only renders with lines, so an empty cart never shows a coupon form.
+               A coupon on nothing to buy is an invitation to an error - and the
+               backend has a known defect where it reports success for exactly that. -->
+          <app-coupon-code />
 
           <!-- Only reachable with something to buy: checkout renders an empty state
                otherwise, and offering it here would be an invitation to a dead end. -->

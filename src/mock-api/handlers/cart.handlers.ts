@@ -1,4 +1,5 @@
 import { isRecord } from '../../app/foundation/network/yob-api.types';
+import { MOCK_COUPON_REJECTIONS, MOCK_COUPON_VALID } from '../fixtures/coupon.fixture';
 import type { MockContext, MockHandler } from '../core/mock-handler';
 import { type MockReply, mockPermissionError, mockSuccess, mockYobError } from '../core/mock-reply';
 
@@ -253,6 +254,114 @@ const setCartShippingAddress: MockHandler = (ctx) => {
 };
 
 /**
+ * Apply a coupon.
+ *
+ * The parameter is **`code`**, not `coupon_code` - the backend signature is
+ * `apply_coupon(code=None)` while the cart *field* is `coupon_code`. Sending the wrong
+ * one answers `coupon_code_required`, and reproducing that faithfully is what stops a
+ * client shipping the confusion.
+ *
+ * The server trims and upper-cases the code, so `"  save10 "` is `SAVE10`. Every
+ * refusal is 422 with `field: "code"`, matching the running backend.
+ *
+ * The reply is `{cart, coupon_code, removed_items, price_updated_items}` - a different
+ * shape from `get_cart`, which is why the client re-reads. Reproduced rather than
+ * tidied, for the same reason `add_to_cart` returns the bare document here.
+ */
+const applyCoupon: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  // Stands in for "the request was accepted but the answer was lost". The client must
+  // recover by READING the cart, never by applying again - and `get_cart` deliberately
+  // keeps working under this scenario so that recovery is observable.
+  if (ctx.scenario === 'coupon-uncertain') {
+    return mockYobError('internal_server_error', 'Something went wrong. Please try again.', {
+      status: 500,
+    });
+  }
+
+  const code = readField(ctx, 'code').toUpperCase();
+
+  if (code === '') {
+    return mockYobError('coupon_code_required', 'Coupon code is required.', {
+      field: 'code',
+      status: 422,
+    });
+  }
+
+  const rejection = MOCK_COUPON_REJECTIONS[code];
+  if (rejection) {
+    return mockYobError(rejection.code, rejection.detail, {
+      field: 'code',
+      status: 422,
+      ...(rejection.details ? { details: rejection.details } : {}),
+    });
+  }
+
+  if (code !== MOCK_COUPON_VALID) {
+    return mockYobError('coupon_invalid', 'The coupon is invalid or expired.', {
+      field: 'code',
+      status: 422,
+    });
+  }
+
+  ctx.cart.setCoupon(code);
+
+  const payload = ctx.cart.buildPayload();
+  return mockSuccess(
+    {
+      cart: payload.cart,
+      coupon_code: ctx.cart.currentCouponCode(),
+      removed_items: payload.removed_items,
+      price_updated_items: payload.price_updated_items,
+    },
+    { notice: 'Coupon applied successfully' },
+  );
+};
+
+/**
+ * Remove the cart's coupon.
+ *
+ * Takes no fields - the cart holds at most one coupon, so there is nothing to identify.
+ * Refused with `coupon_not_applied` when there is none, which is worth reproducing: it
+ * means a second Remove answers an error rather than quietly succeeding twice.
+ */
+const removeCoupon: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  if (ctx.scenario === 'coupon-uncertain') {
+    return mockYobError('internal_server_error', 'Something went wrong. Please try again.', {
+      status: 500,
+    });
+  }
+
+  if (ctx.cart.currentCouponCode() === null) {
+    return mockYobError('coupon_not_applied', 'No coupon is applied to this cart.', {
+      field: 'code',
+      status: 422,
+    });
+  }
+
+  ctx.cart.clearCoupon();
+
+  const payload = ctx.cart.buildPayload();
+  return mockSuccess(
+    {
+      cart: payload.cart,
+      removed_items: payload.removed_items,
+      price_updated_items: payload.price_updated_items,
+    },
+    { notice: 'Coupon removed successfully' },
+  );
+};
+
+/**
  * Mirror the scenario onto the mock server's cart.
  *
  * Applied by every handler that depends on shippability rather than once at dispatch,
@@ -281,4 +390,6 @@ export const CART_HANDLERS: Readonly<Record<string, MockHandler>> = {
   'yob_storefront.api.cart.set_cart_contact': setCartContact,
   'yob_storefront.api.cart.set_cart_billing_address': setCartBillingAddress,
   'yob_storefront.api.cart.set_cart_shipping_address': setCartShippingAddress,
+  'yob_storefront.api.cart.apply_coupon': applyCoupon,
+  'yob_storefront.api.cart.remove_coupon': removeCoupon,
 };

@@ -31,6 +31,18 @@ function isUncertainOutcome(error: YobApiError): boolean {
 /** Which selection a pending `set_cart_*` call is changing. */
 export type CartSelectionKind = 'contact' | 'billing' | 'shipping';
 
+/** Which coupon mutation is in flight, so only that control shows a busy state. */
+export type CouponAction = 'apply' | 'remove';
+
+/**
+ * What we know after a coupon mutation whose outcome could not be determined.
+ *
+ * `refreshed` - the cart was re-read, so what is on screen is current and the coupon
+ * row shows the truth; we still cannot say whether *this* attempt is what caused it.
+ * `unknown` - the re-read failed too, so nothing on screen can be trusted.
+ */
+export type CouponUnconfirmed = 'refreshed' | 'unknown';
+
 /**
  * The cart, as the server last reported it.
  *
@@ -67,6 +79,9 @@ export class CartStore {
   private readonly loadedSignal = signal(false);
   private readonly selectingSignal = signal<CartSelectionKind | null>(null);
   private readonly selectionErrorSignal = signal<YobApiError | null>(null);
+  private readonly couponPendingSignal = signal<CouponAction | null>(null);
+  private readonly couponErrorSignal = signal<YobApiError | null>(null);
+  private readonly couponUnconfirmedSignal = signal<CouponUnconfirmed | null>(null);
 
   /** The latest server cart payload, or `null` before the first successful load. */
   readonly payload = this.payloadSignal.asReadonly();
@@ -112,6 +127,35 @@ export class CartStore {
   readonly contactName = computed(() => this.cart()?.contact_person ?? null);
   readonly billingAddressName = computed(() => this.cart()?.billing_address ?? null);
   readonly shippingAddressName = computed(() => this.cart()?.shipping_address ?? null);
+
+  /**
+   * The applied coupon, exactly as the canonical cart reports it.
+   *
+   * A `computed` over the cart payload, never a stored flag, and there is deliberately
+   * no CouponStore: coupon state *is* cart state. The backend re-evaluates eligibility
+   * on every reprice, so adding an item, removing one, or a plain reconciliation can
+   * drop or change a coupon - and a separately cached copy would then disagree with the
+   * totals rendered beside it.
+   */
+  readonly couponCode = computed(() => this.cart()?.coupon_code ?? null);
+  readonly hasCoupon = computed(() => {
+    const code = this.couponCode();
+    return code !== null && code !== '';
+  });
+
+  /**
+   * The transaction-level coupon discount, as the server calculated it.
+   *
+   * Distinct from `total_discount`, which is the item/pricing-rule discount and applies
+   * with or without a coupon. Nothing here adds, subtracts or reconciles the two.
+   */
+  readonly couponDiscount = computed(() => this.cart()?.coupon_discount ?? 0);
+
+  /** Which coupon mutation is in flight, if any. */
+  readonly couponPending = this.couponPendingSignal.asReadonly();
+  readonly couponError = this.couponErrorSignal.asReadonly();
+  /** Set when a coupon mutation failed in a way that leaves the outcome unknown. */
+  readonly couponUnconfirmed = this.couponUnconfirmedSignal.asReadonly();
 
   /**
    * Whether this cart needs shipping, entirely as the server decided.
@@ -346,6 +390,121 @@ export class CartStore {
   /** Discard a selection failure once the user has been given a way forward. */
   clearSelectionError(): void {
     this.selectionErrorSignal.set(null);
+  }
+
+  /**
+   * Apply a coupon code to the cart.
+   *
+   * ## The mutation reply is never believed
+   *
+   * Not merely "not ingested" - not believed. `apply_coupon` answers a different shape
+   * from `get_cart`, and there is a **verified backend defect**: applying a coupon to
+   * an empty cart returns `"Coupon applied successfully"` while the stored
+   * `coupon_code` remains `null`. A client that concluded "applied" from a 200 would
+   * show a coupon that does not exist. So the applied state comes from the canonical
+   * read and only from there, which makes that defect harmless here.
+   *
+   * ## No pricing is computed
+   *
+   * The buyer's code goes out, a whole cart comes back. Discounts, taxes and totals are
+   * the server's - see {@link couponDiscount}.
+   *
+   * ## Definite refusal vs uncertain outcome
+   *
+   * A YOB error envelope means the endpoint received the request and refused it:
+   * `coupon_invalid`, `coupon_expired`, `coupon_minimum_not_met` and the rest. Nothing
+   * changed, so the cart is left alone and no re-read is issued.
+   *
+   * A transport failure or a 5xx leaves it genuinely open - the coupon may have been
+   * applied and the answer lost. The recovery is a `get_cart`, **never a second
+   * apply**: the read tells us what is actually on the cart, and repeating the mutation
+   * would be guessing with the buyer's money.
+   */
+  applyCoupon(code: string): Observable<CartPayloadDto | never> {
+    const trimmed = code.trim();
+
+    // The server rejects a blank code with `coupon_code_required`; asking it to say so
+    // is a pointless round trip and would flash an error the buyer cannot act on.
+    if (trimmed === '' || this.couponPendingSignal() !== null) {
+      return EMPTY;
+    }
+
+    return this.couponMutation('apply', () => this.api.applyCoupon(trimmed));
+  }
+
+  /**
+   * Remove the cart's coupon.
+   *
+   * Same rules as {@link applyCoupon}: canonical read decides, definite refusals are
+   * shown as-is, uncertain outcomes recover by reading rather than repeating. Removal
+   * is never assumed - the coupon row disappears because the server said so.
+   */
+  removeCoupon(): Observable<CartPayloadDto | never> {
+    if (this.couponPendingSignal() !== null) {
+      return EMPTY;
+    }
+
+    return this.couponMutation('remove', () => this.api.removeCoupon());
+  }
+
+  /**
+   * The shared shape of both coupon mutations.
+   *
+   * One guard covers both actions, not one per action: apply and remove write the same
+   * single `Cart.coupon_code` field, so letting them overlap would race two `get_cart`
+   * reads and adopt whichever landed last.
+   */
+  private couponMutation(
+    action: CouponAction,
+    mutate: () => Observable<unknown>,
+  ): Observable<CartPayloadDto | never> {
+    this.couponPendingSignal.set(action);
+    this.couponErrorSignal.set(null);
+    this.couponUnconfirmedSignal.set(null);
+    this.removedSignal.set(false);
+
+    return mutate().pipe(
+      // Discarded on purpose - see applyCoupon. There is no retry operator in this
+      // path, and a test pins that.
+      switchMap(() => this.api.getCart()),
+      tap((payload) => this.ingest(payload)),
+      catchError((failure: unknown) => {
+        const error = normalizeYobFailure(failure);
+
+        if (!isUncertainOutcome(error)) {
+          this.couponErrorSignal.set(error);
+          return EMPTY;
+        }
+
+        return this.recoverAfterUncertainCoupon();
+      }),
+      finalize(() => this.couponPendingSignal.set(null)),
+    );
+  }
+
+  /**
+   * Re-read the cart after a coupon mutation whose outcome we cannot determine.
+   *
+   * A read, so repeating it is safe - which is exactly why the recovery is a `get_cart`
+   * and never another `apply_coupon`.
+   */
+  private recoverAfterUncertainCoupon(): Observable<CartPayloadDto | never> {
+    return this.api.getCart().pipe(
+      tap((payload) => {
+        this.ingest(payload);
+        this.couponUnconfirmedSignal.set('refreshed');
+      }),
+      catchError(() => {
+        this.couponUnconfirmedSignal.set('unknown');
+        return EMPTY;
+      }),
+    );
+  }
+
+  /** Discard a coupon failure once the buyer has been given a way forward. */
+  clearCouponError(): void {
+    this.couponErrorSignal.set(null);
+    this.couponUnconfirmedSignal.set(null);
   }
 
   /** Replace everything with what the server just said. */

@@ -170,10 +170,12 @@ describe('mockApiInterceptor', () => {
 
     it('fails loudly for an RPC method with no handler', () => {
       let error: YobApiError | undefined;
-      // Deliberately an endpoint no phase has mocked yet. Coupons are unimplemented;
-      // orders used to sit here until Phase 14 mocked them.
+      // Deliberately a method that is not part of the storefront contract at all.
+      // This slot held orders until Phase 14 mocked them and coupons until Phase 16,
+      // each time turning a real assertion into a 403 - so it is no longer an
+      // unmocked REAL endpoint, which can always be implemented out from under it.
       api
-        .get('yob_storefront.api.cart.apply_coupon')
+        .get('yob_storefront.api.cart.not_a_real_endpoint')
         .subscribe({ error: (e: YobApiError) => (error = e) });
 
       expect(error?.httpStatus).toBe(501);
