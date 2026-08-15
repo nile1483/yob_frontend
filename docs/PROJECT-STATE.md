@@ -128,6 +128,67 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## RELEASE READINESS (Phase 20, 2026-08-15)
+
+Review only. **No release blockers were found, and no code was changed.**
+
+### READY
+
+| Area | Evidence |
+| --- | --- |
+| Authentication & session | login, restore, logout, CSRF, guest 403, safe `returnUrl`; no `sid`/token in web storage |
+| Catalog baseline | routes, images, no overflow at any viewport (density deferred) |
+| Item detail | contract, quantity-to-add semantics, add-to-cart |
+| Cart | DELTA add, non-idempotent, display-only quantity, no auto-retry |
+| Coupon | `code` field, canonicalized via `get_cart`, `coupon_discount` distinct |
+| Checkout | setter to `get_cart`, backend-owned `is_shippable`, 200 and 201 both accepted |
+| Payment | public route, no session dependency, token never persisted, server-owned HMAC |
+| Orders | immutable snapshot addresses, backend currency, no Address master reads |
+| Account | presence-based partial updates, explicit clears, 409 in-use, no delete retry |
+| Responsive & a11y | 390/768/1440: no overflow, one `h1`, ordered headings, labelled inputs, named buttons, visible focus, no traps |
+
+Gate: unit **610/610**, Playwright **831/831** (3 viewports), typecheck clean, production /
+development / mock builds clean, production purity clean, live smoke **45/45** read-only
+and **64/64** with the disposable account write cycle. Bench verified clean afterwards.
+
+### Verified security properties
+
+- `/payment/:token` reachable with **no session**: no cookies, empty `localStorage` and
+  `sessionStorage`, token absent from the DOM, no traceback / `_server_messages` /
+  Desk URL / `key_secret` in rendered output.
+- Every secure route (`/catalog`, `/cart`, `/checkout`, `/orders`, `/account`) redirects a
+  guest to sign-in; `/payment` and `/terms` stay public; unknown routes reach not-found.
+- `X-YOB-Original-Host` appears **nowhere** in `src/` or `proxy.conf.json` - it remains the
+  edge's to assert.
+- No hardcoded development hostnames in shipped code; production `methodBasePath` is
+  relative and the production environment file imports nothing from `src/mock-api`.
+- Secret scan across all tracked files: no keys, tokens, private keys, real provider IDs
+  or customer PII. Mock credentials use RFC 2606 `.invalid`; the Razorpay value is a
+  fabricated **publishable** key (`rzp_test_EXAMPLE0001`).
+
+### Runtime measurements (real backend, browser)
+
+One RPC per navigation, **zero duplicates**, and no cart read on navigations that do not
+need one. One full page load for the whole journey - navigation is client-side
+throughout. No page errors, no broken images, no unexpected failed requests. The single
+console error at boot is the guest `get_session_context` 403, which is the documented
+session-restore probe.
+
+### KNOWN NON-BLOCKING
+
+| Item | Class | Note |
+| --- | --- | --- |
+| Full-resolution originals on small cards | BACKLOG | a 1200x1800 JPEG into a 171px mobile card. Needs backend thumbnails or an `IMAGE_LOADER`; markup is already shaped for it |
+| Catalog untested at realistic volume | BACKLOG | density, pagination and merchandising deliberately deferred until representative data exists |
+| Deferred independent-line cart redesign | BACKLOG | recorded separately; current contract is one row per `item_code` |
+| `<app-secure-nav>` rendered twice | BACKLOG | once per breakpoint, so `aria-current` appears twice in the **DOM**. The second is under a `display:none` ancestor and is therefore absent from the accessibility tree - DOM duplication, not an a11y defect |
+| `data-testid` ships to production | ACCEPTED | inert attributes, deliberately retained so production smoke tests can address elements |
+| `application_access_denied` wording | ACCEPTED | an Origin rejection renders as "This account cannot access this store", which names the account rather than the origin. Safe and non-leaking; only reachable from a wrong-origin host |
+
+### Branch state
+
+
+
 ## CONFIRMED - Transactional storefront polish (Phase 19, 2026-08-15)
 
 A refinement pass over everything except Catalog, which was deliberately left alone: the
@@ -1049,6 +1110,7 @@ until the backend ships it.
 | Frontend Phase 17 - Storefront UX & visual design | **PASS** |
 | Frontend Phase 18 - Product & category image standardization | **PASS** |
 | Frontend Phase 19 - Transactional storefront polish | **PASS** |
+| Frontend Phase 20 - Release readiness review | **READY WITH NON-BLOCKING BACKLOG** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |
