@@ -139,8 +139,14 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
         </app-empty-state>
       </div>
     } @else if (store.cart(); as cart) {
+      <!-- Three regions rather than two columns, because the *reading order* differs
+           from the visual arrangement. Stacked, a buyer must see what they are paying
+           for before the button that commits them: selections, then the summary, then
+           the action. Side by side, the summary belongs beside the selections and the
+           action below them. Explicit row/column placement gives both from one DOM
+           order, with no duplicated markup and nothing hidden per breakpoint. -->
       <div class="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div class="flex flex-col gap-8">
+        <div class="flex flex-col gap-8 lg:col-start-1 lg:row-start-1">
           <!-- ------------------------------------------------------ contact -->
           <section data-testid="checkout-contact-section">
             @if (contacts.isLoading()) {
@@ -312,7 +318,18 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
             </section>
           }
 
-          <!-- --------------------------------------- readiness and proceed -->
+        </div>
+
+        <!-- Sticky on desktop: the totals stay in view while a long address list is
+             worked through, which is the whole reason for a second column. -->
+        <div class="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <div class="lg:sticky lg:top-24">
+            <app-checkout-summary [cart]="cart" />
+          </div>
+        </div>
+
+        <!-- ----------------------------------------- readiness and proceed -->
+        <div class="flex flex-col gap-6 lg:col-start-1 lg:row-start-2">
           <section aria-live="polite" data-testid="checkout-readiness">
             @if (isReady()) {
               <app-alert tone="success">
@@ -346,8 +363,6 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
             </button>
           </div>
         </div>
-
-        <app-checkout-summary [cart]="cart" />
       </div>
     }
   `,

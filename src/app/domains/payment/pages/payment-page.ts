@@ -60,7 +60,9 @@ import {
   selector: 'app-payment-page',
   imports: [PageHeader, Alert, Button, PaymentMethodList, PaymentResult, PaymentSummary, RouterLink, Spinner],
   template: `
-    <div class="mx-auto w-full max-w-2xl" data-testid="payment-page">
+    <!-- Left-aligned in the shared container, like every other page, so the brand in
+         the header sits directly above the content rather than off to one side. -->
+    <div class="w-full max-w-2xl" data-testid="payment-page">
       <app-page-header heading="Payment" i18n-heading="@@payment.heading" />
 
       @if (outcome(); as done) {

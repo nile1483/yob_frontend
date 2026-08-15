@@ -201,7 +201,12 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
                       <button yob-button variant="secondary" size="sm" type="button"
                               (click)="openEditAddress(address)"
                               data-testid="address-edit" i18n="@@account.edit">Edit</button>
-                      <button yob-button variant="destructive" size="sm" type="button"
+                      <!-- Quiet until asked for. Deleting a saved address is a normal
+                           thing to want occasionally, and an outlined red control on
+                           every row made the page look like a list of hazards. The
+                           destructive weight appears on the confirmation, where the
+                           decision is actually made. -->
+                      <button yob-button variant="quiet-destructive" size="sm" type="button"
                               (click)="openConfirm('address', address.name)"
                               [attr.data-delete-for]="address.name"
                               data-testid="address-delete" i18n="@@account.delete">Delete</button>
@@ -307,7 +312,7 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
                       <button yob-button variant="secondary" size="sm" type="button"
                               (click)="openEditContact(contact)"
                               data-testid="contact-edit" i18n="@@account.edit">Edit</button>
-                      <button yob-button variant="destructive" size="sm" type="button"
+                      <button yob-button variant="quiet-destructive" size="sm" type="button"
                               (click)="openConfirm('contact', contact.name)"
                               [attr.data-delete-for]="contact.name"
                               data-testid="contact-delete" i18n="@@account.delete">Delete</button>

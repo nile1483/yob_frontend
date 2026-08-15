@@ -3,7 +3,12 @@ import { Component, booleanAttribute, computed, input } from '@angular/core';
 import { Spinner } from '../spinner/spinner';
 
 /** How much weight a button carries on the page. */
-export type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'quiet';
+export type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'destructive'
+  | 'quiet'
+  | 'quiet-destructive';
 
 /** Physical size. `sm` is for actions that sit inside a row rather than under a form. */
 export type ButtonSize = 'md' | 'sm';
@@ -120,4 +125,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   destructive: `border border-red-300 bg-white text-red-700
                 hover:border-red-400 hover:bg-red-50 disabled:hover:bg-white`,
   quiet: 'text-slate-700 underline underline-offset-4 hover:text-slate-900',
+  // Destructive, but weightless: the colour still says what the action does while the
+  // control itself stops competing with the ordinary actions beside it.
+  'quiet-destructive': 'text-red-700 underline underline-offset-4 hover:text-red-800',
 };

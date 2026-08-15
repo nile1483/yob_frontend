@@ -19,15 +19,21 @@ import type { CartLineDto } from '../contracts/cart.types';
   imports: [Button, CurrencyPipe, Media, RouterLink],
   host: { class: 'contents' },
   template: `
+    <!-- Image beside the text at every width. Fully stacked, a phone gave each line
+         about 230px and left the thumbnail orphaned on a row of its own with dead space
+         beside it; only the price and Remove need to drop below. -->
     <article
-      class="flex flex-col gap-3 border-b border-slate-200 py-4 sm:flex-row sm:items-start sm:gap-4"
+      class="flex gap-3 border-b border-slate-200 py-4 sm:gap-4"
       data-testid="cart-line"
     >
+      <!-- Product-shaped, not square: a 2:3 photograph contained in a square box shrank
+           to a narrow strip with grey either side, and the thumbnail stopped resembling
+           the card the buyer added it from. -->
       <app-media
-        class="w-20 shrink-0 overflow-hidden rounded-md"
+        class="w-16 shrink-0 overflow-hidden rounded-md sm:w-20"
         [src]="line().image"
         alt=""
-        ratio="thumb"
+        ratio="product"
         sizes=""
         testId="cart-line-media"
       />
@@ -49,8 +55,8 @@ import type { CartLineDto } from '../contracts/cart.types';
         <p class="mt-1 text-sm text-slate-600">
           <span data-testid="cart-line-quantity">{{ line().quantity }}</span>
           {{ line().uom }}
-          <span aria-hidden="true">&times;</span>
           <span class="sr-only" i18n="@@cart.line.at">at</span>
+          <span aria-hidden="true">&times;</span>
           <span data-testid="cart-line-rate">{{ line().rate | currency: currency() }}</span>
         </p>
 
@@ -65,7 +71,7 @@ import type { CartLineDto } from '../contracts/cart.types';
         }
       </div>
 
-      <div class="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+      <div class="flex shrink-0 flex-col items-end gap-2">
         <p class="font-semibold text-slate-900" data-testid="cart-line-amount">
           {{ line().amount | currency: currency() }}
         </p>
@@ -78,10 +84,11 @@ import type { CartLineDto } from '../contracts/cart.types';
 
         <!-- Quiet, and deliberately not the same weight as Proceed to checkout. Remove
              is a recovery action a buyer occasionally wants, not something the page
-             should be steering them towards. -->
+             should be steering them towards. Text rather than an outlined button also
+             gives a long product name back about 25px of a 390px line. -->
         <button
           yob-button
-          variant="destructive"
+          variant="quiet-destructive"
           size="sm"
           type="button"
           [loading]="removing()"

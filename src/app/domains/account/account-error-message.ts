@@ -28,22 +28,28 @@ export interface AccountFailure {
  *
  * A referenced record cannot be deleted, and the server detaches nothing. That is the
  * system working. Wording it like a failure - or offering a retry - would tell the
- * buyer to keep pressing a button that can never succeed. The referring document is
- * deliberately not named: a buyer does not need to know which internal record holds
- * the link, and naming it would leak order and cart identifiers into the account page.
+ * buyer to keep pressing a button that can never succeed.
+ *
+ * So it is phrased as information with a way forward ("you can edit it instead") rather
+ * than as a refusal. It is shown in the page's ordinary notice tone, never as an error:
+ * nothing went wrong, and a red banner would suggest otherwise.
+ *
+ * The referring document is deliberately not named: a buyer does not need to know which
+ * internal record holds the link, and naming it would leak order and cart identifiers
+ * into the account page.
  */
 export function accountFailure(error: YobApiError): AccountFailure {
   switch (error.code) {
     case 'address_in_use':
       return {
         kind: 'refused',
-        message: $localize`:@@account.error.addressInUse:This address is currently in use and can't be deleted.`,
+        message: $localize`:@@account.error.addressInUse:This address is used by an existing order, so it needs to stay on your account. You can edit it instead.`,
       };
 
     case 'contact_in_use':
       return {
         kind: 'refused',
-        message: $localize`:@@account.error.contactInUse:This contact is currently in use and can't be deleted.`,
+        message: $localize`:@@account.error.contactInUse:This contact is used by an existing order, so it needs to stay on your account. You can edit it instead.`,
       };
 
     case 'address_not_found':

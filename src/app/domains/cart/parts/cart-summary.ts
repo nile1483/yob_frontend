@@ -24,7 +24,7 @@ import type { CartDocDto } from '../contracts/cart.types';
         Order summary
       </h2>
 
-      <dl class="mt-3 flex flex-col gap-2 text-sm">
+      <dl class="mt-3 flex flex-col gap-2 text-sm [&_dd]:tabular-nums">
         <div class="flex justify-between gap-4">
           <dt i18n="@@cart.summary.quantity">Total quantity</dt>
           <dd data-testid="cart-total-quantity">{{ cart().total_quantity }}</dd>
@@ -66,11 +66,11 @@ import type { CartDocDto } from '../contracts/cart.types';
           </div>
         }
 
-        <div
-          class="mt-2 flex justify-between gap-4 border-t border-slate-200 pt-3 text-base font-semibold"
-        >
-          <dt i18n="@@cart.summary.grandTotal">Total</dt>
-          <dd data-testid="cart-grand-total">
+        <!-- The figure the buyer is actually agreeing to, and the strongest thing in
+             the panel. Tabular figures so it lines up with the rows above it. -->
+        <div class="mt-2 flex items-baseline justify-between gap-4 border-t border-slate-200 pt-3">
+          <dt class="text-base font-semibold" i18n="@@cart.summary.grandTotal">Total</dt>
+          <dd class="text-lg font-semibold tabular-nums" data-testid="cart-grand-total">
             {{ cart().grand_total | currency: cart().currency }}
           </dd>
         </div>

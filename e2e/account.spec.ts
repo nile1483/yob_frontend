@@ -183,7 +183,7 @@ test.describe('records that are in use', () => {
     await page.getByTestId('address-delete').first().click();
     await page.getByTestId('address-confirm-confirm').click();
 
-    await expect(page.getByTestId('account-notice')).toContainText("currently in use");
+    await expect(page.getByTestId('account-notice')).toContainText('used by an existing order');
     // The record survives, and nothing invites another attempt at something that can
     // never succeed.
     await expect(page.getByTestId('address-item')).toHaveCount(2);
@@ -195,7 +195,7 @@ test.describe('records that are in use', () => {
     await page.getByTestId('contact-delete').first().click();
     await page.getByTestId('contact-confirm-confirm').click();
 
-    await expect(page.getByTestId('account-notice')).toContainText('currently in use');
+    await expect(page.getByTestId('account-notice')).toContainText('used by an existing order');
     await expect(page.getByTestId('contact-item')).toHaveCount(2);
     await expect(page.locator('body')).not.toContainText('contact_in_use');
   });

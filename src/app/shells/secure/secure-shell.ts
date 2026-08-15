@@ -24,6 +24,14 @@ import { SecureNav } from './parts/secure-nav';
  * on the brand row and navigation takes a full-width scrollable row beneath it, so the
  * header is two predictable rows rather than three ragged wrapped ones.
  *
+ * ## Sticky from `sm` up only (Phase 19)
+ *
+ * Those two rows are about 110px, which is 13% of a 390x844 phone - permanently, on
+ * every page, including the ones where a buyer is reading a long address list or a
+ * total. On a phone the header scrolls away and the browser's own back gesture is the
+ * navigation; on wider screens there is room to spare and persistent navigation is
+ * worth more than the pixels.
+ *
  * ## Sign out
  *
  * `SessionStore.signOut()` existed and was tested from Phase 3 but had no way in from
@@ -38,7 +46,7 @@ import { SecureNav } from './parts/secure-nav';
   imports: [RouterLink, RouterOutlet, SecureNav],
   template: `
     <div data-testid="secure-shell" class="flex min-h-dvh flex-col bg-white text-slate-900">
-      <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <header class="z-20 border-b border-slate-200 bg-white/95 backdrop-blur sm:sticky sm:top-0">
         <div [class]="container">
           <div class="flex min-h-16 flex-wrap items-center gap-x-8 gap-y-2 py-2">
             <a routerLink="/catalog" class="text-lg font-semibold tracking-tight">Your Order Book</a>

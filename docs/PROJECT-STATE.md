@@ -128,6 +128,84 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Transactional storefront polish (Phase 19, 2026-08-15)
+
+A refinement pass over everything except Catalog, which was deliberately left alone: the
+development catalog is too small and too industry-specific to justify decisions about
+grid density, hierarchy or merchandising. Catalog received no changes in this phase.
+
+### The finding that mattered: checkout asked for commitment before disclosure
+
+Stacked - which is **both mobile and tablet**, since the two-column layout only began at
+1024px - checkout rendered in this order:
+
+```text
+Contact -> Billing -> Shipping -> [Proceed to payment] -> Items -> Total
+```
+
+The buyer was asked to commit before seeing the amount. Fixed by splitting the page into
+three grid regions with explicit row/column placement, so one DOM order yields both
+arrangements: stacked it reads selections -> summary -> action, and side by side the
+summary sits in its own column and is sticky. No duplicated markup, nothing hidden per
+breakpoint, and no change to any setter or `get_cart` behaviour.
+
+### Sparse pages: cap the measure, never invent content
+
+Order Detail stretched a single line item across 1264px, leaving a product name most of a
+screen from its price and every totals label a screenful from its figure. The article is
+now capped at `max-w-3xl`, totals and payment figures sit in a narrow right-aligned block
+with tabular figures, and the who/where grid flows to three columns so the third cell
+stops wrapping alone and leaving a hole.
+
+The cap is generous enough that a twenty-line order still uses it well. Padding the page
+with invented content was never an option.
+
+### Header stickiness is a phone-viewport decision
+
+Two header rows are about 110px - 13% of a 390x844 phone, permanently, on every page. The
+header is now sticky from `sm` up only. On a phone it scrolls away and the browser's own
+back gesture is the navigation; wider screens have room to spare.
+
+### Destructive actions recede until requested
+
+`Remove` in the cart and `Delete` in the account were outlined red buttons, so a list of
+saved addresses read as a list of hazards. A new `quiet-destructive` variant keeps the
+colour - which is what says *what the action does* - and drops the weight. The full
+destructive treatment now appears only on the confirmation, where the decision is made.
+It also gave a long product name back about 25px on a 390px cart line.
+
+### `*_in_use` reads as information, not alarm
+
+Was "This address is currently in use and can't be deleted." Now "This address is used by
+an existing order, so it needs to stay on your account. You can edit it instead." Shown
+in the ordinary notice tone, never as an error: nothing went wrong. The referring
+document is still deliberately unnamed.
+
+### Smaller corrections
+
+- Cart thumbnails use the **product** ratio; a 2:3 photograph contained in a square box
+  shrank to a strip and stopped resembling the card it was added from.
+- Cart lines keep the image beside the text at every width. Fully stacked, a phone gave
+  each line ~230px and orphaned the thumbnail on a row of its own.
+- `12 Nos x₹11.25` - a zero-width `sr-only` span sat between the multiplication sign and
+  the rate and contributed no whitespace. Reordered.
+- Payment page left-aligned in the shared container, so the brand sits above the content
+  rather than off to one side.
+- `netbanking` is capitalized for display only; the stored value is untouched.
+- Order Detail badges now use the shared `Badge` primitive with the same tone mapping as
+  the orders list, so one order cannot read two ways.
+- Grand totals in cart, checkout and order detail share one treatment and tabular figures.
+
+### Deliberately left unchanged
+
+- **Catalog**, per the phase brief.
+- **Notice persistence.** Notices clear when the next action starts and on navigation.
+  Auto-dismiss timers were not added: a total or a refusal a buyer has not read yet
+  should not vanish on a timer, and no toast library is warranted.
+- **Totals heading offset** on Order Detail - the section heading sits left while the
+  figures align right. Conventional for an invoice, and the alternative pulled the
+  figures away from the edge they should align to.
+
 ## CONFIRMED - Product & category image standardization (Phase 18, 2026-08-15)
 
 The frontend owns the **box and the behaviour**; the business owns the **picture**. YOB is
@@ -970,6 +1048,7 @@ until the backend ships it.
 | Frontend Phase 15 - Account address & contact management | **PASS** |
 | Frontend Phase 17 - Storefront UX & visual design | **PASS** |
 | Frontend Phase 18 - Product & category image standardization | **PASS** |
+| Frontend Phase 19 - Transactional storefront polish | **PASS** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

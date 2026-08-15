@@ -545,7 +545,9 @@ describe('Account', () => {
       await view.click('address-confirm-confirm');
       await view.settle();
 
-      expect(view.text()).toContain("currently in use and can't be deleted");
+      // Phrased as information with a way forward, not as a refusal.
+      expect(view.text()).toContain('used by an existing order');
+      expect(view.text()).toContain('You can edit it instead');
       // Still listed, and nothing suggests a server fault or a retry.
       expect(view.all('address-item')).toHaveLength(2);
       expect(view.text()).not.toContain('Please try again');
@@ -648,7 +650,9 @@ describe('Account', () => {
       await view.click('contact-confirm-confirm');
       await view.settle();
 
-      expect(view.text()).toContain("currently in use and can't be deleted");
+      // Phrased as information with a way forward, not as a refusal.
+      expect(view.text()).toContain('used by an existing order');
+      expect(view.text()).toContain('You can edit it instead');
       expect(view.all('contact-item')).toHaveLength(2);
     });
 

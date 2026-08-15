@@ -292,6 +292,51 @@ test.describe('action hierarchy', () => {
   });
 });
 
+test.describe('transactional reading order', () => {
+  test('the summary is above the primary action when stacked', async ({ page }, testInfo) => {
+    await signInAsMockBuyer(page);
+    test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
+    await page.getByTestId('item-card').first().click();
+    await page.getByTestId('add-to-cart').click();
+    await nav(page, 'Cart').click();
+    await page.getByTestId('cart-checkout-link').click();
+    await expect(page).toHaveURL('/checkout');
+
+    const summary = await page.getByTestId('cart-grand-total').boundingBox();
+    const proceed = await page.getByTestId('checkout-proceed').boundingBox();
+
+    const stacked = (page.viewportSize()?.width ?? 0) < 1024;
+    if (stacked) {
+      // A buyer must be able to see what they are paying before the button that
+      // commits them to it. Stacked, the summary used to render *after* the CTA.
+      expect(
+        summary!.y,
+        `summary at ${summary!.y} is below the CTA at ${proceed!.y} on ${testInfo.project.name}`,
+      ).toBeLessThan(proceed!.y);
+    } else {
+      // Side by side the arrangement is spatial rather than sequential: the summary
+      // sits in its own column, level with the selections.
+      expect(summary!.x).toBeGreaterThan(proceed!.x);
+    }
+  });
+
+  test('the mobile header does not hold a third of the screen', async ({ page }) => {
+    await signInAsMockBuyer(page);
+
+    const header = await page.getByRole('banner').boundingBox();
+    const viewport = page.viewportSize()!;
+    expect(header!.height).toBeLessThan(viewport.height * 0.2);
+
+    // On a phone it scrolls away entirely rather than following the buyer down a long
+    // address list; there is room to spare on wider screens, where it stays put.
+    await page.evaluate(() => window.scrollTo(0, 400));
+    const position = await page
+      .getByRole('banner')
+      .evaluate((el) => getComputedStyle(el).position);
+    expect(position).toBe(viewport.width < 640 ? 'static' : 'sticky');
+  });
+});
+
 test.describe('order status is legible', () => {
   test('finished and stopped orders are distinguishable', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: '/orders' });
