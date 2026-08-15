@@ -128,6 +128,109 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Reusable address form and location data (Phase 21, 2026-08-15)
+
+### What was already true
+
+The phase brief assumed the address form was duplicated across Account and Checkout. It
+was not: `AddressForm` has been a single shared, API-free component since Phase 15, used
+by both, emitting values while the page owns the request. Address *display* derivation is
+likewise already shared through `toAddressChoice`.
+
+So the real work was the parts that genuinely did not exist: a searchable select, static
+geography, an India default, and country/state interaction.
+
+### `SearchSelect` - generic, and Signal Forms native
+
+`design/search-select` knows nothing about addresses; its options are
+`{value, label?, hint?}`.
+
+It implements Angular's **`FormValueControl<string>`**, not `ControlValueAccessor`. The
+brief suggested the latter, but `ControlValueAccessor` is the Reactive Forms integration
+point and **this project has no Reactive Forms** - every form is a Signal Form bound with
+`[formField]`. `FormValueControl` is the equivalent contract in that world: a component
+exposing a `value` model plus optional `disabled` / `invalid` / `required` / `name`
+inputs the `Field` directive fills in. It therefore binds exactly like the native inputs
+beside it, with no adapter and no second forms API in the bundle. It also works
+standalone via `[(value)]`.
+
+Combobox behaviour: filter by label *and* hint, arrow/Home/End navigation, Enter to
+commit, Escape to close and restore focus, click-outside to close, `aria-expanded`,
+`role="listbox"`, `aria-selected`, and `aria-activedescendant` so a screen reader follows
+the highlight while focus stays in the search box. **Highlighting never commits** - only
+Enter or a click - so arrowing past an option cannot silently rewrite a stored address.
+
+### Static geography, generated from the bench
+
+`foundation/locations/location.data.ts` is **generated**, not hand-written or taken from a
+generic internet dataset:
+
+| Data | Source |
+| --- | --- |
+| 250 country names | `frappe/geo/country_info.json` |
+| 36 Indian states/UTs + GST numbers | `india_compliance/gst_india/constants/__init__.py` |
+
+That provenance is the point. `country` is a **Link to the Country doctype** - a name that
+does not match a Country record is rejected - and `state` is validated by India
+Compliance. Taking names from anywhere else risks values that look right and are refused.
+It also gets the cases a generic dataset gets wrong: `Dadra and Nagar Haveli and Daman and
+Diu` (merged, 26) and `Ladakh` (38). `Other Countries` / `Other Territory` are GST filing
+artefacts and are excluded from the picker.
+
+Regenerate with `node scripts/generate-locations.mjs` after a bench upgrade. **No runtime
+request, no geography API, no npm dependency.** The data compiles into a lazy chunk: the
+initial bundle grew ~1 kB.
+
+Saved values are the canonical names (`India`, `Gujarat`) - never `IN` / `GJ`. The GST
+state number is carried as **metadata only**; this phase sends no `gst_state`,
+`gst_state_number` or `gst_category`.
+
+### India default, and the rule that protects stored addresses
+
+A **new** address starts on India, overridable via `AddressFormConfig.defaultCountry`.
+No state is preselected by default - pre-selecting one a buyer did not choose is how
+addresses get filed in the wrong place.
+
+**Editing never applies the default.** The stored record wins outright, and a first-run
+guard stops the country-change effect firing during seeding - without it, opening a
+Kenyan address for editing would have wiped its state.
+
+Changing country clears a state that cannot survive: it is kept only when the new country
+has a controlled list *and* the value is in it. Where the new country has no list nothing
+here can validate the value, but it was chosen for a different country, so it goes. Other
+fields are untouched.
+
+### Partial updates - unchanged and now directly tested
+
+The form still emits **values**, and the page still diffs them with `changedFields`. That
+division is what makes one component serve create and edit without a `mode` flag, and it
+is what protects presence-based updates. Newly proven by test at the form level: untouched
+fields are omitted, a deliberately cleared field emits `""`, a falsy-but-present `"0"`
+postal code is not mistaken for an omission, and an unchanged form produces no patch.
+
+### Deliberately not built
+
+- **`AddressSelectorComponent`** - excluded by the brief, and correctly: selection is
+  contextual.
+- **`AddressCard`** - the brief allows skipping it if displays are materially different.
+  They are: Account renders a list row with Edit/Delete, Checkout renders a radio option.
+  The shared part - deciding which fields identify an address - is already extracted into
+  `toAddressChoice`. Wrapping two different containers would add conditionals, not reuse.
+- **`mode` / `context` / `isBilling` / `showX` inputs** - the form behaves identically
+  everywhere, and create-versus-edit is already expressed by whether `initial` is passed.
+  `AddressFormConfig` carries only wording and new-address defaults.
+- **`phone` / `email` fields** - `get_addresses` still does not return them (the Phase 15
+  gap). Rendering them would show blanks over data the frontend cannot see and clear it on
+  save.
+- **`is_primary_address` / `is_shipping_address` toggles** - default-address management,
+  explicitly out of scope since Phase 19.
+
+### Known limitation
+
+Only India ships subdivisions. Every other country falls back to a free-text State field,
+which is what the backend accepts there. This is a supported fallback, not a gap - a
+picker offering nothing would be a broken control.
+
 ## RELEASE READINESS (Phase 20, 2026-08-15)
 
 Review only. **No release blockers were found, and no code was changed.**
@@ -1111,6 +1214,7 @@ until the backend ships it.
 | Frontend Phase 18 - Product & category image standardization | **PASS** |
 | Frontend Phase 19 - Transactional storefront polish | **PASS** |
 | Frontend Phase 20 - Release readiness review | **READY WITH NON-BLOCKING BACKLOG** |
+| Frontend Phase 21 - Reusable address form, search select, static geography | **PASS** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

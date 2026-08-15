@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
+import { selectSearchOption } from './support/forms';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
 
 /**
@@ -57,7 +58,8 @@ test.describe('addresses', () => {
     await page.getByTestId('address-title').fill('Warehouse');
     await page.getByTestId('address-line1').fill('12 Dock Road');
     await page.getByTestId('address-city').fill('Kochi');
-    await page.getByTestId('address-country').fill('India');
+    // Country is not typed: a new address already starts on India.
+    await expect(page.getByTestId('address-country')).toContainText('India');
     await page.getByTestId('address-form-submit').click();
 
     await expect(page.getByTestId('address-item')).toHaveCount(3);
@@ -98,6 +100,47 @@ test.describe('addresses', () => {
 
     await expect(page.getByTestId('address-form')).toBeHidden();
     await expect(page.getByTestId('address-item').first()).toHaveText(before ?? '');
+  });
+
+  test('a new address starts on India and offers its states', async ({ page }) => {
+    await page.getByTestId('account-add-address').click();
+
+    await expect(page.getByTestId('address-country')).toContainText('India');
+
+    await page.getByTestId('address-state').click();
+    await page.getByTestId('address-state-search').fill('guj');
+    await expect(page.getByTestId('address-state-listbox').getByRole('option')).toHaveCount(1);
+    await page.getByTestId('address-state-listbox').getByRole('option').click();
+
+    await expect(page.getByTestId('address-state')).toContainText('Gujarat');
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('the state picker is usable from the keyboard', async ({ page }) => {
+    await page.getByTestId('account-add-address').click();
+
+    await page.getByTestId('address-state').focus();
+    await page.keyboard.press('Enter');
+    // Focus moves into the search box so typing filters immediately.
+    await expect(page.getByTestId('address-state-search')).toBeFocused();
+
+    await page.keyboard.type('ker');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByTestId('address-state')).toContainText('Kerala');
+    await expect(page.getByTestId('address-state-listbox')).toBeHidden();
+  });
+
+  test('changing country away from India drops the Indian state', async ({ page }) => {
+    await page.getByTestId('address-edit').first().click();
+    await expect(page.getByTestId('address-state')).toContainText('Gujarat');
+
+    await selectSearchOption(page, 'address-country', 'Kenya');
+
+    // The state control becomes free text for a country with no bundled subdivisions,
+    // and the Indian value does not come with it.
+    await expect(page.getByTestId('address-state')).toHaveValue('');
   });
 
   test('deletes an address, but only after confirming', async ({ page }) => {
@@ -336,7 +379,6 @@ test.describe('layout', () => {
     await page.getByTestId('address-title').fill('Averyveryverylongunbrokenaddresstitlewithnospacesatallxxxxxxxxxxxx');
     await page.getByTestId('address-line1').fill('Unit-9876543210-Buildingnamewithoutanyspaces-Industrialestate');
     await page.getByTestId('address-city').fill('Ahmedabad');
-    await page.getByTestId('address-country').fill('India');
     await page.getByTestId('address-form-submit').click();
 
     await expect(page.getByTestId('address-item')).toHaveCount(3);

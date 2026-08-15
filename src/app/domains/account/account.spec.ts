@@ -300,7 +300,6 @@ describe('Account', () => {
       await view.fill('address-title', 'New Depot');
       await view.fill('address-line1', 'Shed 9');
       await view.fill('address-city', 'Pune');
-      await view.fill('address-country', 'India');
       await view.click('address-form-submit');
       await view.settle();
 
@@ -760,7 +759,6 @@ describe('Account', () => {
       await view.fill('address-title', 'Cartless');
       await view.fill('address-line1', 'Shed 1');
       await view.fill('address-city', 'Pune');
-      await view.fill('address-country', 'India');
       await view.click('address-form-submit');
       await view.settle();
 

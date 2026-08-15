@@ -310,7 +310,6 @@ describe('CheckoutPage', () => {
 
     fill(view.root, 'address-line1', 'Shed 7');
     fill(view.root, 'address-city', 'Pune');
-    fill(view.root, 'address-country', 'India');
     fill(view.root, 'address-title', 'New Depot');
     (view.testId('address-form-submit') as HTMLButtonElement).click();
     await view.settle();
@@ -333,7 +332,6 @@ describe('CheckoutPage', () => {
 
     fill(view.root, 'address-line1', 'Dock 2');
     fill(view.root, 'address-city', 'Surat');
-    fill(view.root, 'address-country', 'India');
     fill(view.root, 'address-title', 'Surat Dock');
     (view.testId('address-form-submit') as HTMLButtonElement).click();
     await view.settle();

@@ -265,7 +265,6 @@ test.describe('adding records', () => {
     await page.getByTestId('address-title').fill('Nagpur Depot');
     await page.getByTestId('address-line1').fill('Warehouse 12, MIDC');
     await page.getByTestId('address-city').fill('Nagpur');
-    await page.getByTestId('address-country').fill('India');
     await page.getByTestId('address-form-submit').click();
 
     await expect(page.getByTestId('address-form')).toHaveCount(0);
@@ -282,7 +281,6 @@ test.describe('adding records', () => {
     await page.getByTestId('address-title').fill('Surat Dock');
     await page.getByTestId('address-line1').fill('Dock 2');
     await page.getByTestId('address-city').fill('Surat');
-    await page.getByTestId('address-country').fill('India');
     await page.getByTestId('address-form-submit').click();
 
     await expect(page.getByTestId('address-form')).toHaveCount(0);
@@ -470,7 +468,6 @@ test.describe('layout', () => {
       .getByTestId('address-line1')
       .fill('Building 47B, Phase III Extension, Industrial Development Corporation Estate');
     await page.getByTestId('address-city').fill('Pimpri-Chinchwad');
-    await page.getByTestId('address-country').fill('India');
     await page.getByTestId('address-form-submit').click();
 
     await expect(page.getByTestId('address-form')).toHaveCount(0);

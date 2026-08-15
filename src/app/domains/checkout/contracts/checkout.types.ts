@@ -105,6 +105,36 @@ export interface AddressFormValues {
 }
 
 /** The same for a contact. */
+/**
+ * Presentation and defaults for {@link AddressForm}.
+ *
+ * One object rather than a row of boolean inputs. The form has exactly two things a
+ * caller legitimately varies - the words on it, and what a *new* address starts as - so
+ * that is all this carries. There is deliberately no `mode`, no `context` and no
+ * `isBilling`: the component behaves identically in every flow, and the difference
+ * between creating and editing is already expressed by whether `initial` is supplied.
+ */
+export interface AddressFormConfig {
+  /** Form heading. Defaults to wording that suits creating. */
+  readonly heading?: string;
+  /** Submit button label. Defaults to wording that suits creating. */
+  readonly submitLabel?: string;
+  /**
+   * Country a **new** address starts on. Defaults to India.
+   *
+   * Never applied when editing: an existing address keeps whatever country it was
+   * stored with, whatever this says.
+   */
+  readonly defaultCountry?: string;
+  /**
+   * Subdivision a **new** address starts on. Defaults to none.
+   *
+   * Deliberately unset by default - pre-selecting a state a buyer did not choose is how
+   * addresses end up filed in the wrong place.
+   */
+  readonly defaultState?: string | null;
+}
+
 export interface ContactFormValues {
   readonly first_name: string;
   readonly last_name: string;

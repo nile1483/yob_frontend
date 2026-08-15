@@ -19,6 +19,7 @@ import { normalizeYobFailure } from '../../../foundation/network/yob-api-error';
 import { toAddressChoice, toContactChoice } from '../../checkout/checkout.choices';
 import type {
   AddressDto,
+  AddressFormConfig,
   AddressFormValues,
   ContactDto,
   ContactFormValues,
@@ -124,8 +125,7 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
 
       @if (creatingAddress()) {
         <app-address-form
-          heading="New address"
-          i18n-heading="@@account.addresses.newHeading"
+          [config]="newAddressConfig"
           [pending]="saving()"
           [error]="formError()"
           [fieldErrors]="fieldErrors()"
@@ -166,10 +166,7 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
             <li class="p-4" data-testid="address-item">
               @if (editingAddressValues(address.name); as initial) {
                 <app-address-form
-                  heading="Edit address"
-                  i18n-heading="@@account.addresses.editHeading"
-                  submitLabel="Save changes"
-                  i18n-submitLabel="@@account.save"
+                  [config]="editAddressConfig"
                   [initial]="initial"
                   [pending]="saving()"
                   [error]="formError()"
@@ -332,6 +329,21 @@ export class AccountPage {
 
   protected readonly addresses = rxResource({ stream: () => this.api.getAddresses() });
   protected readonly contacts = rxResource({ stream: () => this.api.getContacts() });
+
+  /**
+   * Wording for the two address flows.
+   *
+   * Constants, not getters: the config is an input, and rebuilding the object on every
+   * change detection would re-seed the form's `linkedSignal` and discard what the buyer
+   * had typed - the defect Phase 15 hit with `initial`.
+   */
+  protected readonly newAddressConfig: AddressFormConfig = {
+    heading: $localize`:@@account.addresses.newHeading:New address`,
+  };
+  protected readonly editAddressConfig: AddressFormConfig = {
+    heading: $localize`:@@account.addresses.editHeading:Edit address`,
+    submitLabel: $localize`:@@account.save:Save changes`,
+  };
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);

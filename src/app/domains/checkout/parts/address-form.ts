@@ -1,10 +1,12 @@
-import { Component, computed, input, linkedSignal, output } from '@angular/core';
+import { Component, computed, effect, inject, input, linkedSignal, output, untracked } from '@angular/core';
 import { FormField, form, required, submit } from '@angular/forms/signals';
 
 import { Alert } from '../../../design/alert/alert';
 import { Button } from '../../../design/button/button';
 import { Field } from '../../../design/field/field';
-import type { AddressFormValues } from '../contracts/checkout.types';
+import { SearchSelect, type SearchSelectOption } from '../../../design/search-select/search-select';
+import { AddressLocationService } from '../../../foundation/locations/address-location.service';
+import type { AddressFormConfig, AddressFormValues } from '../contracts/checkout.types';
 
 const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-base sm:text-sm';
 
@@ -41,7 +43,7 @@ const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-
  */
 @Component({
   selector: 'app-address-form',
-  imports: [Alert, Button, Field, FormField],
+  imports: [Alert, Button, Field, FormField, SearchSelect],
   template: `
     <form
       class="mt-4 flex flex-col gap-4 rounded-md border border-slate-200 p-4"
@@ -106,13 +108,28 @@ const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-
         </app-field>
 
         <app-field label="State" i18n-label="@@checkout.address.state" [error]="stateError()">
-          <input
-            [formField]="addressForm.state"
-            type="text"
-            [class]="control"
-            autocomplete="address-level1"
-            data-testid="address-state"
-          />
+          <!-- A controlled list only where one exists. For a country with no bundled
+               subdivisions a picker would offer nothing, so the field stays free text -
+               which is what the backend accepts there anyway. -->
+          @if (hasSubdivisions()) {
+            <app-search-select
+              [formField]="addressForm.state"
+              [options]="stateOptions()"
+              placeholder="Select a state"
+              i18n-placeholder="@@checkout.address.state.placeholder"
+              ariaLabel="State"
+              i18n-ariaLabel="@@checkout.address.state"
+              testId="address-state"
+            />
+          } @else {
+            <input
+              [formField]="addressForm.state"
+              type="text"
+              [class]="control"
+              autocomplete="address-level1"
+              data-testid="address-state"
+            />
+          }
         </app-field>
 
         <app-field
@@ -136,12 +153,14 @@ const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-
           [required]="true"
           [error]="countryError()"
         >
-          <input
+          <app-search-select
             [formField]="addressForm.country"
-            type="text"
-            [class]="control"
-            autocomplete="country-name"
-            data-testid="address-country"
+            [options]="countryOptions()"
+            placeholder="Select a country"
+            i18n-placeholder="@@checkout.address.country.placeholder"
+            ariaLabel="Country"
+            i18n-ariaLabel="@@checkout.address.country"
+            testId="address-country"
           />
         </app-field>
       </div>
@@ -152,9 +171,8 @@ const CONTROL_CLASS = 'w-full rounded-md border border-slate-300 px-3 py-2 text-
           type="submit"
           [loading]="pending()"
           data-testid="address-form-submit"
-          i18n="@@checkout.address.form.submit"
         >
-          Save address
+          {{ submitLabel() }}
         </button>
         <button
           type="button"
@@ -190,10 +208,16 @@ export class AddressForm {
    * update, so the form itself needs no notion of create-versus-edit beyond seeding.
    */
   readonly initial = input<AddressFormValues | null>(null);
-  /** Overrides the form heading; the default suits creating. */
-  readonly heading = input($localize`:@@checkout.address.form.heading:New address`);
-  /** Overrides the submit label; the default suits creating. */
-  readonly submitLabel = input($localize`:@@checkout.address.form.submit:Save address`);
+
+  /** Wording and new-address defaults. See {@link AddressFormConfig}. */
+  readonly config = input<AddressFormConfig>({});
+
+  protected readonly heading = computed(
+    () => this.config().heading ?? $localize`:@@checkout.address.form.heading:New address`,
+  );
+  protected readonly submitLabel = computed(
+    () => this.config().submitLabel ?? $localize`:@@checkout.address.form.submit:Save address`,
+  );
 
   /**
    * The form's values as typed.
@@ -207,6 +231,27 @@ export class AddressForm {
 
   protected readonly control = CONTROL_CLASS;
 
+  private readonly locations = inject(AddressLocationService);
+
+  protected readonly countryOptions: () => readonly SearchSelectOption[] = computed(() =>
+    this.locations.countries.map((c) => ({ value: c.name, label: c.name, hint: c.code })),
+  );
+
+  /**
+   * Subdivisions for whatever country is currently selected.
+   *
+   * Driven by the live form value rather than by `initial`, so switching country
+   * repopulates the list immediately. The GST state number rides along as a hint, which
+   * also makes a state findable by typing its code.
+   */
+  protected readonly stateOptions: () => readonly SearchSelectOption[] = computed(() =>
+    this.locations
+      .subdivisionsFor(this.addressForm.country().value())
+      .map((s) => ({ value: s.name, label: s.name, hint: s.code })),
+  );
+
+  protected readonly hasSubdivisions = computed(() => this.stateOptions().length > 0);
+
   /**
    * The values being edited.
    *
@@ -215,18 +260,25 @@ export class AddressForm {
    * there would always see `null` and the editor would open empty over a populated
    * record. This re-seeds when the input arrives and stays writable for typing.
    */
-  private readonly draft = linkedSignal<AddressFormValues>(
-    () =>
-      this.initial() ?? {
-        address_title: '',
-        address_line1: '',
-        address_line2: '',
-        city: '',
-        state: '',
-        pincode: '',
-        country: '',
-      },
-  );
+  private readonly draft = linkedSignal<AddressFormValues>(() => {
+    const existing = this.initial();
+    if (existing !== null) {
+      // Editing: the stored record wins outright. Applying a default country here is
+      // how an address in Kenya silently becomes an address in India on save.
+      return existing;
+    }
+
+    const config = this.config();
+    return {
+      address_title: '',
+      address_line1: '',
+      address_line2: '',
+      city: '',
+      state: config.defaultState ?? '',
+      pincode: '',
+      country: config.defaultCountry ?? this.locations.defaultCountry,
+    };
+  });
 
   protected readonly addressForm = form(this.draft, (path) => {
     required(path.address_line1, {
@@ -252,6 +304,49 @@ export class AddressForm {
   protected readonly countryError = this.errorFor('country', () =>
     this.firstError(this.addressForm.country()),
   );
+
+  /**
+   * The country last observed, so a *change* can be told from the initial seeding.
+   *
+   * `undefined` until the first run. Without this the effect would fire while the form
+   * is being populated from a stored record and wipe that record's state.
+   */
+  private previousCountry: string | undefined = undefined;
+
+  constructor() {
+    effect(() => {
+      const country = this.addressForm.country().value();
+
+      untracked(() => {
+        const previous = this.previousCountry;
+        this.previousCountry = country;
+
+        // First run is the seeding, not a change: an address loaded for editing keeps
+        // exactly the state it was stored with.
+        if (previous === undefined || previous === country) {
+          return;
+        }
+
+        const state = this.addressForm.state().value();
+        if (state === '') {
+          return;
+        }
+
+        // A state belonging to the country the buyer just left cannot stay selected:
+        // `Gujarat` is not a subdivision of Kenya. It survives only when the new country
+        // has a controlled list *and* the value is in it. Where the new country has no
+        // list, nothing here can validate the value - but it was chosen for a different
+        // country, so keeping it would submit something known to be wrong.
+        const survives =
+          this.locations.hasSubdivisions(country) &&
+          this.locations.isValidSubdivision(country, state);
+
+        if (!survives) {
+          this.addressForm.state().value.set('');
+        }
+      });
+    });
+  }
 
   protected async onSubmit(event: Event): Promise<void> {
     event.preventDefault();
