@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 
 import { Alert } from '../../../design/alert/alert';
 import { Badge } from '../../../design/badge/badge';
+import { Media } from '../../../design/media/media';
 import { Button } from '../../../design/button/button';
 import { Field } from '../../../design/field/field';
 import { EmptyState } from '../../../design/empty-state/empty-state';
@@ -46,7 +47,7 @@ import { CatalogApi } from '../data/catalog.api';
  */
 @Component({
   selector: 'app-item-page',
-  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, RouterLink, Spinner],
+  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, Media, RouterLink, Spinner],
   template: `
     <nav aria-label="Breadcrumb" i18n-aria-label="@@item.breadcrumb.label">
       <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
@@ -85,18 +86,20 @@ import { CatalogApi } from '../data/catalog.api';
         <!-- Sticky on desktop so the product stays in view while the buy box and the
              specifications below it are read. -->
         <div class="md:sticky md:top-24">
-          <div class="aspect-square w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-            @if (detail.image; as image) {
-              <img
-                [src]="image"
-                [alt]="detail.item_name"
-                class="h-full w-full object-cover"
-                data-testid="item-image"
-              />
-            } @else {
-              <div class="h-full w-full" aria-hidden="true" data-testid="item-image-placeholder"></div>
-            }
-          </div>
+          <!-- The buying surface's main image: larger than a card, the whole product
+               visible, and capped in height so a tall portrait cannot push the price and
+               Add to cart below the fold on a laptop. Named here rather than left with an
+               empty alt - unlike a card, this image is the subject of the page. It is
+               the only image in the storefront loaded with priority. -->
+          <app-media
+            class="overflow-hidden rounded-lg border border-slate-200"
+            [src]="detail.image"
+            [alt]="detail.item_name"
+            ratio="hero"
+            [priority]="true"
+            sizes="(min-width: 768px) 50vw, 100vw"
+            testId="item-image"
+          />
         </div>
 
         <div class="flex flex-col gap-5">

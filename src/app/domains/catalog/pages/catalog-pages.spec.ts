@@ -276,10 +276,23 @@ describe('catalog pages', () => {
     });
 
     it('shows a placeholder when the item has no image', async () => {
-      const view = await open('/catalog/item/hex-bolt-m10-50');
+      // The washer is the fixture with no photograph - a normal state, not an error.
+      const view = await open('/catalog/item/flat-washer-m10');
 
-      expect(view.testId('item-image')).toBeNull();
+      expect(view.testId('item-image-image')).toBeNull();
       expect(view.testId('item-image-placeholder')).not.toBeNull();
+      // The box is still there at full size, so nothing collapses around it.
+      expect(view.testId('item-image')).not.toBeNull();
+    });
+
+    it('shows the product image, named, when there is one', async () => {
+      const view = await open('/catalog/item/hex-bolt-m10-50');
+      const img = view.testId('item-image-image');
+
+      expect(img?.getAttribute('src')).toBe('/mock-media/product-portrait.svg');
+      // Unlike a card, this image is the subject of the page, so it carries the name.
+      expect(img?.getAttribute('alt')).toBe('Hex Bolt M10 x 50mm');
+      expect(view.testId('item-image-placeholder')).toBeNull();
     });
 
     it('shows a not-found state for an unknown slug', async () => {

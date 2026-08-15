@@ -22,11 +22,18 @@
             "assets": [
               {
                 "glob": "**/*",
-                "input": "public"
+                "input": "public",
+                "ignore": [
+                  "mock-media/**"
+                ]
               }
             ],
-            "styles": ["src/styles.css"],
-            "polyfills": ["@angular/localize/init"]
+            "styles": [
+              "src/styles.css"
+            ],
+            "polyfills": [
+              "@angular/localize/init"
+            ]
           },
           "configurations": {
             "production": {
@@ -64,6 +71,12 @@
                   "replace": "src/environments/environment.ts",
                   "with": "src/environments/environment.mock.ts"
                 }
+              ],
+              "assets": [
+                {
+                  "glob": "**/*",
+                  "input": "public"
+                }
               ]
             }
           },
@@ -73,7 +86,9 @@
           "builder": "@angular/build:dev-server",
           "options": {
             "proxyConfig": "proxy.conf.json",
-            "allowedHosts": ["storefront.local"]
+            "allowedHosts": [
+              "storefront.local"
+            ]
           },
           "configurations": {
             "production": {

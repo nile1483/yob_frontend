@@ -15,19 +15,59 @@ import type {
  * figures and UOMs are taken from the examples in
  * `reference/api/live/verified-responses.json`.
  *
- * ## Every image is null, on purpose
+ * ## Images point at mock-only asset files, on purpose
  *
- * `thumbnail`, `banner` and `image` are Frappe `Attach Image` fields, and the backend
- * currently returns the raw stored value because its `get_url()` calls are commented
- * out. Stored values are normally root-relative (`/files/…`), which the browser
- * resolves same-origin and the dev proxy already forwards - but no non-null value has
- * ever been observed from this bench, and inventing `/files/hex-bolt.png` would point
- * at a file that does not exist and render a broken image in every test.
+ * `thumbnail`, `banner` and `image` are Frappe `Attach Image` fields. The live bench
+ * returns root-relative paths (`/files/…`), wire-verified in Phase 18 - but a fixture
+ * cannot point at one, because those files exist only on a developer's bench and mock
+ * mode has to work with the backend switched off.
  *
- * So the fixtures exercise the null path, which is the one the real bench produces
- * today, and the components' non-null path is covered by unit tests that pass a path
- * directly. Recorded as an open item rather than guessed.
+ * So the fixtures point at flat SVGs in `public/mock-media/`, which `angular.json`
+ * includes only in the `mock` configuration. They are deterministic, need no backend,
+ * and never reach a production bundle. Flat rectangles labelled with their ratio, not
+ * photographs: a cropping or stretching bug is obvious at a glance in one and invisible
+ * in the other.
+ *
+ * The set is chosen to break a naive image implementation:
+ *
+ * | Case | Why |
+ * | --- | --- |
+ * | portrait 2:3 | matches the real product photography |
+ * | landscape 3:2 | the opposite extreme, in the same grid |
+ * | square 1:1 | neither |
+ * | very large 3000x2000 | a huge original rendered into a small card |
+ * | `null` | a product with no photograph, which is normal |
+ * | a path that 404s | a URL that exists in data but not on disk |
+ *
+ * A layout that survives all six is one where the source image genuinely cannot affect
+ * the page, which is the entire Phase 18 standard.
  */
+
+/**
+ * Mock media paths.
+ *
+ * Root-relative paths, exactly like the real backend's `/files/…` values, rather than
+ * data URIs - which keeps the fixtures faithful to the contract and is also what
+ * `NgOptimizedImage` supports (it rejects Base64 sources outright).
+ *
+ * The files live in `public/mock-media/`, which `angular.json` includes **only** in the
+ * `mock` configuration. Production and development builds never carry them, the same
+ * structural guarantee `fileReplacements` gives the mock API itself.
+ */
+const IMAGE_PORTRAIT = '/mock-media/product-portrait.svg';
+const IMAGE_LANDSCAPE = '/mock-media/product-landscape.svg';
+const IMAGE_SQUARE = '/mock-media/product-square.svg';
+/** Deliberately enormous, rendered into a card a few hundred pixels wide. */
+const IMAGE_HUGE = '/mock-media/product-huge.svg';
+const IMAGE_CATEGORY = '/mock-media/category-square.svg';
+/**
+ * A well-formed path that resolves to nothing.
+ *
+ * The broken-image case: the data says there is a picture and the network disagrees.
+ * Must render the same neutral placeholder as a missing image, never the browser's
+ * broken-image icon.
+ */
+const IMAGE_BROKEN = '/mock-media/deliberately-missing.svg';
 
 const NULL_MEDIA = { thumbnail: null, banner: null } as const;
 
@@ -43,7 +83,8 @@ export const MOCK_TOP_LEVEL_CATEGORIES: readonly CategoryListItemDto[] = [
     meta_title: null,
     meta_description: null,
     parent_category: null,
-    ...NULL_MEDIA,
+    thumbnail: IMAGE_LANDSCAPE,
+    banner: null,
   },
   {
     name: 'Fasteners',
@@ -53,7 +94,8 @@ export const MOCK_TOP_LEVEL_CATEGORIES: readonly CategoryListItemDto[] = [
     meta_title: null,
     meta_description: null,
     parent_category: null,
-    ...NULL_MEDIA,
+    thumbnail: IMAGE_PORTRAIT,
+    banner: null,
   },
   {
     name: 'Safety Equipment',
@@ -86,7 +128,7 @@ const INDUSTRIAL_SUPPLIES_CHILDREN: readonly SubcategoryDto[] = [
     slug: 'fasteners',
     display_order: 1,
     is_group: 0,
-    thumbnail: null,
+    thumbnail: IMAGE_CATEGORY,
   },
   {
     name: 'Abrasives',
@@ -94,7 +136,8 @@ const INDUSTRIAL_SUPPLIES_CHILDREN: readonly SubcategoryDto[] = [
     slug: 'abrasives',
     display_order: 2,
     is_group: 0,
-    thumbnail: null,
+    // The broken case, on a card: the data claims a picture, the network 404s.
+    thumbnail: IMAGE_BROKEN,
   },
 ];
 
@@ -118,7 +161,7 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
     item_name: 'Hex Bolt M10 x 50mm',
     slug: 'hex-bolt-m10-50',
     stock_uom: 'Nos',
-    image: null,
+    image: IMAGE_PORTRAIT,
     base_price: 12.5,
     rate: 11.25,
     discount_percentage: 10,
@@ -134,7 +177,7 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
     item_name: 'Hex Nut M10',
     slug: 'hex-nut-m10',
     stock_uom: 'Nos',
-    image: null,
+    image: IMAGE_LANDSCAPE,
     base_price: 3.75,
     rate: 3.37,
     discount_percentage: 10,
@@ -166,7 +209,7 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
     item_name: 'Heavy Duty Through Bolt Anchor M12 x 120mm, Hot Dip Galvanised, Boxed Quantity',
     slug: 'through-bolt-anchor-m12-120',
     stock_uom: 'Box',
-    image: null,
+    image: IMAGE_HUGE,
     base_price: 480,
     rate: 432,
     discount_percentage: 10,

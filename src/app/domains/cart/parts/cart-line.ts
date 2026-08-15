@@ -3,6 +3,7 @@ import { Component, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { Button } from '../../../design/button/button';
+import { Media } from '../../../design/media/media';
 
 import type { CartLineDto } from '../contracts/cart.types';
 
@@ -15,18 +16,21 @@ import type { CartLineDto } from '../contracts/cart.types';
  */
 @Component({
   selector: 'app-cart-line',
-  imports: [Button, CurrencyPipe, RouterLink],
+  imports: [Button, CurrencyPipe, Media, RouterLink],
   host: { class: 'contents' },
   template: `
     <article
       class="flex flex-col gap-3 border-b border-slate-200 py-4 sm:flex-row sm:items-start sm:gap-4"
       data-testid="cart-line"
     >
-      <div class="size-20 shrink-0 overflow-hidden rounded-md bg-slate-50">
-        @if (line().image; as image) {
-          <img [src]="image" alt="" class="h-full w-full object-cover" />
-        }
-      </div>
+      <app-media
+        class="w-20 shrink-0 overflow-hidden rounded-md"
+        [src]="line().image"
+        alt=""
+        ratio="thumb"
+        sizes=""
+        testId="cart-line-media"
+      />
 
       <div class="min-w-0 flex-1">
         <h3 class="font-medium break-words text-slate-900">

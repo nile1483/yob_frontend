@@ -1,6 +1,8 @@
 import { Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
+import { Media } from '../../../design/media/media';
+
 import type { CategoryLink } from '../contracts/catalog.types';
 
 /**
@@ -15,7 +17,7 @@ import type { CategoryLink } from '../contracts/catalog.types';
  */
 @Component({
   selector: 'app-category-card',
-  imports: [RouterLink],
+  imports: [Media, RouterLink],
   host: { class: 'contents' },
   template: `
     <a
@@ -24,21 +26,16 @@ import type { CategoryLink } from '../contracts/catalog.types';
              transition-shadow hover:shadow-md"
       data-testid="category-card"
     >
-      <!-- Fixed ratio so a row of categories lines up with or without thumbnails. The
-           placeholder is decorative: the name below already identifies the category, so
-           an empty alt keeps a screen reader from announcing it twice. -->
-      <div class="aspect-4/3 w-full overflow-hidden rounded-t-lg bg-slate-50">
-        @if (category().thumbnail; as thumbnail) {
-          <img
-            [src]="thumbnail"
-            alt=""
-            class="h-full w-full object-cover transition-transform duration-200
-                   group-hover:scale-[1.02]"
-          />
-        } @else {
-          <div class="h-full w-full" aria-hidden="true"></div>
-        }
-      </div>
+      <!-- Editorial imagery, so it fills the box and crops: nothing is being examined
+           here, unlike a product. Empty alt because the title sits directly below. -->
+      <app-media
+        class="overflow-hidden rounded-t-lg"
+        [src]="category().thumbnail"
+        alt=""
+        ratio="category"
+        fit="cover"
+        testId="category-media"
+      />
 
       <!-- break-words keeps an unbroken 60-character category name inside the card
            instead of widening the grid column and scrolling the page sideways. -->

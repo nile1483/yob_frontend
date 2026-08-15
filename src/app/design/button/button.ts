@@ -45,7 +45,7 @@ export type ButtonSize = 'md' | 'sm';
  *
  * - the cart rendered **Remove** at the same weight as **Proceed to checkout**
  * - checkout rendered three **Add new address/contact** buttons heavier than
- *   **Proceed to Payment**, which is the entire point of the page
+ *   **Proceed to payment**, which is the entire point of the page
  * - account had given up and hand-written `secondary` and `destructive` class strings
  *   as page fields, which is the duplication a design layer exists to prevent
  *

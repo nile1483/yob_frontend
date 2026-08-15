@@ -128,6 +128,105 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Product & category image standardization (Phase 18, 2026-08-15)
+
+The frontend owns the **box and the behaviour**; the business owns the **picture**. YOB is
+a multipurpose B2B storefront, so no source image may change the layout around it.
+
+### Image source contract - wire-verified
+
+| DTO | Field | Live value |
+| --- | --- | --- |
+| Category (list + subcategory) | `thumbnail` | `/files/F001779FGreyHarbor-70417.01.jpg` |
+| Category | `banner` | `null` on every record |
+| Item (listing + detail) | `image` | `/files/3502LFWashedBasil-…jpg` |
+
+Root-relative, same-origin, served by the edge in production and by the dev proxy's
+existing `/files` entry in development. **No URL rewriting**: no base prefix, no media
+host, no environment media root. The one normalization is in
+`foundation/media/media-url.ts`, which treats `''` and whitespace as absent - a cleared
+Frappe `Attach Image` can arrive as an empty string, and `src=""` re-requests the page and
+then fails as an image, producing the very broken-image icon the fallback exists to stop.
+
+Measured on the bench: **products 1200x1800 (2:3 portrait)**, one 512x768; **categories
+1200x1200 (1:1)**. Every live record has an image, so the no-image path exists only in
+mocks.
+
+### The standard
+
+`design/media` owns all of it. One primitive, five box shapes, chosen by purpose:
+
+| Use | Ratio | Fit | Why |
+| --- | --- | --- | --- |
+| product card | 3:4 | `contain` | the whole product, whatever shape it was shot in |
+| category card | 4:3 | `cover` | editorial; cropping a category banner loses nothing |
+| item detail | height-capped | `contain` | the subject of the page |
+| cart thumbnail | 1:1 | `contain` | a reminder, not an examination |
+
+**Why products are `contain`.** The square `cover` box this replaced cut a third off every
+2:3 photograph, top and bottom - collars and hems on apparel, threads on a fitting.
+`cover` only looks right when the source ratio happens to match the box, which is a fact
+about one client's photo library, not a decision a master project can make. Categories are
+the deliberate exception, and the two are **not** forced to share a ratio.
+
+**The item-detail box is capped by viewport height, not given a ratio.** At 3:4 across a
+full column it produced an image taller than the screen, pushing the price and Add to cart
+below the fold. Height derives from the viewport and never from the image, so it remains
+layout-shift free.
+
+### Fallback and failure are the same thing
+
+A missing image and a URL that 404s are identical to a buyer: there is no picture. Both
+render one neutral inline glyph, at exactly the same box size. Verified in a real browser -
+the broken fixture yields `img=0, placeholder=1, box=258x194`, the same box as its working
+neighbour. Deliberately not a stock photo: a fallback showing a t-shirt would be actively
+wrong for a bearings catalog.
+
+### NgOptimizedImage - adopted, with a documented limit
+
+Used with `fill`. It buys lazy loading by default, a real `fetchpriority` on the one image
+that deserves it, and enforcement that every image has a sized container.
+
+Two compatibility findings worth recording:
+
+- **It rejects Base64 sources outright** (`NG02952`), which ruled out data-URI fixtures.
+- **`sizes` must be responsive units**; a pixel value is rejected, so the fixed-size cart
+  thumbnail passes none.
+
+It does **not** resize: `srcset` generation needs an `IMAGE_LOADER`, and no image CDN was
+introduced. Full-size originals are therefore sent to small cards - a 1200x1800 JPEG into
+a 171px mobile card. **This is the main outstanding cost of the phase.** The fix is
+backend-rendered thumbnails or a loader, not markup.
+
+Exactly one image in the storefront is `priority`: the item-detail hero.
+
+### Alt text
+
+The image describes the *thing*, never itself - "Product image of…" appears nowhere.
+
+- **Cards: empty alt.** The whole tile is one link whose text is the product name, so
+  naming the image makes a screen reader announce the same product twice.
+- **Item detail: the product name.** There the image is the subject of the page.
+- **Placeholders: `aria-hidden`.** The absence of a picture is not information.
+
+### Mock media
+
+`public/mock-media/` holds flat SVGs at deliberately awkward intrinsic sizes - 2:3, 3:2,
+1:1, and one 3000x2000 - plus a null case and a path that 404s. `angular.json` includes
+that directory **only in the `mock` configuration**, the same structural guarantee
+`fileReplacements` gives the mock API. Verified: mock bundle 6 files, production and
+development 0, and `/mock-media/…` 404s on the development server.
+
+Flat labelled rectangles rather than photographs on purpose: a cropping or stretching bug
+is obvious at a glance in one and invisible in the other.
+
+### Copy
+
+Sentence case is the convention, confirmed by audit - "Add to cart", "Proceed to
+checkout", "Sign in", "Pay now", "Save address". **"Proceed to Payment" was the only
+title-case action label in the application** and is now "Proceed to payment". No other
+copy changed.
+
 ## CONFIRMED - Storefront UX & visual design (Phase 17, 2026-08-14)
 
 A styling pass over the whole buyer journey. No business logic, no contract changes, no
@@ -870,6 +969,7 @@ until the backend ships it.
 | Frontend Phase 14.6 - Order contract synchronization | **PASS** |
 | Frontend Phase 15 - Account address & contact management | **PASS** |
 | Frontend Phase 17 - Storefront UX & visual design | **PASS** |
+| Frontend Phase 18 - Product & category image standardization | **PASS** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

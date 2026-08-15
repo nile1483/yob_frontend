@@ -51,7 +51,7 @@ test.describe('the Proceed CTA', () => {
     const proceed = page.getByTestId('checkout-proceed');
     await expect(proceed).toBeVisible();
     await expect(proceed).toBeEnabled();
-    await expect(proceed).toContainText('Proceed to Payment');
+    await expect(proceed).toContainText('Proceed to payment');
     await expect(page.getByTestId('checkout-readiness')).toContainText('Ready to proceed');
   });
 

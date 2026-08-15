@@ -342,7 +342,7 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
               data-testid="checkout-proceed"
               i18n="@@checkout.proceed"
             >
-              Proceed to Payment
+              Proceed to payment
             </button>
           </div>
         </div>

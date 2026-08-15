@@ -47,6 +47,11 @@ describe('ItemCard', () => {
       element,
       text: () => element.textContent ?? '',
       testId: (id: string) => element.querySelector(`[data-testid="${id}"]`),
+      settle: async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+      },
     };
   }
 
@@ -145,14 +150,37 @@ describe('ItemCard', () => {
       expect(view.element.querySelector('[aria-hidden="true"]')).not.toBeNull();
     });
 
-    it('renders the path the backend supplied, with the item name as alt text', async () => {
+    it('renders the path the backend supplied', async () => {
       // Root-relative is what a Frappe Attach Image field stores; it resolves
       // same-origin, so no rewriting is needed.
       const view = await render(item({ image: '/files/hex-bolt-m10.png' }));
       const img = view.element.querySelector('img');
 
+      expect(img).not.toBeNull();
       expect(img?.getAttribute('src')).toBe('/files/hex-bolt-m10.png');
-      expect(img?.getAttribute('alt')).toBe('Hex Bolt M10 x 50mm');
+    });
+
+    it('leaves the card image alt empty, because the name is right beside it', async () => {
+      // The whole tile is one link whose text is the product name, so naming the image
+      // too makes a screen reader announce the same product twice. The item detail page
+      // is the opposite case - there the image is the subject - and it does pass a name.
+      const view = await render(item({ image: '/files/hex-bolt-m10.png' }));
+
+      expect(view.element.querySelector('img')?.getAttribute('alt')).toBe('');
+    });
+
+    it('falls back to the placeholder when the image fails to load', async () => {
+      const view = await render(item({ image: '/files/deleted-from-disk.png' }));
+      const img = view.element.querySelector('img');
+      expect(img).not.toBeNull();
+
+      // A URL that 404s is the same thing to a buyer as no picture at all, and must
+      // never leave the browser's broken-image icon in a product grid.
+      img?.dispatchEvent(new Event('error'));
+      await view.settle();
+
+      expect(view.element.querySelector('img')).toBeNull();
+      expect(view.element.querySelector('[aria-hidden="true"]')).not.toBeNull();
     });
   });
 

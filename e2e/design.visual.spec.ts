@@ -133,6 +133,125 @@ test.describe('catalog grid', () => {
   });
 });
 
+test.describe('the image standard', () => {
+  test('a source image cannot change the box it sits in', async ({ page }) => {
+    await signInAsMockBuyer(page);
+    test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
+
+    // The fixtures deliberately mix a 2:3 portrait, a 3:2 landscape, a 3000x2000
+    // original and one product with no photograph at all.
+    const boxes = await page
+      .getByTestId('item-media')
+      .evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          return `${Math.round(r.width)}x${Math.round(r.height)}`;
+        }),
+      );
+
+    expect(boxes.length).toBeGreaterThan(2);
+    expect(new Set(boxes).size, `media boxes differ: ${boxes.join(', ')}`).toBe(1);
+  });
+
+  test('products are shown whole rather than cropped', async ({ page }) => {
+    await signInAsMockBuyer(page);
+    test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
+
+    const img = page.getByTestId('item-media-image').first();
+    const fit = await img.evaluate((el) => getComputedStyle(el).objectFit);
+    // Cropping a product removes the part that identifies it - a collar, a thread.
+    expect(fit).toBe('contain');
+
+    // `contain` is what guarantees no stretching, so the assertion above is the whole
+    // guarantee - the element box is measured deliberately *not* compared to the
+    // source ratio here, because with `fill` the element always matches its container
+    // and the picture is letterboxed inside it. What is worth proving is that the
+    // fixtures genuinely exercise that letterboxing rather than happening to match:
+    const ratios = await page.getByTestId('item-media-image').evaluateAll((els) =>
+      els.map((el) => {
+        const i = el as HTMLImageElement;
+        const r = i.getBoundingClientRect();
+        return { source: i.naturalWidth / i.naturalHeight, box: r.width / r.height };
+      }),
+    );
+    expect(
+      ratios.some((r) => Math.abs(r.source - r.box) > 0.05),
+      'no fixture image differs in ratio from its box, so nothing proves contain works',
+    ).toBe(true);
+  });
+
+  test('a missing image and a broken URL look the same, and take the same space', async ({
+    page,
+  }) => {
+    await signInAsMockBuyer(page);
+
+    // The first category page carries a subcategory whose thumbnail 404s.
+    await page.getByTestId('category-card').first().click();
+    await expect(page).toHaveURL(/\/catalog\//);
+    const cards = page.getByTestId('category-card');
+    await expect(cards.first()).toBeVisible();
+
+    const boxes = await page
+      .getByTestId('category-media')
+      .evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          return `${Math.round(r.width)}x${Math.round(r.height)}`;
+        }),
+      );
+    expect(new Set(boxes).size, `media boxes differ: ${boxes.join(', ')}`).toBe(1);
+
+    // The broken one resolved to the neutral placeholder rather than leaving the
+    // browser's broken-image icon in the grid.
+    await expect(page.getByTestId('category-media-placeholder')).toHaveCount(1);
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('catalog images load lazily and the detail image does not', async ({ page }) => {
+    await signInAsMockBuyer(page);
+    test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
+
+    const loading = await page
+      .getByTestId('item-media-image')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('loading')));
+    expect(loading.every((l) => l === 'lazy')).toBe(true);
+
+    await page.getByTestId('item-card').first().click();
+    const hero = page.getByTestId('item-image-image');
+    await expect(hero).toBeVisible();
+    // Exactly one image in the storefront is worth blocking on: this one.
+    await expect(hero).toHaveAttribute('loading', 'eager');
+    await expect(hero).toHaveAttribute('fetchpriority', 'high');
+  });
+
+  test('the detail image fits the viewport and keeps the buy box reachable', async ({ page }) => {
+    await signInAsMockBuyer(page);
+    test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
+    await page.getByTestId('item-card').first().click();
+
+    const media = await page.getByTestId('item-image').boundingBox();
+    const viewport = page.viewportSize();
+    expect(media!.height).toBeLessThanOrEqual((viewport?.height ?? 0) * 0.75);
+
+    await expect(page.getByTestId('add-to-cart')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('no image request fails except the deliberately broken fixture', async ({ page }) => {
+    const failed: string[] = [];
+    page.on('response', (r) => {
+      if (r.request().resourceType() === 'image' && r.status() >= 400) {
+        failed.push(r.url().split('/').pop() ?? r.url());
+      }
+    });
+
+    await signInAsMockBuyer(page);
+    await openLeafCategory(page);
+
+    expect(failed.filter((f) => !f.includes('deliberately-missing'))).toEqual([]);
+  });
+});
+
 test.describe('action hierarchy', () => {
   test('checkout offers exactly one primary action', async ({ page }) => {
     await signInAsMockBuyer(page);

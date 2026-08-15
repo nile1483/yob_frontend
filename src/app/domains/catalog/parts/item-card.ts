@@ -3,6 +3,7 @@ import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { Badge } from '../../../design/badge/badge';
+import { Media } from '../../../design/media/media';
 import { CATALOG_CURRENCY } from '../catalog.currency';
 import type { CatalogItemDto } from '../contracts/catalog.types';
 
@@ -25,7 +26,7 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
  */
 @Component({
   selector: 'app-item-card',
-  imports: [Badge, CurrencyPipe, RouterLink],
+  imports: [Badge, CurrencyPipe, Media, RouterLink],
   host: { class: 'contents' },
   template: `
     <article
@@ -33,22 +34,15 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
              transition-shadow focus-within:shadow-md hover:shadow-md"
       data-testid="item-card"
     >
-      <!-- Fixed aspect ratio, so a row of cards lines up whether or not any of them
-           actually has an image yet. -->
-      <div class="aspect-square w-full overflow-hidden rounded-t-lg bg-slate-50">
-        @if (item().image; as image) {
-          <img
-            [src]="image"
-            [alt]="item().item_name"
-            class="h-full w-full object-cover transition-transform duration-200
-                   group-hover:scale-[1.02]"
-          />
-        } @else {
-          <!-- Decorative: the name below already identifies the item, so this must not
-               be announced as an image with no accessible name. -->
-          <div class="h-full w-full" aria-hidden="true"></div>
-        }
-      </div>
+      <!-- Empty alt: the product name is the very next element, so naming the image
+           too would announce the same product twice. -->
+      <app-media
+        class="overflow-hidden rounded-t-lg"
+        [src]="item().image"
+        alt=""
+        ratio="product"
+        testId="item-media"
+      />
 
       <div class="flex flex-1 flex-col gap-1 p-4">
         <h3 class="text-sm leading-snug font-medium break-words text-slate-900">

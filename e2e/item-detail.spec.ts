@@ -136,10 +136,23 @@ test.describe('item detail content', () => {
   });
 
   test('shows a placeholder for a missing image', async ({ page }) => {
-    await signInAsMockBuyer(page, { goTo: BOLT });
+    // The washer is the fixture with no photograph. A product without one is normal,
+    // not an error, and must occupy the same space as one that has it.
+    await signInAsMockBuyer(page, { goTo: WASHER });
 
     await expect(page.getByTestId('item-image-placeholder')).toBeVisible();
-    await expect(page.getByTestId('item-image')).toHaveCount(0);
+    await expect(page.getByTestId('item-image-image')).toHaveCount(0);
+    await expect(page.getByTestId('item-image')).toBeVisible();
+  });
+
+  test('shows the product image, named, when there is one', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: BOLT });
+
+    const img = page.getByTestId('item-image-image');
+    await expect(img).toBeVisible();
+    // Named here, unlike on a card: this image is the subject of the page.
+    await expect(img).toHaveAttribute('alt', 'Hex Bolt M10 x 50mm');
+    await expect(page.getByTestId('item-image-placeholder')).toHaveCount(0);
   });
 
   test('renders inside the secure shell', async ({ page }) => {
