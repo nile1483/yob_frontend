@@ -91,7 +91,8 @@ test.describe('category detail', () => {
 
     await expect(page.getByRole('heading', { name: 'Subcategories' })).toBeVisible();
     await expect(page.getByTestId('subcategory-grid')).toBeVisible();
-    await expect(page.getByTestId('category-card')).toHaveCount(2);
+    // Fasteners, Abrasives and the multi-page Bulk Fasteners category.
+    await expect(page.getByTestId('category-card')).toHaveCount(3);
     await expect(page.getByTestId('item-grid')).toHaveCount(0);
   });
 
@@ -158,6 +159,131 @@ test.describe('category detail', () => {
     await expect(page.getByTestId('item-card')).toHaveCount(4);
     await expectShellUsable(page);
     await expectNoHorizontalOverflow(page);
+  });
+});
+
+test.describe('bounded item listing (Phase 22B-2)', () => {
+  const BULK = '/catalog/bulk-fasteners';
+
+  test('shows a first page and offers Load More', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: BULK });
+
+    // Page size is 24; the category holds 30.
+    await expect(page.getByTestId('item-card')).toHaveCount(24);
+    await expect(page.getByTestId('load-more')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('Load More appends without disturbing what is already shown', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: BULK });
+    const first = await page.getByTestId('item-card').first().textContent();
+
+    await page.getByTestId('load-more').click();
+
+    await expect(page.getByTestId('item-card')).toHaveCount(30);
+    // The card that was on screen before is still there, and still first.
+    await expect(page.getByTestId('item-card').first()).toHaveText(first ?? '');
+  });
+
+  test('Load More disappears once the backend says there is no more', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: BULK });
+    await page.getByTestId('load-more').click();
+
+    await expect(page.getByTestId('item-card')).toHaveCount(30);
+    await expect(page.getByTestId('load-more')).toBeHidden();
+  });
+
+  test('a small category never offers Load More', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/fasteners' });
+
+    await expect(page.getByTestId('item-card')).toHaveCount(4);
+    await expect(page.getByTestId('load-more')).toBeHidden();
+  });
+
+  test.describe('sort', () => {
+    test('defaults to name A to Z', async ({ page }) => {
+      await signInAsMockBuyer(page, { goTo: BULK });
+
+      await expect(page.getByTestId('item-sort')).toHaveValue('name_asc');
+      await expect(page.getByTestId('item-card').first()).toContainText('Bulk Fastener 01');
+    });
+
+    test('name Z to A reverses the listing', async ({ page }) => {
+      await signInAsMockBuyer(page, { goTo: BULK });
+      await page.getByTestId('item-sort').selectOption('name_desc');
+
+      await expect(page.getByTestId('item-card').first()).toContainText('Bulk Fastener 30');
+    });
+
+    test('newest is its own order', async ({ page }) => {
+      await signInAsMockBuyer(page, { goTo: BULK });
+      await page.getByTestId('item-sort').selectOption('newest');
+
+      await expect(page.getByTestId('item-sort')).toHaveValue('newest');
+      await expect(page.getByTestId('item-card').first()).toContainText('Bulk Fastener 30');
+    });
+
+    test('changing sort replaces the listing rather than appending', async ({ page }) => {
+      await signInAsMockBuyer(page, { goTo: BULK });
+      await page.getByTestId('load-more').click();
+      await expect(page.getByTestId('item-card')).toHaveCount(30);
+
+      await page.getByTestId('item-sort').selectOption('name_desc');
+
+      // Back to a single page, not 30 + 24.
+      await expect(page.getByTestId('item-card')).toHaveCount(24);
+      await expect(page.getByTestId('item-card').first()).toContainText('Bulk Fastener 30');
+    });
+
+    test('Load More after a sort continues that sort', async ({ page }) => {
+      await signInAsMockBuyer(page, { goTo: BULK });
+      await page.getByTestId('item-sort').selectOption('name_desc');
+      await expect(page.getByTestId('item-card')).toHaveCount(24);
+
+      await page.getByTestId('load-more').click();
+
+      await expect(page.getByTestId('item-card')).toHaveCount(30);
+      // Descending throughout: the continuation used the new sort's cursor.
+      await expect(page.getByTestId('item-card').first()).toContainText('Bulk Fastener 30');
+      await expect(page.getByTestId('item-card').last()).toContainText('Bulk Fastener 01');
+    });
+  });
+
+  test('an empty page that reports more to come is not the end of the catalog', async ({
+    page,
+  }) => {
+    await signInWithMockFlags(page, 'mockScenario=catalog-empty-page', { goTo: BULK });
+
+    // The scan-budget continuation: nothing returned, but not exhausted.
+    await expect(page.getByTestId('item-card')).toHaveCount(0);
+    await expect(page.getByTestId('category-no-items')).toBeHidden();
+    await expect(page.getByTestId('load-more')).toBeVisible();
+  });
+
+  test('a truly empty category shows the empty state', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/abrasives' });
+
+    await expect(page.getByTestId('category-no-items')).toBeVisible();
+    await expect(page.getByTestId('load-more')).toBeHidden();
+  });
+
+  test('a group category keeps its subcategory experience and asks for no listing', async ({
+    page,
+  }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/industrial-supplies' });
+
+    await expect(page.getByTestId('subcategory-grid')).toBeVisible();
+    await expect(page.getByTestId('item-listing')).toBeHidden();
+    await expect(page.getByTestId('items-error')).toBeHidden();
+  });
+
+  test('the listing is usable at every viewport', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: BULK });
+
+    await expect(page.getByTestId('item-sort')).toBeVisible();
+    await expect(page.getByTestId('load-more')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await expectShellUsable(page);
   });
 });
 

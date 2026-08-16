@@ -60,7 +60,8 @@ export interface SubcategoryDto {
 }
 
 /**
- * A row of `get_category.items`.
+ * A catalog item row, as returned by `get_items` (and, legacily, by
+ * `get_category.items`, which the frontend no longer reads).
  *
  * Every price here is computed by the backend for the requested quantity. Angular
  * displays them and compares them; it never derives one from another.
@@ -89,10 +90,112 @@ export interface CatalogItemDto {
 }
 
 /** The `data` payload of `get_category`. */
+/**
+ * `get_category`, as the frontend consumes it.
+ *
+ * ## `items` is deliberately absent
+ *
+ * The backend still returns an embedded `items` array. It is a **response
+ * compatibility field**, not a frontend dependency: since Phase 22B-2 the listing comes
+ * from `get_items`, which is bounded, sorted and cursor-paginated, while the embedded
+ * array is unbounded and cannot express any of that.
+ *
+ * Leaving it off this interface is the enforcement. A page that tried to read
+ * `payload.items` would not compile, so the migration cannot quietly regress. The field
+ * is still on the wire and still arrives; nothing here breaks by ignoring it, and
+ * removing it from the response is a backend concern for Phase 22B-3.
+ */
 export interface CategoryPayloadDto {
   readonly category: CategoryDetailDto;
   readonly subcategories: readonly SubcategoryDto[];
+}
+
+// ------------------------------------------------------------------ item listing
+
+/** Sort orders `get_items` accepts. Price sorting is deliberately absent - see below. */
+export type ItemListingSort = 'name_asc' | 'name_desc' | 'newest';
+
+/**
+ * A future listing filter.
+ *
+ * Typed now so the query model does not need reshaping later, but the backend accepts
+ * **only an empty list** today and answers `unsupported_filters` for anything else. No
+ * filter state, UI or service exists, and none should until the backend supports one.
+ */
+export interface ItemListingFilter {
+  readonly key: string;
+  readonly values: readonly string[];
+}
+
+/**
+ * Everything that identifies one page of a listing.
+ *
+ * `scopeType` is a single-member union rather than a plain string: `collection` and
+ * `all` are planned, and the backend answers `unsupported_scope` for both today, so the
+ * type says exactly what works now while leaving room to widen later.
+ */
+export interface ItemListingQuery {
+  readonly scopeType: 'category';
+  readonly scopeValue: string;
+  /** Backend search exists; there is no search UI, so this is always `''` today. */
+  readonly search: string;
+  /** Always empty today - the backend rejects anything else. */
+  readonly filters: readonly ItemListingFilter[];
+  readonly sort: ItemListingSort;
+  readonly pageSize: number;
+  /** `null` for the first page; the previous page's `next_cursor` thereafter. */
+  readonly cursor: string | null;
+}
+
+/**
+ * `pagination` from `get_items`.
+ *
+ * ## `has_more` is the only exhaustion signal
+ *
+ * The backend scanner has a per-request scan budget, so `items: []` with
+ * `has_more: true` is a **valid continuation** - the request ran out of budget, not out
+ * of catalogue. Deriving exhaustion from `items.length` or `returned_count` would
+ * silently truncate a category. Only `has_more: false` is terminal.
+ */
+export interface ItemListingPaginationDto {
+  readonly returned_count: number;
+  readonly page_size: number;
+  readonly has_more: boolean;
+  readonly next_cursor: string | null;
+}
+
+/** The query the backend echoes back, so a response can be matched to its request. */
+export interface ItemListingQueryDto {
+  readonly scope_type: string;
+  readonly scope_value: string;
+  readonly search: string;
+  readonly sort: string;
+}
+
+/** `get_items` payload. Rows are the same `CatalogItemDto` the cards already render. */
+export interface ItemListingDto {
   readonly items: readonly CatalogItemDto[];
+  readonly pagination: ItemListingPaginationDto;
+  readonly query: ItemListingQueryDto;
+}
+
+/** The page size the storefront asks for. The backend accepts 1..48. */
+export const ITEM_PAGE_SIZE = 24;
+
+/** A fresh first-page query for a category. */
+export function categoryListingQuery(
+  slug: string,
+  sort: ItemListingSort = 'name_asc',
+): ItemListingQuery {
+  return {
+    scopeType: 'category',
+    scopeValue: slug,
+    search: '',
+    filters: [],
+    sort,
+    pageSize: ITEM_PAGE_SIZE,
+    cursor: null,
+  };
 }
 
 /** `meta` for `get_category`. */

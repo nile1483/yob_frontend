@@ -7,11 +7,14 @@ import type {
   CategoryMetaDto,
   CategoryPayloadDto,
   ItemDetailDto,
+  ItemListingDto,
+  ItemListingQuery,
 } from '../contracts/catalog.types';
 
 const GET_CATEGORIES = 'yob_storefront.api.catalog.get_categories';
 const GET_CATEGORY = 'yob_storefront.api.catalog.get_category';
 const GET_ITEM = 'yob_storefront.api.catalog.get_item';
+const GET_ITEMS = 'yob_storefront.api.catalog.get_items';
 
 /** `get_category` returns its counts in `meta`; the payload and counts travel together. */
 export interface CategoryResult {
@@ -64,6 +67,44 @@ export class CatalogApi {
         meta: response.meta as CategoryMetaDto | undefined,
       })),
     );
+  }
+
+  /**
+   * One bounded page of a category's items.
+   *
+   * Replaces the unbounded `get_category().items` array for product listing. The page
+   * supplies a whole {@link ItemListingQuery}; this method only serialises it, so there
+   * is exactly one place that knows the backend's parameter names.
+   *
+   * ## Serialisation notes, all wire-verified
+   *
+   * - `filters` goes as a JSON string. The backend accepts the parameter being omitted
+   *   entirely, but sending `[]` explicitly states the intent and is what the contract
+   *   documents; anything non-empty answers `unsupported_filters` today.
+   * - `cursor` is sent **only** for a continuation. `YobApiClient` drops `null` params,
+   *   so a first page simply carries no cursor rather than `cursor=null`.
+   * - `qty` stays at 1, for the same reason `get_category` does: listing prices are
+   *   per-unit, and requesting another quantity would show that quantity's price as if
+   *   it were the unit price.
+   *
+   * Failures arrive as `YobApiError` with the backend's stable codes -
+   * `category_not_listable` (422) for a group category, `category_not_found` (404),
+   * `unsupported_sort`, `page_size_invalid`, `cursor_invalid`, `unsupported_filters`
+   * and `unsupported_scope` (all 422). All verified against the running backend.
+   */
+  getItems(query: ItemListingQuery): Observable<ItemListingDto> {
+    return this.api
+      .get<ItemListingDto>(GET_ITEMS, {
+        scope_type: query.scopeType,
+        scope_value: query.scopeValue,
+        search: query.search,
+        filters: JSON.stringify(query.filters),
+        sort: query.sort,
+        page_size: query.pageSize,
+        cursor: query.cursor,
+        qty: 1,
+      })
+      .pipe(map((response) => response.data));
   }
 
   /**

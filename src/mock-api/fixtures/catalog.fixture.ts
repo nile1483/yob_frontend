@@ -139,6 +139,14 @@ const INDUSTRIAL_SUPPLIES_CHILDREN: readonly SubcategoryDto[] = [
     // The broken case, on a card: the data claims a picture, the network 404s.
     thumbnail: IMAGE_BROKEN,
   },
+  {
+    name: 'Bulk Fasteners',
+    category_name: 'Bulk Fasteners',
+    slug: 'bulk-fasteners',
+    display_order: 3,
+    is_group: 0,
+    thumbnail: IMAGE_CATEGORY,
+  },
 ];
 
 /** A leaf category with a mix of discounted and undiscounted items. */
@@ -222,6 +230,45 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
   },
 ];
 
+/**
+ * A leaf category with more items than one page holds.
+ *
+ * 30 rows against a page size of 24 gives a first page, a Load More, and a terminal
+ * second page - the smallest set that exercises the whole pagination path. Names are
+ * zero-padded so that ascending, descending and insertion order are all distinguishable
+ * and deterministic, which is what lets an E2E assert a sort actually changed anything.
+ */
+const BULK_ITEMS: readonly CatalogItemDto[] = Array.from({ length: 30 }, (_, index) => {
+  const n = String(index + 1).padStart(2, '0');
+  return {
+    name: `YOB-BULK-${n}`,
+    item_name: `Bulk Fastener ${n}`,
+    slug: `bulk-fastener-${n}`,
+    stock_uom: 'Nos',
+    image: null,
+    base_price: 100 + index,
+    rate: 100 + index,
+    discount_percentage: 0,
+    discount_amount: 0,
+    net_amount: 100 + index,
+    tax_amount: 0,
+    total_amount: 100 + index,
+    pricing_rule_label: null,
+  };
+});
+
+const BULK: CategoryDetailDto = {
+  name: 'Bulk Fasteners',
+  category_name: 'Bulk Fasteners',
+  slug: 'bulk-fasteners',
+  meta_title: null,
+  meta_description: null,
+  description: 'A category large enough to need more than one page.',
+  is_group: 0,
+  parent_category: 'Industrial Supplies',
+  ...NULL_MEDIA,
+};
+
 /** A leaf category that legitimately has nothing in it. */
 const ABRASIVES: CategoryDetailDto = {
   name: 'Abrasives',
@@ -248,7 +295,18 @@ const SAFETY: CategoryDetailDto = {
 };
 
 /** Every category the mock can serve, by slug. */
-export const MOCK_CATEGORIES_BY_SLUG: Readonly<Record<string, CategoryPayloadDto>> = {
+/**
+ * The `get_category` payload **as it goes over the wire**, legacy `items` included.
+ *
+ * The frontend's own `CategoryPayloadDto` deliberately omits `items` - the listing comes
+ * from `get_items` since Phase 22B-2 - but the real backend still returns it, and a mock
+ * that dropped it would be less strict than the thing it stands in for. So the mock
+ * keeps serving it, and the application keeps ignoring it, which is exactly the
+ * situation Phase 22B-3 will clean up on the backend.
+ */
+type MockCategoryPayload = CategoryPayloadDto & { readonly items: readonly CatalogItemDto[] };
+
+export const MOCK_CATEGORIES_BY_SLUG: Readonly<Record<string, MockCategoryPayload>> = {
   'industrial-supplies': {
     category: INDUSTRIAL_SUPPLIES,
     subcategories: INDUSTRIAL_SUPPLIES_CHILDREN,
@@ -258,6 +316,11 @@ export const MOCK_CATEGORIES_BY_SLUG: Readonly<Record<string, CategoryPayloadDto
     category: FASTENERS,
     subcategories: [],
     items: FASTENER_ITEMS,
+  },
+  'bulk-fasteners': {
+    category: BULK,
+    subcategories: [],
+    items: BULK_ITEMS,
   },
   abrasives: {
     // Leaf with neither subcategories nor items.

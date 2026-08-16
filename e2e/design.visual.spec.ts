@@ -216,7 +216,14 @@ test.describe('the image standard', () => {
       .evaluateAll((els) => els.map((el) => el.getAttribute('loading')));
     expect(loading.every((l) => l === 'lazy')).toBe(true);
 
-    await page.getByTestId('item-card').first().click();
+    // Pick a card that actually has a photograph: one fixture item deliberately has
+    // none, and since Phase 22B-2 the listing is sorted, so which card is first is a
+    // property of the sort rather than of the fixture order.
+    await page
+      .getByTestId('item-card')
+      .filter({ has: page.getByTestId('item-media-image') })
+      .first()
+      .click();
     const hero = page.getByTestId('item-image-image');
     await expect(hero).toBeVisible();
     // Exactly one image in the storefront is worth blocking on: this one.

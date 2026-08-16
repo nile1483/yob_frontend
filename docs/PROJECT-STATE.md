@@ -128,6 +128,131 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Scalable bounded catalog listing (Phase 22, complete, 2026-08-16)
+
+**Phase 22 is complete.** Both halves have passed: the frontend migration (22B-2) and the
+backend cleanup (22B-3). Nothing about catalog listing is awaiting further work.
+
+### What is active
+
+- **Bounded listing through `get_items`.** Category product listing is served by the
+  bounded, sorted, cursor-paginated endpoint. Page size 24.
+- **Cursor-based Load More** in Angular, with `has_more` as the sole exhaustion signal -
+  an empty page carrying `has_more: true` is a scan-budget continuation, not the end of
+  the catalogue.
+- **Sorting:** Name A-Z (default), Name Z-A, Newest. No price sorting - there is no
+  global customer-price order to sort by.
+- **Customer-aware Item Price eligibility remains ERPNext-backed.** Pricing is unchanged
+  by this phase: the backend resolves per-customer eligibility and every figure shown is
+  the backend's. Angular displays prices and never derives one.
+
+### What was retired
+
+The legacy unbounded `get_category().items` loading **and pricing** path has been removed
+from the backend. `get_category` now returns category metadata and children only; it no
+longer loads or prices an unbounded item array. The frontend had already stopped reading
+that field in 22B-2, so the removal required no frontend change.
+
+### Cleanup for the next Angular touch
+
+Neither is user-visible; both are tidy-ups left deliberately rather than bundled into a
+documentation-only change:
+
+- **`src/mock-api/fixtures/catalog.fixture.ts`** still carries `items` on its category
+  payloads, via the `MockCategoryPayload` wire type added in 22B-2. It existed to keep the
+  mock as strict as the real backend while the field was still on the wire. Now that the
+  backend no longer sends it, the mock should stop sending it too, and
+  `MockCategoryPayload` should collapse back into `CategoryPayloadDto`.
+- **`CategoryMetaDto.item_count`** is unused. It described the size of the embedded array
+  that no longer exists, and nothing reads it.
+
+## CONFIRMED - Catalog listing migration to `get_items` (Phase 22B-2, 2026-08-15)
+
+Category product listing moved off the unbounded embedded array onto the bounded,
+cursor-paginated endpoint.
+
+```text
+before:  get_category -> metadata + subcategories + every item, unbounded
+after:   get_category -> metadata + subcategories
+         get_items    -> one bounded, sorted, cursor-paginated page
+```
+
+Wire-verified against the running backend: envelope, pagination, cursor continuation with
+no overlap, terminal `has_more: false`, and every documented error
+(`category_not_listable` 422, `category_not_found` 404, `unsupported_sort`,
+`page_size_invalid`, `cursor_invalid`, `unsupported_filters`, `unsupported_scope`).
+
+### `has_more` is the only exhaustion signal
+
+The backend scanner has a per-request scan budget, so this is a **valid continuation**:
+
+```json
+{ "items": [], "pagination": { "has_more": true, "next_cursor": "..." } }
+```
+
+It means the request ran out of budget, not that the catalogue ran out of items. Nothing
+in the frontend derives exhaustion from `items.length` or `returned_count`; an empty page
+with `has_more: true` keeps Load More available, and nothing auto-chases continuations -
+one click, one request. The `catalog-empty-page` mock scenario exists solely to keep that
+behaviour under test, since it is otherwise unreproducible.
+
+### Listing state
+
+`ItemListing` (`domains/catalog/state/`) is a plain class the page constructs with `new` -
+not a `@Service()`, because one page consumes it. It owns items, cursor, hasMore, the two
+loading flags and the **two separate failures**:
+
+- a first page that fails leaves nothing on screen, so it is a page-level error with a retry;
+- a Load More that fails **keeps every row already loaded**, shows a message beside the
+  button, and does not advance the cursor, so a retry repeats the identical request.
+
+Appends deduplicate by item `name` without reordering - belt and braces over a cursor
+contract that already forbids overlap.
+
+### Race protection
+
+`load()` unsubscribes the previous request, which **cancels it at the transport**, and
+bumps a generation counter that discards anything that still slips through. So a category
+change or a burst of sort changes can never be overtaken by the request it replaced.
+Proven by test: superseded requests are observably `cancelled`.
+
+### Sort
+
+| Option | Value |
+| --- | --- |
+| Name: A to Z (default) | `name_asc` |
+| Name: Z to A | `name_desc` |
+| Newest | `newest` |
+
+A native `<select>`, not the Phase 21 `SearchSelect`: three options need no search box,
+and a native control is better on mobile. **No price sorting** - there is no global
+customer-price order, and sorting only the loaded page would be wrong for every page after
+the first while looking authoritative.
+
+Sort resets to `name_asc` on category change (a `linkedSignal` keyed on the slug), and a
+sort change resets items, cursor and errors - the old cursor is bound to the old query and
+the backend would reject it.
+
+### Group categories are not listed
+
+`get_items` answers `category_not_listable` for a group category, so the page checks
+`is_group` first and simply does not ask. Subcategory navigation is unchanged.
+
+### Legacy embedded payload - retired
+
+`CategoryPayloadDto` **no longer declares `items`**, so a page that tried to read it
+would not compile. **Zero frontend listing consumers remain.**
+
+Backend Phase 22B-3 has since retired the legacy path at source: `get_category` no longer
+loads or prices an unbounded item array. Both halves of the migration are therefore done -
+see the Phase 22 completion entry above.
+
+### Deferred by design
+
+Search and filters are in the query model (`search: ''`, `filters: []`) and nowhere in the
+UI. The backend supports search and rejects non-empty filters today. No search box, no
+filter chips, no header autocomplete, no collection or all-products scope.
+
 ## CONFIRMED - Reusable address form and location data (Phase 21, 2026-08-15)
 
 ### What was already true
@@ -1215,6 +1340,9 @@ until the backend ships it.
 | Frontend Phase 19 - Transactional storefront polish | **PASS** |
 | Frontend Phase 20 - Release readiness review | **READY WITH NON-BLOCKING BACKLOG** |
 | Frontend Phase 21 - Reusable address form, search select, static geography | **PASS** |
+| Frontend Phase 22B-2 - Catalog listing migration to `get_items` | **PASS** |
+| Backend Phase 22B-3 - legacy unbounded catalog path retired | **PASS** |
+| **Phase 22 - scalable bounded catalog listing (overall)** | **PASS - complete** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

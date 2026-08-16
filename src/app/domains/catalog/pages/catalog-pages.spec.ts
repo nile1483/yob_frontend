@@ -70,6 +70,88 @@ describe('catalog pages', () => {
     };
   }
 
+  describe('/catalog/:slug listing migration (Phase 22B-2)', () => {
+    /** Let the listing request settle after a click or a sort change. */
+    async function settle(view: { harness: { fixture: { whenStable(): Promise<unknown>; detectChanges(): void } } }) {
+      for (let i = 0; i < 4; i++) {
+        await Promise.resolve();
+      }
+      view.harness.fixture.detectChanges();
+      await view.harness.fixture.whenStable();
+      view.harness.fixture.detectChanges();
+    }
+
+    it('renders items from get_items, not from the category payload', async () => {
+      const view = await open('/catalog/fasteners');
+      await settle(view);
+
+      expect(view.testId('item-grid')).not.toBeNull();
+      expect(view.all('item-card').length).toBeGreaterThan(0);
+      // The legacy embedded array is no longer even on the frontend type.
+      expect(view.testId('item-listing')).not.toBeNull();
+    });
+
+    it('offers the sort control, defaulting to name A-Z', async () => {
+      const view = await open('/catalog/fasteners');
+      await settle(view);
+
+      const sort = view.testId('item-sort') as HTMLSelectElement;
+      expect(sort).not.toBeNull();
+      expect(sort.value).toBe('name_asc');
+      expect(Array.from(sort.options).map((o) => o.value)).toEqual([
+        'name_asc',
+        'name_desc',
+        'newest',
+      ]);
+      // Price sorting is deliberately absent - there is no global customer-price order.
+      expect(sort.textContent).not.toContain('Price');
+    });
+
+    it('reloads the listing when the sort changes', async () => {
+      const view = await open('/catalog/fasteners');
+      await settle(view);
+      const before = Array.from(view.all('item-card')).length;
+
+      const sort = view.testId('item-sort') as HTMLSelectElement;
+      sort.value = 'name_desc';
+      sort.dispatchEvent(new Event('change', { bubbles: true }));
+      await settle(view);
+
+      // Replaced, not appended: the same rows in a different order.
+      expect(Array.from(view.all('item-card')).length).toBe(before);
+    });
+
+    it('does not request a listing for a group category', async () => {
+      // `industrial-supplies` is a group; `get_items` answers category_not_listable for
+      // one, so the page must not ask. Its subcategory experience is unchanged.
+      const view = await open('/catalog/industrial-supplies');
+      await settle(view);
+
+      expect(view.testId('subcategory-grid')).not.toBeNull();
+      expect(view.testId('item-listing')).toBeNull();
+      expect(view.testId('items-error')).toBeNull();
+    });
+
+    it('shows the empty state only on true exhaustion', async () => {
+      const view = await open('/catalog/abrasives');
+      await settle(view);
+
+      // A leaf with no items at all: items = [], has_more = false.
+      expect(view.testId('category-no-items')).not.toBeNull();
+      expect(view.testId('load-more')).toBeNull();
+    });
+
+    it('keeps Load More available when an empty page reports more to come', async () => {
+      scenario.scenario.set('catalog-empty-page');
+      const view = await open('/catalog/fasteners');
+      await settle(view);
+
+      // The scan-budget continuation: nothing returned, but not exhausted.
+      expect(view.testId('category-no-items')).toBeNull();
+      expect(view.testId('load-more')).not.toBeNull();
+    });
+  });
+
   describe('/catalog', () => {
     it('lists the top-level categories', async () => {
       const view = await open('/catalog');
@@ -140,7 +222,8 @@ describe('catalog pages', () => {
       const view = await open('/catalog/industrial-supplies');
 
       expect(view.testId('subcategory-grid')).not.toBeNull();
-      expect(view.all('category-card')).toHaveLength(2);
+      // Fasteners, Abrasives and the multi-page Bulk Fasteners category.
+      expect(view.all('category-card')).toHaveLength(3);
       // A group category has no items of its own, and that is not an empty state.
       expect(view.testId('item-grid')).toBeNull();
       expect(view.testId('category-no-items')).toBeNull();

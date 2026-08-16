@@ -97,7 +97,9 @@ export type MockScenario =
    * A knob because the refusal comes from links a mock cart and mock order do not
    * have, and simulating those links would be more backend than this needs.
    */
-  | 'account-record-in-use';
+  | 'account-record-in-use'
+  /** `get_items` first page returns nothing while `has_more` stays true. */
+  | 'catalog-empty-page';
 
 /**
  * Runtime knobs for the mock API.
@@ -154,7 +156,8 @@ export class MockApiScenario {
       scenario === 'payment-committed' ||
       scenario === 'payment-provider-unavailable' ||
       scenario === 'payment-already-processed' ||
-      scenario === 'account-record-in-use'
+      scenario === 'account-record-in-use' ||
+      scenario === 'catalog-empty-page'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);
