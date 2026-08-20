@@ -99,7 +99,21 @@ export type MockScenario =
    */
   | 'account-record-in-use'
   /** `get_items` first page returns nothing while `has_more` stays true. */
-  | 'catalog-empty-page';
+  | 'catalog-empty-page'
+  /** ERPNext adds a free row for the *same* SKU already in the cart. */
+  | 'cart-promotion-same-item'
+  /** ERPNext gifts a different SKU, present in no cart item. */
+  | 'cart-promotion-other-item'
+  /** A Paid row legitimately priced to zero by a 100% discount. */
+  | 'cart-paid-zero-rate'
+  /** Tax already inside the price: total equals amount, not amount + tax. */
+  | 'cart-tax-inclusive'
+  /** Inter-state sale: a single IGST component. */
+  | 'cart-tax-igst'
+  /** GST-unregistered company: a real but unclassified component named by `label`. */
+  | 'cart-tax-generic'
+  /** Row figures deliberately disagreeing with the document totals. */
+  | 'cart-summary-mismatch';
 
 /**
  * Runtime knobs for the mock API.
@@ -157,7 +171,14 @@ export class MockApiScenario {
       scenario === 'payment-provider-unavailable' ||
       scenario === 'payment-already-processed' ||
       scenario === 'account-record-in-use' ||
-      scenario === 'catalog-empty-page'
+      scenario === 'catalog-empty-page' ||
+      scenario === 'cart-promotion-same-item' ||
+      scenario === 'cart-promotion-other-item' ||
+      scenario === 'cart-paid-zero-rate' ||
+      scenario === 'cart-tax-inclusive' ||
+      scenario === 'cart-tax-igst' ||
+      scenario === 'cart-tax-generic' ||
+      scenario === 'cart-summary-mismatch'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

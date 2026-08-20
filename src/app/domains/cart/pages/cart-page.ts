@@ -8,6 +8,7 @@ import { PageHeader } from '../../../design/page-header/page-header';
 import { CartLine } from '../parts/cart-line';
 import { CartSummary } from '../parts/cart-summary';
 import { CouponCode } from '../parts/coupon-code/coupon-code';
+import { toCartRowViews } from '../cart.rows';
 import { CartStore } from '../state/cart.store';
 
 /**
@@ -74,13 +75,17 @@ import { CartStore } from '../state/cart.store';
       <div class="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <!-- A list, not a table: a price table is unreadable on a 390px phone, and
              nothing here is genuinely tabular data a user needs to scan in columns. -->
+        <!-- Priced rows, not intent rows: pricing_rows is what ERPNext actually
+             charged, including promotion rows the buyer never asked for. Tracked by
+             row_id because one SKU legitimately appears twice - once Paid, once
+             Promotion - and tracking by item code would make one replace the other. -->
         <ul data-testid="cart-lines">
-          @for (line of store.lines(); track line.item_code) {
+          @for (view of rowViews(); track view.row.row_id) {
             <li>
               <app-cart-line
-                [line]="line"
+                [view]="view"
                 [currency]="cart.currency"
-                [removing]="store.removingItemCode() === line.item_code"
+                [removing]="store.removingItemCode() === view.row.item_code"
                 (remove)="onRemove($event)"
               />
             </li>
@@ -114,6 +119,17 @@ import { CartStore } from '../state/cart.store';
 })
 export class CartPage {
   protected readonly store = inject(CartStore);
+
+  /**
+   * What the cart shows: the priced projection, joined to the intent rows for the
+   * thumbnail, the product link and the readable offer wording.
+   *
+   * Totals are **not** derived from these rows - they come from the cart document, which
+   * is the only thing that has seen taxes, coupons and transaction-level discounts.
+   */
+  protected readonly rowViews = computed(() =>
+    toCartRowViews(this.store.pricingRows(), this.store.lines()),
+  );
 
   constructor() {
     // The store may already hold a payload from an add on item detail; reload anyway

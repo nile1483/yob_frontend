@@ -20,6 +20,11 @@ const ADD_TO_CART = '/api/method/yob_storefront.api.cart.add_to_cart';
 const BOLT = 'YOB-BOLT-M10';
 const WASHER = 'YOB-WASH-M10';
 
+/** Two decimals, the way the mock server rounds money. */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 describe('Cart domain', () => {
   describe('CartApi', () => {
     let api: CartApi;
@@ -291,6 +296,159 @@ describe('Cart domain', () => {
       // The client-side session is untouched: a business refusal is not a logout.
       expect(session.isAuthenticated()).toBe(true);
       expect(session.isGuest()).toBe(false);
+    });
+
+    describe('priced projection (Phase 23B-2)', () => {
+      /** Load a cart with one line, then read back what the store exposes. */
+      async function loadWithItem(): Promise<void> {
+        mockCart.seedQuantity('YOB-BOLT-M10', 2);
+        store.load().subscribe();
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+
+      it('exposes the projection separately from customer intent', async () => {
+        await loadWithItem();
+
+        // Two different concepts, both available and neither standing in for the other.
+        expect(store.lines().length).toBeGreaterThan(0);
+        expect(store.pricingRows().length).toBeGreaterThan(0);
+        expect(store.pricingRows()[0].line_role).toBe('Paid');
+      });
+
+      it('marks a paid row mutable and a promotion row not', async () => {
+        scenario.scenario.set('cart-promotion-same-item');
+        await loadWithItem();
+
+        const rows = store.pricingRows();
+        const paid = rows.filter((r) => r.line_role === 'Paid');
+        const promo = rows.filter((r) => r.line_role === 'Promotion');
+
+        expect(paid.length).toBe(1);
+        expect(promo.length).toBe(1);
+        expect(store.isMutable(paid[0])).toBe(true);
+        expect(store.isMutable(promo[0])).toBe(false);
+      });
+
+      it('keeps a same-SKU promotion from overwriting the paid row', async () => {
+        scenario.scenario.set('cart-promotion-same-item');
+        await loadWithItem();
+
+        const rows = store.pricingRows();
+        expect(rows).toHaveLength(2);
+        // Same item code, two distinct projection rows with distinct ids and prices.
+        expect(rows[0].item_code).toBe(rows[1].item_code);
+        expect(rows[0].row_id).not.toBe(rows[1].row_id);
+        expect(rows[0].rate).toBeGreaterThan(0);
+        expect(rows[1].rate).toBe(0);
+      });
+
+      it('lists a gift SKU that has no cart item at all', async () => {
+        scenario.scenario.set('cart-promotion-other-item');
+        await loadWithItem();
+
+        const gift = store.pricingRows().find((r) => r.line_role === 'Promotion');
+        expect(gift).toBeDefined();
+        expect(store.lines().some((l) => l.item_code === gift?.item_code)).toBe(false);
+        expect(store.isMutable(gift!)).toBe(false);
+      });
+
+      it('treats a zero-rate paid row as paid', async () => {
+        scenario.scenario.set('cart-paid-zero-rate');
+        await loadWithItem();
+
+        const row = store.pricingRows()[0];
+        expect(row.rate).toBe(0);
+        expect(row.line_role).toBe('Paid');
+        expect(store.isMutable(row)).toBe(true);
+      });
+
+      it('takes totals from the cart document, not from summing rows', async () => {
+        // The anchor is the fixture that carries tax, which is what makes the two
+        // numbers differ - and the reason the grand total can never be a row sum.
+        mockCart.seedQuantity('YOB-ANCHOR-HD-12', 1);
+        store.load().subscribe();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const cart = store.cart()!;
+        const summed = store.pricingRows().reduce((total, row) => total + row.amount, 0);
+
+        // Summing projection rows and calling it the grand total would silently drop
+        // tax, coupons and every other document-level effect ERPNext applied.
+        expect(summed).toBeGreaterThan(0);
+        expect(cart.grand_total).toBeGreaterThan(summed);
+        expect(cart.grand_total).toBe(round2(cart.net_total + cart.tax_total));
+      });
+    });
+
+    describe('summary stays document-authoritative (Phase 23B-4)', () => {
+      it('shows the document totals even when the rows deliberately disagree', async () => {
+        // The rows are rigged to be inconsistent with the document. A future
+        // "simplification" that summed rows would change these numbers; the server's
+        // totals are the ones the buyer is charged, so they must win.
+        scenario.scenario.set('cart-summary-mismatch');
+        mockCart.seedQuantity('YOB-ANCHOR-HD-12', 1);
+        store.load().subscribe();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const cart = store.cart()!;
+        const rows = store.pricingRows();
+        const rowTax = rows.reduce((total, row) => total + row.tax_amount, 0);
+        const rowTotal = rows.reduce((total, row) => total + row.total_amount, 0);
+
+        expect(rowTax).toBe(999);
+        expect(rowTotal).toBe(9999);
+        // Untouched by the row figures.
+        expect(cart.tax_total).not.toBe(rowTax);
+        expect(cart.grand_total).not.toBe(rowTotal);
+        expect(cart.grand_total).toBe(round2(cart.net_total + cart.tax_total));
+      });
+
+      it('carries row tax through from the backend without recomputing it', async () => {
+        mockCart.seedQuantity('YOB-ANCHOR-HD-12', 1);
+        store.load().subscribe();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const row = store.pricingRows()[0];
+        const line = store.lines()[0];
+
+        // Straight from the line the server priced, not derived from a rate.
+        expect(row.tax_amount).toBe(line.tax_amount);
+        expect(row.total_amount).toBe(line.total_amount);
+        expect(row.tax_components.length).toBeGreaterThan(0);
+      });
+
+      it('preserves a null tax_type and the numeric inclusive flag', async () => {
+        scenario.scenario.set('cart-tax-generic');
+        mockCart.seedQuantity('YOB-ANCHOR-HD-12', 1);
+        store.load().subscribe();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const part = store.pricingRows()[0].tax_components[0];
+        expect(part.tax_type).toBeNull();
+        expect(part.label).toBe('Service Tax');
+        // A number on the wire; typing it as boolean would make 0 truthy.
+        expect(part.included_in_print_rate).toBe(0);
+      });
+
+      it('keeps the inclusive-tax figures exactly as sent', async () => {
+        scenario.scenario.set('cart-tax-inclusive');
+        mockCart.seedQuantity('YOB-ANCHOR-HD-12', 1);
+        store.load().subscribe();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const row = store.pricingRows()[0];
+        expect(row.amount).toBe(100);
+        expect(row.net_amount).toBe(84.75);
+        expect(row.tax_amount).toBe(15.25);
+        // The total equals the amount, because the tax was already inside it.
+        expect(row.total_amount).toBe(100);
+      });
     });
 
     describe('removal (current backend: by item_code)', () => {

@@ -70,6 +70,57 @@ describe('catalog pages', () => {
     };
   }
 
+  describe('UOM and availability (Phase 23B-2)', () => {
+    it('shows the priced UOM on a listing card', async () => {
+      const view = await open('/catalog/fasteners');
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+      view.harness.fixture.detectChanges();
+      await view.harness.fixture.whenStable();
+      view.harness.fixture.detectChanges();
+
+      expect(view.testId('item-uom')?.textContent).toContain('Nos');
+    });
+
+    it('shows the priced UOM on item detail', async () => {
+      const view = await open('/catalog/item/hex-bolt-m10-50');
+      expect(view.testId('item-uom')?.textContent).toContain('Nos');
+    });
+
+    it('shows a real stock quantity in the stock UOM', async () => {
+      const view = await open('/catalog/item/hex-bolt-m10-50');
+      expect(view.testId('item-availability')?.textContent).toContain('25');
+      expect(view.testId('item-availability')?.textContent).toContain('Nos');
+    });
+
+    it('shows zero stock, because zero is a real quantity', async () => {
+      const view = await open('/catalog/item/hex-nut-m10');
+      // A resolved warehouse holding none. Different from "we do not know".
+      expect(view.testId('item-availability')?.textContent).toContain('0');
+    });
+
+    it('shows nothing for a non-stock item', async () => {
+      const view = await open('/catalog/item/flat-washer-m10');
+      // Availability does not apply; "out of stock" about a non-stock item is wrong.
+      expect(view.testId('item-availability')).toBeNull();
+      expect(view.text()).not.toContain('Out of stock');
+    });
+
+    it('shows nothing when no warehouse resolved, rather than zero', async () => {
+      const view = await open('/catalog/item/through-bolt-anchor-m12-120');
+      // actual_qty is null because ERPNext resolved no transaction warehouse. Rendering
+      // 0 would invent a stock position the system never reported.
+      expect(view.testId('item-availability')).toBeNull();
+      expect(view.text()).not.toContain('Out of stock');
+    });
+
+    it('does not add a request merely to learn the UOM or stock', async () => {
+      const view = await open('/catalog/item/hex-bolt-m10-50');
+      // Both arrive on the item response itself.
+      expect(view.testId('item-uom')).not.toBeNull();
+      expect(view.testId('item-availability')).not.toBeNull();
+    });
+  });
+
   describe('/catalog/:slug listing migration (Phase 22B-2)', () => {
     /** Let the listing request settle after a click or a sort change. */
     async function settle(view: { harness: { fixture: { whenStable(): Promise<unknown>; detectChanges(): void } } }) {

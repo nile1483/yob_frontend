@@ -107,8 +107,40 @@ export class CartStore {
   readonly isLoaded = this.loadedSignal.asReadonly();
 
   readonly cart = computed(() => this.payloadSignal()?.cart ?? null);
+  /**
+   * Persistent customer intent: what the buyer asked for.
+   *
+   * The mutation source, and the only thing `add`/`remove` may target. **Not** what the
+   * cart displays - see {@link pricingRows}.
+   */
   readonly lines = computed(() => this.cart()?.items ?? []);
+
+  /**
+   * The priced projection ERPNext produced: what the cart displays.
+   *
+   * Includes promotion rows that exist in no cart item, and can list one SKU twice - once
+   * Paid, once Promotion. Falls back to an empty list rather than to `items`, because
+   * silently rendering the intent snapshot as though it were priced is the exact
+   * confusion this split exists to prevent.
+   */
+  readonly pricingRows = computed(() => this.cart()?.pricing_rows ?? []);
   readonly isEmpty = computed(() => this.loadedSignal() && this.lines().length === 0);
+
+  /** Which SKUs the buyer actually owns, so a Paid row can offer mutation controls. */
+  private readonly ownedItemCodes = computed(
+    () => new Set(this.lines().map((line) => line.item_code)),
+  );
+
+  /**
+   * Whether this priced row maps to editable customer intent.
+   *
+   * A promotion row never does. A paid row does when the buyer owns that SKU - the
+   * mapping is by `item_code` because `cart.items` exposes no row name for
+   * `source_line_ids` to resolve against.
+   */
+  isMutable(row: { line_role: string; item_code: string }): boolean {
+    return row.line_role === 'Paid' && this.ownedItemCodes().has(row.item_code);
+  }
 
   /** Authoritative currency for this cart, when the server has told us one. */
   readonly currency = computed(() => this.cart()?.currency ?? null);

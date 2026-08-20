@@ -3,6 +3,7 @@ import type { MockContext, MockHandler } from '../core/mock-handler';
 import type { CatalogItemDto } from '../../app/domains/catalog/contracts/catalog.types';
 import {
   MOCK_CATEGORIES_BY_SLUG,
+  MOCK_ITEMS_BY_CATEGORY,
   MOCK_ITEM_DETAILS_BY_SLUG,
   MOCK_TOP_LEVEL_CATEGORIES,
   mockChildCategories,
@@ -79,7 +80,6 @@ const getCategory: MockHandler = (ctx) => {
     notice: 'Category loaded',
     meta: {
       subcategory_count: payload.subcategories.length,
-      item_count: payload.items.length,
     },
   });
 };
@@ -262,7 +262,7 @@ const getItems: MockHandler = (ctx) => {
     offset = cursor.offset;
   }
 
-  const all = sortItems(payload.items, sort);
+  const all = sortItems(MOCK_ITEMS_BY_CATEGORY[slug] ?? [], sort);
 
   // A page that returns nothing while more remains: the scan-budget continuation.
   if (ctx.scenario === 'catalog-empty-page' && offset === 0 && all.length > 0) {

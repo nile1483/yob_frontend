@@ -5,6 +5,8 @@ import type {
   CartContactDto,
   CartLineDto,
   CartPayloadDto,
+  CartPricingRowDto,
+  CartTaxComponentDto,
 } from '../../app/domains/cart/contracts/cart.types';
 import {
   MOCK_ADDRESS_LOCAL,
@@ -14,7 +16,33 @@ import {
 } from '../fixtures/address-book.fixture';
 import { MOCK_ITEM_DETAILS_BY_SLUG } from '../fixtures/catalog.fixture';
 import { couponDiscountRate } from '../fixtures/coupon.fixture';
+import { MockApiScenario } from '../scenarios/mock-scenario';
 import { MockServerAddressBook } from './mock-server-address-book';
+
+/** The gift SKU the different-item promotion scenario hands out. */
+export const MOCK_GIFT_ITEM_CODE = 'YOB-GIFT-CAP';
+export const MOCK_GIFT_ITEM_NAME = 'YOB Branded Cap';
+
+/**
+ * Split a line's tax into CGST and SGST, as an intra-state sale does.
+ *
+ * The halves carry the rounding remainder on the first component, so the two amounts do
+ * not always sum evenly to `tax_amount`. That asymmetry is the point: a UI that summed
+ * components rather than reading the authoritative `tax_amount` would drift by a paisa,
+ * and this fixture makes that drift visible.
+ */
+function splitGst(taxAmount: number, taxableAmount: number): CartTaxComponentDto[] {
+  if (taxAmount === 0) {
+    return [];
+  }
+  const half = Math.round((taxAmount / 2) * 100) / 100;
+  const remainder = Math.round((taxAmount - half) * 100) / 100;
+  const base = { taxable_amount: taxableAmount, included_in_print_rate: 0, charge_type: 'On Net Total' };
+  return [
+    { tax_type: 'CGST', label: 'CGST', rate: 9, amount: half, ...base },
+    { tax_type: 'SGST', label: 'SGST', rate: 9, amount: remainder, ...base },
+  ];
+}
 
 /**
  * The mock API's server-side cart.
@@ -39,6 +67,7 @@ export class MockServerCart {
   private readonly withdrawnCodes = signal<ReadonlySet<string>>(new Set());
 
   private readonly addressBook = inject(MockServerAddressBook);
+  private readonly scenario = inject(MockApiScenario);
 
   /**
    * The cart's current selections.
@@ -342,6 +371,7 @@ export class MockServerCart {
         coupon_code: this.couponCode(),
         coupon_discount: couponDiscount,
         items: lines,
+        pricing_rows: this.buildPricingRows(lines),
       },
       // Resolved blocks, as `build_cart_response` returns them: a summary of the
       // selected record, not the master record itself.
@@ -351,6 +381,216 @@ export class MockServerCart {
       cart_updated: removed.length > 0 || repriced.length > 0,
       removed_items: removed,
       price_updated_items: repriced,
+    };
+  }
+
+  /**
+   * The priced projection ERPNext would derive from the temporary Sales Order.
+   *
+   * Mirrors the real contract rather than echoing `items`: every paid line becomes a
+   * `Paid` row, and the promotion scenarios add ERPNext-generated `Promotion` rows that
+   * exist in no cart item. `row_id` is positional and stable within a response, which is
+   * what lets one SKU appear twice without the two rows colliding.
+   */
+  private buildPricingRows(lines: readonly CartLineDto[]): CartPricingRowDto[] {
+    const rows: CartPricingRowDto[] = lines.map((line, index) => ({
+      row_id: String(index),
+      line_role: 'Paid',
+      is_free_item: 0,
+      item_code: line.item_code,
+      item_name: line.item_name,
+      uom: line.uom,
+      stock_uom: line.stock_uom,
+      conversion_factor: 1,
+      qty: line.quantity,
+      stock_qty: line.quantity,
+      base_price: line.base_price,
+      rate: line.rate,
+      discount_percentage: line.discount_percentage,
+      discount_amount: line.discount_amount,
+      amount: line.amount,
+      net_amount: line.amount,
+      // Tax exactly as the backend reports it, so the frontend has nothing to compute.
+      tax_amount: line.tax_amount,
+      total_amount: line.total_amount,
+      tax_components: splitGst(line.tax_amount, line.amount),
+      // The frontend's CartLineDto does not carry rule names; the projection does.
+      pricing_rules: line.pricing_rule_label === null ? [] : ['PRLE-MOCK-0001'],
+      // The real backend supplies cart-item row names here. They are unresolvable in the
+      // browser because `items` carries no `name`, and the mock reproduces that faithfully
+      // rather than inventing an id the application could accidentally start relying on.
+      source_line_ids: [`mock-line-${index}`],
+    }));
+
+    const scenario = this.scenario.scenario();
+    const first = lines[0];
+    if (first === undefined) {
+      return rows;
+    }
+
+    if (scenario === 'cart-promotion-same-item') {
+      // Buy some, get one of the *same* SKU free. The row that used to overwrite the
+      // paid row's price before backend Phase 23B-1.
+      rows.push(this.freeRow(String(rows.length), first.item_code, first.item_name, first.uom, first.stock_uom));
+    }
+
+    if (scenario === 'cart-promotion-other-item') {
+      // A gift of a different SKU, which exists in no cart item at all.
+      rows.push(this.freeRow(String(rows.length), MOCK_GIFT_ITEM_CODE, MOCK_GIFT_ITEM_NAME, 'Nos', 'Nos'));
+    }
+
+    if (scenario === 'cart-tax-inclusive') {
+      // The case naive arithmetic gets wrong: the tax is already inside `amount`, so the
+      // total equals the amount. `net + tax` would show 115.25 and charge tax twice.
+      rows[0] = {
+        ...rows[0],
+        amount: 100,
+        net_amount: 84.75,
+        tax_amount: 15.25,
+        total_amount: 100,
+        tax_components: [
+          {
+            tax_type: 'CGST',
+            label: 'CGST',
+            rate: 9,
+            amount: 7.63,
+            taxable_amount: 84.75,
+            included_in_print_rate: 1,
+            charge_type: 'On Net Total',
+          },
+          {
+            tax_type: 'SGST',
+            label: 'SGST',
+            rate: 9,
+            amount: 7.62,
+            taxable_amount: 84.75,
+            included_in_print_rate: 1,
+            charge_type: 'On Net Total',
+          },
+        ],
+      };
+    }
+
+    if (scenario === 'cart-tax-igst') {
+      rows[0] = {
+        ...rows[0],
+        amount: 100,
+        net_amount: 100,
+        tax_amount: 18,
+        total_amount: 118,
+        tax_components: [
+          {
+            tax_type: 'IGST',
+            label: 'IGST',
+            rate: 18,
+            amount: 18,
+            taxable_amount: 100,
+            included_in_print_rate: 0,
+            charge_type: 'On Net Total',
+          },
+        ],
+      };
+    }
+
+    if (scenario === 'cart-tax-generic') {
+      // A GST-unregistered company produces real but unclassified tax. `tax_type` is
+      // null, so the buyer-facing name has to come from `label`.
+      rows[0] = {
+        ...rows[0],
+        amount: 100,
+        net_amount: 100,
+        tax_amount: 5,
+        total_amount: 105,
+        tax_components: [
+          {
+            tax_type: null,
+            label: 'Service Tax',
+            rate: 5,
+            amount: 5,
+            taxable_amount: 100,
+            included_in_print_rate: 0,
+            charge_type: 'On Net Total',
+          },
+        ],
+      };
+    }
+
+    if (scenario === 'cart-summary-mismatch') {
+      // Rows deliberately disagreeing with the document totals, so a future
+      // "simplification" that summed rows would be caught immediately.
+      rows[0] = { ...rows[0], tax_amount: 999, total_amount: 9999 };
+    }
+
+    if (scenario === 'cart-paid-zero-rate') {
+      // A *paid* row priced to zero by a legitimate 100% discount. Must not be labelled
+      // a promotion merely because it is free.
+      rows[0] = {
+        ...rows[0],
+        rate: 0,
+        amount: 0,
+        net_amount: 0,
+        discount_percentage: 100,
+        discount_amount: rows[0].base_price,
+        // Free to the buyer, and ERPNext still decides the tax. Never inferred from rate.
+        tax_amount: 0,
+        total_amount: 0,
+        tax_components: [],
+        pricing_rules: ['PRLE-MOCK-FULL-DISCOUNT'],
+      };
+    }
+
+    return rows;
+  }
+
+  /**
+   * A CGST/SGST split of the line's tax, the way an intra-state sale produces.
+   *
+   * Halved with the remainder on the first component, which is what makes the fixture
+   * useful: the two amounts do not always divide evenly, so a UI that summed components
+   * instead of reading `tax_amount` would drift by a paisa.
+   */
+  private freeRow(
+    rowId: string,
+    itemCode: string,
+    itemName: string,
+    uom: string,
+    stockUom: string,
+  ): CartPricingRowDto {
+    return {
+      row_id: rowId,
+      line_role: 'Promotion',
+      is_free_item: 1,
+      item_code: itemCode,
+      item_name: itemName,
+      uom,
+      stock_uom: stockUom,
+      conversion_factor: 1,
+      qty: 1,
+      stock_qty: 1,
+      base_price: 0,
+      rate: 0,
+      discount_percentage: 0,
+      discount_amount: 0,
+      amount: 0,
+      net_amount: 0,
+      // A promotion row carries its own authoritative tax result. Zero here, with a
+      // component that still belongs to *this* row - proving the UI never borrows tax
+      // from the paid row, and never hides a component because the amount is zero.
+      tax_amount: 0,
+      total_amount: 0,
+      tax_components: [
+        {
+          tax_type: 'CGST',
+          label: 'CGST',
+          rate: 9,
+          amount: 0,
+          taxable_amount: 0,
+          included_in_print_rate: 0,
+          charge_type: 'On Net Total',
+        },
+      ],
+      pricing_rules: ['PRLE-MOCK-PROMO'],
+      source_line_ids: [],
     };
   }
 
@@ -399,4 +639,5 @@ export class MockServerCart {
 /** Currency-ish rounding, so fixture totals stay comparable. */
 function round(value: number): number {
   return Math.round(value * 100) / 100;
+
 }

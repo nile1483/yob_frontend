@@ -128,6 +128,234 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - ERPNext pricing compatibility sign-off (Phase 23B-5, 2026-08-20)
+
+Verification gate. Tests and documentation only; no production behaviour changed.
+
+### The architecture, as verified in source
+
+```text
+preview   get_item -> SellingContext -> throwaway in-memory Sales Order -> ERPNext prices it
+qty +/-   local signal only, zero requests
+mutation  add/remove/coupon -> load COMPLETE cart -> rebuild Sales Order -> ERPNext prices
+          everything -> pricing_rows + document totals
+commit    Draft Sales Order
+```
+
+- **No parallel pricing engine.** `frappe.new_doc("Sales Order")` plus `set_missing_values()`,
+  `calculate_taxes_and_totals()` and ERPNext's own `apply_pricing_rule_on_transaction`.
+  The YOB Cart DocType is **never** passed to ERPNext pricing as if it were a Sales Order.
+- **`for_shopping_cart` appears nowhere** in `yob_storefront`, `yob_core` or `yob_auth`.
+- **Row tax comes from `_item_wise_tax_details`**, grouped by row identity rather than
+  `item_code` - which is what keeps a same-SKU paid row and its free row apart.
+- Angular performs **no** pricing or tax arithmetic. Verified behaviourally, not by
+  source-scanning: tests pin figures any calculation would get wrong.
+
+### Environments, and why two passed gates looked contradictory
+
+`test.localhost` (backend tests) has an **Unregistered** company; `yob.localhost` (live
+smoke) has a **Registered Regular** company, GSTIN `24AEQPV5389F1ZS`, Gujarat. Same company
+name, different sites. Both earlier reports were correct. The backend skip message already
+names the company and its `gst_category`, and `fail()`s if a registered company produces no
+classification - so it was accurate and is retained unchanged.
+
+### Two observations recorded, neither a production defect
+
+**1. The legacy cart-item tax snapshot is prorated, the projection is not.**
+`cart_row.tax_amount` is computed as `total_taxes / net * row_net`, while
+`pricing_rows[].tax_amount` comes from ERPNext's item-wise attribution. With items on
+different tax rates the two disagree by construction. Harmless today because the snapshot is
+non-authoritative and Angular reads only `pricing_rows` - and the projection is covered by
+`test_items_with_different_tax_rates_each_get_their_own`. Worth retiring the prorated field
+when the legacy snapshot is next touched.
+
+**2. `get_payment_methods(order_amount=...)` trusts a client number for *listing*.**
+A caller can pass any amount and see a method it is not entitled to. No financial authority:
+`process_payment` re-evaluates eligibility against the immutable Payment Request's own
+`grand_total` and refuses with `payment_method_unsupported`. Cosmetic enumeration only.
+
+### Boundaries confirmed unchanged
+
+Single-currency storefront. No selectable UOM, no warehouse selection, no independent
+duplicate lines, no per-line expiry. One paid intent row per SKU - the invariant that makes
+Angular's `item_code` mutation mapping safe while `source_line_ids` stays unresolvable.
+
+## CONFIRMED - Authoritative row-level tax display (Phase 23B-4, 2026-08-20)
+
+`cart.pricing_rows` now drives row-level **price and tax** presentation. Angular performs
+**zero tax arithmetic**: no rate multiplication, no `net + tax`, no CGST/SGST/IGST split,
+and no jurisdiction inferred from state, address, GSTIN or account name.
+
+### The contract, as verified on the wire
+
+Additive on each pricing row: `tax_amount`, `total_amount`, and `tax_components[]` with
+`tax_type`, `label`, `rate`, `amount`, `taxable_amount`, `included_in_print_rate`,
+`charge_type`.
+
+One deviation from the phase brief, adapted to rather than worked around:
+**`included_in_print_rate` is a number (`0`/`1`), not a boolean.** Typing it as boolean
+would make `0` truthy after a naive mapping.
+
+### Read, never reconstructed
+
+`total_amount` is **not** `net_amount + tax_amount`. With an inclusive tax the backend
+returns `amount 100, net 84.75, tax 15.25, total 100`; adding the tax back would show
+115.25 and bill the buyer for it twice. Both figures are rendered exactly as sent.
+
+Likewise `tax_amount` is **not** the sum of its components. ERPNext may assign a rounding
+difference to one component, so the parts can differ from the total by a paisa - a fixture
+splits an odd amount deliberately so that drift would be caught.
+
+### Component naming
+
+`tax_type ?? label`. A `null` `tax_type` is legitimate rather than missing data - a company
+without GST registration produces real, unclassified tax - so such a component is shown,
+named by the backend's own `label`, and never relabelled "GST" on a guess. Rates come from
+`rate`, never from `amount / taxable_amount`.
+
+`taxable_amount` is deliberately not surfaced: components can have different bases, so
+there is no single "taxable value" for a row.
+
+### Roles carry their own tax
+
+A promotion row renders its own `tax_amount` and components, never the paid row's - which
+matters most for the same-SKU case, where both rows share an `item_code` and are kept apart
+by `row_id`. A gift SKU with no intent row still renders its tax from the projection. A
+paid row priced to zero by a 100% discount keeps whatever tax ERPNext gave it; nothing is
+inferred from `rate === 0`.
+
+### Cart summary remains document-authoritative
+
+Row totals are item-level attribution; the summary is the financial authority, because
+document-level discounts, rounding, additional charges and inclusive taxes all live there.
+Nothing sums `pricing_rows`. A `cart-summary-mismatch` scenario rigs the rows to `999` /
+`9999` so a future "simplification" that summed them would fail immediately.
+
+### Live verification
+
+Against the real bench at 390px and 1440px: row tax `₹214.92`, row total `₹1,408.92`,
+components `SGST 9% ₹107.46 · CGST 9% ₹107.46`, summary unchanged, no overflow, and **no
+additional HTTP request** - the tax arrives with the cart.
+
+The breakdown sits in the details column rather than beside the money: in the narrow
+right-hand column it was the longest string on a 390px line and squeezed the product name
+onto three lines.
+
+### GST environments - corrected in Phase 23B-5
+
+An earlier version of this entry claimed the phase brief's "GST-unregistered bench" premise
+was outdated. That was **half right and stated too broadly**. There are two environments,
+and they genuinely differ:
+
+| | Site | Company `gst_category` | GSTIN |
+| --- | --- | --- | --- |
+| Backend automated tests | `test.localhost` | **Unregistered** | none |
+| Live Angular smoke | `yob.localhost` | **Registered Regular** | `24AEQPV5389F1ZS` (Gujarat) |
+
+The same Company *name* exists on both sites in different states, which is why the backend
+suite legitimately skips the CGST/SGST/IGST classification cases while the live cart
+legitimately returns `SGST 9% + CGST 9%`. Neither report was wrong.
+
+So: classified intra-state GST rendering **is** verified against a real registered company
+on `yob.localhost`. Generic (`tax_type: null`) rendering stays mock-backed - that is the
+case `yob.localhost` cannot produce. IGST remains an environment sign-off (see Phase
+23B-5).
+
+## CONFIRMED - Pricing projection, UOM, stock and local quantity (Phase 23B-2, 2026-08-17)
+
+Frontend only. ERPNext remains the sole owner of pricing: Angular computes no rate, no
+discount, no threshold and no tax, and this phase removed the last place where it implied
+otherwise.
+
+### Two cart concepts, deliberately not merged
+
+| | Purpose |
+| --- | --- |
+| `cart.items` | persistent customer **intent** - the mutation source, one line per SKU |
+| `cart.pricing_rows` | the priced **projection** ERPNext derived - what the cart displays |
+
+The cart page renders `pricing_rows` and tracks by **`row_id`**, never `item_code`: the
+same SKU legitimately appears twice, once `Paid` and once `Promotion`, and tracking by
+item code made one overwrite the other - the bug backend Phase 23B-1 fixed.
+
+`cart.rows.ts` joins the two once: **every figure comes from the projection**, and only
+decoration (thumbnail, product link, readable offer wording) comes from the intent row. A
+gift SKU has no intent row, so it renders without a thumbnail or link - correct, not
+degraded.
+
+Totals still come from the cart document. Summing projection rows would drop tax, coupons
+and transaction-level discounts, and a test pins that the two numbers genuinely differ.
+
+### Paid vs Promotion
+
+Read from the backend's explicit `line_role`, **never inferred from `rate === 0`**: a Paid
+row can price to zero through a legitimate 100% discount, and calling that a gift would
+tell the buyer something false. Promotion rows show a `Free` badge and carry **no mutation
+controls at all** - they are ERPNext output that can change or vanish after any mutation.
+
+`source_line_ids` is typed and carried, but **cannot be resolved in the browser**:
+`cart.items` rows expose no `name` for those ids to match. Mutation controls therefore map
+by `item_code`, which is unambiguous while the backend keeps one intent line per SKU.
+Recorded as a contract gap, not worked around.
+
+### Quantity is local until Add to cart
+
+Item detail used to refetch `get_item(slug, qty)` on every committed quantity. Removed.
+Choosing a quantity now changes a signal and issues **no request of any kind**; Add to
+cart sends the chosen quantity once and the returned cart is authoritative.
+
+Verified against the real backend: **1 `get_item` on load, 0 after three quantity
+changes**, with the displayed price unchanged.
+
+Two reasons, both decisive. The displayed price is a **standalone preview** for the
+backend's default quantity - the transaction rate is settled only when the whole cart is
+priced as one document, where quantity rules, mixed conditions, transaction-amount rules
+and coupons apply and none can be previewed per item. And the refetch made a misconfigured
+Pricing Rule break the page: a tier conflict at qty 5 turned typing a quantity into "We
+could not load this item". A cart rate differing from the preview is legitimate.
+
+`item-pricing-race.spec.ts` was inverted rather than deleted - the race it guarded cannot
+happen once nothing refetches, so it now pins the stronger guarantee.
+
+### UOM
+
+Shown on listing cards and item detail. `get_items` supplies only `stock_uom`, which is
+the priced unit for a default-quantity preview; `get_item` supplies a distinct `uom` and
+detail shows that. **No UOM selector**, and no extra request - both arrive on the product
+response.
+
+### Availability
+
+Three situations, deliberately distinct:
+
+| Backend | Shown |
+| --- | --- |
+| `is_stock_item: 0` | nothing - availability does not apply to a service |
+| stock item, `actual_qty: null` | nothing - no warehouse resolved, so the quantity is unknown |
+| stock item, number (**including `0`**) | the quantity, in `stock_uom` |
+
+`null` is never rendered as `0`, and a stocked item with an unresolved warehouse is never
+shown as sold out - that invents a stock position the system never reported. Zero *is*
+shown, because a resolved warehouse holding none is a fact worth telling the buyer.
+
+Availability is **informational**. Nothing restricts what may be added; ERPNext owns that.
+The warehouse is ERPNext-resolved and the browser never sends one.
+
+Variants use the actual variant SKU's own response - no template lookup, no sibling
+summing.
+
+### Deliberately unchanged
+
+Duplicate-SKU behaviour, cart mutation semantics, and cart-page quantity operations (a
+real cart change is still a server mutation). No selectable UOM, no warehouse selector, no
+independent duplicate lines, no per-line expiry, no client-side stock reservation.
+
+### Phase 22 cleanup, completed here
+
+Both recorded items are done: the mock `get_category` payload no longer carries the legacy
+`items` array (listing fixtures moved to `MOCK_ITEMS_BY_CATEGORY`, feeding `get_items`),
+and the unused `CategoryMetaDto.item_count` is gone.
+
 ## CONFIRMED - Scalable bounded catalog listing (Phase 22, complete, 2026-08-16)
 
 **Phase 22 is complete.** Both halves have passed: the frontend migration (22B-2) and the
@@ -1343,6 +1571,9 @@ until the backend ships it.
 | Frontend Phase 22B-2 - Catalog listing migration to `get_items` | **PASS** |
 | Backend Phase 22B-3 - legacy unbounded catalog path retired | **PASS** |
 | **Phase 22 - scalable bounded catalog listing (overall)** | **PASS - complete** |
+| Frontend Phase 23B-2 - pricing projection, UOM, stock, local quantity | **PASS** |
+| Frontend Phase 23B-4 - authoritative row-level tax display | **PASS** |
+| **Phase 23B-5 - ERPNext pricing compatibility sign-off audit** | **PASS with environment sign-off** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

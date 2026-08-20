@@ -84,6 +84,10 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
           </div>
 
           <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <!-- The UOM the shown price is for. get_items supplies only stock_uom,
+                 and listing prices are the backend's default-quantity preview in that
+                 unit, so it is the priced UOM here. Product detail carries a separate
+                 uom and shows that instead. -->
             <span class="text-xs text-slate-500" data-testid="item-uom">
               <ng-container i18n="@@catalog.item.perUom">per</ng-container>
               {{ item().stock_uom }}

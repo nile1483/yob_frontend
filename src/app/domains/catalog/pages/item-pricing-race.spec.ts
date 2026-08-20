@@ -42,14 +42,25 @@ function itemPayload(qty: number, rate: number) {
 }
 
 /**
- * Stale quantity pricing must never win.
+ * Choosing a quantity is local, and costs nothing.
+ *
+ * ## Why this file inverted in Phase 23B-2
+ *
+ * It used to prove that a *stale* quantity reprice could not overwrite a newer one -
+ * necessary while every committed quantity refetched `get_item`. That refetch is gone:
+ * the displayed price is the customer's standalone preview at the backend's default
+ * quantity, and the transaction rate is only settled when the whole cart is priced as
+ * one document. Angular cannot preview that without reimplementing ERPNext's pricing,
+ * which is the one thing it must never do.
+ *
+ * So there is no race left to lose, and the guarantee worth pinning is the stronger one:
+ * **no pricing request happens at all** until Add to cart. The old assertions are not
+ * deleted so much as replaced by the reason they became unnecessary.
  *
  * The component is driven directly rather than through the router, and against the
- * testing backend rather than the mock API, because staging a race needs a request
- * left deliberately unanswered - which the mock (synchronous) and `whenStable()` (hangs
- * on a pending request) both make impossible.
+ * testing backend rather than the mock API, so every request is observable.
  */
-describe('ItemPage quantity pricing race', () => {
+describe('ItemPage local quantity', () => {
   let http: HttpTestingController;
   let fixture: ComponentFixture<ItemPage>;
 
@@ -109,61 +120,61 @@ describe('ItemPage quantity pricing race', () => {
 
   afterEach(() => http.verify());
 
-  it('cannot render an older quantity pricing over a newer one', async () => {
-    // Quantity 10 goes out and is captured, deliberately unanswered.
-    await commit('10');
-    const requestForTen = pendingItemRequest();
-    expect(requestForTen.request.params.get('qty')).toBe('10');
-
-    // Quantity 50 is committed before 10 has answered.
-    await commit('50');
-    const requestForFifty = pendingItemRequest();
-    expect(requestForFifty.request.params.get('qty')).toBe('50');
-
-    // Changing the quantity aborted the in-flight request for the old one.
-    expect(requestForTen.cancelled).toBe(true);
-
-    // The newest quantity answers.
-    requestForFifty.flush(itemPayload(50, 9));
-    await settle();
-    expect(rate()).toContain('9.00');
-
-    // The stale response now tries to arrive, out of order. It cannot: the request was
-    // cancelled the moment the quantity changed.
-    expect(() => requestForTen.flush(itemPayload(10, 99.99))).toThrow(/cancel/i);
-    await settle();
-
-    expect(rate()).toContain('9.00');
-    expect(rate()).not.toContain('99.99');
-    expect(quantityInput().value).toBe('50');
-  });
-
-  it('keeps the newest pricing through a burst of quantity changes', async () => {
-    const captured: TestRequest[] = [];
-
-    for (const value of ['5', '25', '100']) {
-      await commit(value);
-      captured.push(pendingItemRequest());
-    }
-
-    // Only the last is live; the earlier two were aborted mid-flight.
-    expect(captured[0]?.cancelled).toBe(true);
-    expect(captured[1]?.cancelled).toBe(true);
-    expect(captured[2]?.cancelled).toBe(false);
-    expect(captured[2]?.request.params.get('qty')).toBe('100');
-
-    captured[2]?.flush(itemPayload(100, 8.5));
-    await settle();
-
-    expect(rate()).toContain('8.50');
-  });
-
-  it('issues exactly one pricing request per committed quantity', async () => {
+  it('issues no pricing request when a quantity is committed', async () => {
     await commit('7');
 
-    const requests = http.match((r) => r.url.includes('get_item'));
-    expect(requests).toHaveLength(1);
-    requests[0]?.flush(itemPayload(7, 10));
+    // The whole point of the phase: typing a quantity is a local decision.
+    expect(http.match((r) => r.url.includes('get_item'))).toHaveLength(0);
+    expect(quantityInput().value).toBe('7');
+  });
+
+  it('issues no pricing request through a burst of quantity changes', async () => {
+    for (const value of ['2', '5', '25', '100']) {
+      await commit(value);
+    }
+
+    expect(http.match((r) => r.url.includes('get_item'))).toHaveLength(0);
+    expect(quantityInput().value).toBe('100');
+  });
+
+  it('keeps showing the preview price whatever quantity is chosen', async () => {
+    await commit('50');
+
+    // Still the standalone preview. Angular does not pretend to know what 50 will cost:
+    // quantity rules, mixed conditions and transaction-level effects are settled by
+    // ERPNext when the cart is priced, and a multiplied preview would be a guess
+    // presented as a fact.
+    expect(rate()).toContain('11.25');
+  });
+
+  it('does not multiply the preview by the chosen quantity', async () => {
+    await commit('4');
+
+    // 11.25 x 4 = 45.00 must appear nowhere.
+    expect(rate()).not.toContain('45.00');
+    expect(rate()).toContain('11.25');
+  });
+
+  it('sends the chosen quantity to the cart exactly once, and only on Add', async () => {
+    await commit('5');
+    expect(http.match((r) => r.url.includes('get_item'))).toHaveLength(0);
+
+    const form = (fixture.nativeElement as HTMLElement).querySelector('form');
+    form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await settle();
+
+    const adds = http.match((r) => r.url.includes('add_to_cart'));
+    expect(adds).toHaveLength(1);
+    expect((adds[0]?.request.body as { qty?: number } | null)?.qty).toBe(5);
+
+    // The store re-reads the cart after a successful add, because the server's cart is
+    // the authoritative result of the mutation - not the add's own reply.
+    adds[0]?.flush({ message: { data: { name: 'CART-1' } } });
+    await settle();
+
+    const reads = http.match((r) => r.url.includes('get_cart'));
+    expect(reads).toHaveLength(1);
+    reads[0]?.flush({ message: { data: { cart: { name: 'CART-1', items: [], pricing_rows: [] } } } });
     await settle();
   });
 });

@@ -198,10 +198,14 @@ export function categoryListingQuery(
   };
 }
 
-/** `meta` for `get_category`. */
+/**
+ * `meta` for `get_category`.
+ *
+ * `item_count` was removed in Phase 23B-2: it counted the legacy embedded array that
+ * backend Phase 22B-3 retired, and nothing read it.
+ */
 export interface CategoryMetaDto {
   readonly subcategory_count: number;
-  readonly item_count: number;
 }
 
 /**
@@ -272,7 +276,37 @@ export interface ItemDetailDto {
   readonly tax_label: string | null;
   readonly total_amount: number;
 
+  /** The UOM the shown price is for. May differ from {@link stock_uom}. */
   readonly uom: string;
+  /** The item's stock-keeping UOM, which is what `actual_qty` is counted in. */
+  readonly stock_uom: string;
+
+  /**
+   * Whether ERPNext tracks stock for this item, as `0` or `1`.
+   *
+   * A service or a non-stock item has no availability to report, and saying
+   * "out of stock" about one would be wrong rather than merely unhelpful.
+   */
+  readonly is_stock_item: number;
+
+  /**
+   * The warehouse ERPNext resolved for this customer's transactions, or `null`.
+   *
+   * Resolved entirely server-side. The browser never chooses or sends a warehouse.
+   */
+  readonly warehouse: string | null;
+
+  /**
+   * Stock on hand in {@link warehouse}, in {@link stock_uom}.
+   *
+   * ## `null` and `0` are different facts
+   *
+   * `0` is a real ERPNext quantity: the warehouse is known and it holds none.
+   * `null` means the quantity could not be established - no warehouse resolved, or the
+   * item is not stock-tracked - and must never be rendered as `0` or "out of stock".
+   * Conflating them invents a stock position the system never reported.
+   */
+  readonly actual_qty: number | null;
 
   /** Duplicative detail; the UI reads the top-level fields instead. */
   readonly pricing: ItemPricingDto;

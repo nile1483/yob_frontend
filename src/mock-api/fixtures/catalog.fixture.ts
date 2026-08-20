@@ -296,44 +296,51 @@ const SAFETY: CategoryDetailDto = {
 
 /** Every category the mock can serve, by slug. */
 /**
- * The `get_category` payload **as it goes over the wire**, legacy `items` included.
+ * `get_category` payloads.
  *
- * The frontend's own `CategoryPayloadDto` deliberately omits `items` - the listing comes
- * from `get_items` since Phase 22B-2 - but the real backend still returns it, and a mock
- * that dropped it would be less strict than the thing it stands in for. So the mock
- * keeps serving it, and the application keeps ignoring it, which is exactly the
- * situation Phase 22B-3 will clean up on the backend.
+ * The legacy embedded `items` array is **gone**: backend Phase 22B-3 retired it, so a
+ * mock still serving it would be modelling a wire that no longer exists. Item listing
+ * comes from `get_items`; the per-category item fixtures below feed that handler.
  */
-type MockCategoryPayload = CategoryPayloadDto & { readonly items: readonly CatalogItemDto[] };
-
-export const MOCK_CATEGORIES_BY_SLUG: Readonly<Record<string, MockCategoryPayload>> = {
+export const MOCK_CATEGORIES_BY_SLUG: Readonly<Record<string, CategoryPayloadDto>> = {
   'industrial-supplies': {
     category: INDUSTRIAL_SUPPLIES,
     subcategories: INDUSTRIAL_SUPPLIES_CHILDREN,
-    items: [],
   },
   fasteners: {
     category: FASTENERS,
     subcategories: [],
-    items: FASTENER_ITEMS,
   },
   'bulk-fasteners': {
     category: BULK,
     subcategories: [],
-    items: BULK_ITEMS,
   },
   abrasives: {
     // Leaf with neither subcategories nor items.
     category: ABRASIVES,
     subcategories: [],
-    items: [],
   },
   'safety-equipment': {
     category: SAFETY,
     subcategories: [],
-    items: [],
   },
 };
+
+/**
+ * Items per category, for the `get_items` listing endpoint.
+ *
+ * Separate from the category payloads since Phase 23B-2: `get_category` no longer carries
+ * an item array, so keeping one inside those objects would model a wire that no longer
+ * exists. This map is listing fixture data, addressed by the same slug `get_items` takes.
+ */
+export const MOCK_ITEMS_BY_CATEGORY: Readonly<Record<string, readonly CatalogItemDto[]>> = {
+  'industrial-supplies': [],
+  'fasteners': FASTENER_ITEMS,
+  'bulk-fasteners': BULK_ITEMS,
+  'abrasives': [],
+  'safety-equipment': [],
+};
+
 
 /** Children of a given parent slug, for `get_categories?parent_slug=`. */
 export function mockChildCategories(parentSlug: string): readonly CategoryListItemDto[] {
@@ -374,6 +381,39 @@ const OFFERS_BY_SLUG: Readonly<Record<string, readonly string[]>> = {
   'through-bolt-anchor-m12-120': ['10% off on 5 boxes or more'],
 };
 
+/**
+ * Stock metadata per item, covering every case the availability UI must tell apart.
+ *
+ * | Slug | Case |
+ * | --- | --- |
+ * | hex bolt | stock item, warehouse resolved, plenty on hand |
+ * | hex nut | stock item, warehouse resolved, genuinely **zero** on hand |
+ * | flat washer | **non-stock** item - availability does not apply at all |
+ * | anchor | stock item, **warehouse unresolved**, so quantity is unknown (`null`) |
+ *
+ * The last two both carry `actual_qty: null` for entirely different reasons, which is
+ * exactly why the UI must branch on `is_stock_item` rather than on the number.
+ */
+interface MockStockMeta {
+  readonly is_stock_item: number;
+  readonly warehouse: string | null;
+  readonly actual_qty: number | null;
+}
+
+const STOCK_BY_SLUG: Readonly<Record<string, MockStockMeta>> = {
+  'hex-bolt-m10-50': { is_stock_item: 1, warehouse: 'Stores - ST', actual_qty: 25 },
+  'hex-nut-m10': { is_stock_item: 1, warehouse: 'Stores - ST', actual_qty: 0 },
+  'flat-washer-m10': { is_stock_item: 0, warehouse: null, actual_qty: null },
+  'through-bolt-anchor-m12-120': { is_stock_item: 1, warehouse: null, actual_qty: null },
+};
+
+/** A stock item whose warehouse resolved but which nothing has been received into. */
+const DEFAULT_STOCK: MockStockMeta = {
+  is_stock_item: 1,
+  warehouse: 'Stores - ST',
+  actual_qty: 12,
+};
+
 function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
   // Only the anchor item carries tax in these fixtures.
   const taxLabel = listing.tax_amount > 0 ? 'GST 18%' : null;
@@ -397,6 +437,9 @@ function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
     total_amount: listing.total_amount,
 
     uom: listing.stock_uom,
+    stock_uom: listing.stock_uom,
+
+    ...(STOCK_BY_SLUG[listing.slug] ?? DEFAULT_STOCK),
 
     pricing: {
       item: {

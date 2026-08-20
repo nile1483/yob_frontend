@@ -3,6 +3,234 @@ import { expect, test } from '@playwright/test';
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
 
+test.describe('priced projection (Phase 23B-2)', () => {
+  /** Client-side only: a full page load restarts the app and drops the mock session. */
+  async function addBoltAndOpenCart(page: import('@playwright/test').Page): Promise<void> {
+    await page.getByTestId('add-to-cart').click();
+    await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
+    await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Cart' }).click();
+    await expect(page.getByTestId('cart-line').first()).toBeVisible();
+  }
+
+  test('a same-SKU promotion renders as its own row, without taking the paid price', async ({
+    page,
+  }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-promotion-same-item', {
+      goTo: '/catalog/item/hex-bolt-m10-50',
+    });
+    await addBoltAndOpenCart(page);
+
+    await expect(page.getByTestId('cart-line')).toHaveCount(2);
+    // The paid row keeps its price; the promotion row is free and labelled.
+    await expect(page.getByTestId('cart-line-promotion')).toHaveCount(1);
+    await expect(page.getByTestId('cart-line-amount').first()).not.toHaveText('₹0.00');
+  });
+
+  test('only the paid row offers Remove', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-promotion-same-item', {
+      goTo: '/catalog/item/hex-bolt-m10-50',
+    });
+    await addBoltAndOpenCart(page);
+
+    // A promotion row is ERPNext output - the buyer does not own it and cannot remove it.
+    await expect(page.getByTestId('cart-line')).toHaveCount(2);
+    await expect(page.getByTestId('cart-line-remove')).toHaveCount(1);
+  });
+
+  test('a gift of a different SKU appears even though the cart never held it', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-promotion-other-item', {
+      goTo: '/catalog/item/hex-bolt-m10-50',
+    });
+    await addBoltAndOpenCart(page);
+
+    await expect(page.getByTestId('cart-line')).toHaveCount(2);
+    await expect(page.getByTestId('cart-lines')).toContainText('YOB Branded Cap');
+    await expect(page.getByTestId('cart-line-remove')).toHaveCount(1);
+  });
+
+  test('a paid row priced to zero is still a paid row', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-paid-zero-rate', {
+      goTo: '/catalog/item/hex-bolt-m10-50',
+    });
+    await addBoltAndOpenCart(page);
+
+    // Free by a 100% discount, not a gift: it keeps its Remove control and is not
+    // labelled as a promotion.
+    await expect(page.getByTestId('cart-line')).toHaveCount(1);
+    await expect(page.getByTestId('cart-line-promotion')).toHaveCount(0);
+    await expect(page.getByTestId('cart-line-remove')).toHaveCount(1);
+  });
+});
+
+test.describe('row-level tax (Phase 23B-4)', () => {
+  /** Client-side only: a full page load restarts the app and drops the mock session. */
+  async function addAndOpenCart(page: import('@playwright/test').Page): Promise<void> {
+    await page.getByTestId('add-to-cart').click();
+    await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('link', { name: 'Cart' })
+      .click();
+    await expect(page.getByTestId('cart-line').first()).toBeVisible();
+  }
+
+  test('an exclusive-tax row shows the backend tax and total', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/through-bolt-anchor-m12-120' });
+    await addAndOpenCart(page);
+
+    // The anchor is the taxed fixture: 432.00 net, 77.76 tax, 509.76 total.
+    await expect(page.getByTestId('cart-line-tax')).toContainText('77.76');
+    await expect(page.getByTestId('cart-line-total')).toContainText('509.76');
+  });
+
+  test('an inclusive-tax row shows the total as sent, without double-adding', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-tax-inclusive', {
+      goTo: '/catalog/item/through-bolt-anchor-m12-120',
+    });
+    await addAndOpenCart(page);
+
+    await expect(page.getByTestId('cart-line-tax')).toContainText('15.25');
+    await expect(page.getByTestId('cart-line-total')).toContainText('100.00');
+    // 100 + 15.25 would charge the tax twice.
+    await expect(page.getByTestId('cart-line-total')).not.toContainText('115.25');
+  });
+
+  test('shows CGST and SGST as separate components', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/through-bolt-anchor-m12-120' });
+    await addAndOpenCart(page);
+
+    const parts = page.getByTestId('cart-line-tax-component');
+    await expect(parts).toHaveCount(2);
+    await expect(parts.first()).toContainText('CGST');
+    await expect(parts.last()).toContainText('SGST');
+  });
+
+  test('shows a single IGST component', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-tax-igst', {
+      goTo: '/catalog/item/through-bolt-anchor-m12-120',
+    });
+    await addAndOpenCart(page);
+
+    const parts = page.getByTestId('cart-line-tax-component');
+    await expect(parts).toHaveCount(1);
+    await expect(parts.first()).toContainText('IGST');
+    await expect(parts.first()).toContainText('18%');
+  });
+
+  test('names an unclassified component by its backend label', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-tax-generic', {
+      goTo: '/catalog/item/through-bolt-anchor-m12-120',
+    });
+    await addAndOpenCart(page);
+
+    // tax_type is null - real tax from a GST-unregistered company, named by label.
+    await expect(page.getByTestId('cart-line-tax-component')).toContainText('Service Tax');
+  });
+
+  test('a same-SKU promotion keeps its own tax, separate from the paid row', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-promotion-same-item', {
+      goTo: '/catalog/item/through-bolt-anchor-m12-120',
+    });
+    await addAndOpenCart(page);
+
+    await expect(page.getByTestId('cart-line')).toHaveCount(2);
+    // The paid row is taxed; the free row is not, and did not borrow the paid figure.
+    await expect(page.getByTestId('cart-line-tax')).toHaveCount(1);
+    await expect(page.getByTestId('cart-line-tax')).toContainText('77.76');
+  });
+
+  test('the summary stays document-authoritative when rows disagree', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-summary-mismatch', {
+      goTo: '/catalog/item/through-bolt-anchor-m12-120',
+    });
+    await addAndOpenCart(page);
+
+    // The row is rigged to 999 / 9999; the summary must ignore it entirely.
+    await expect(page.getByTestId('cart-line-total')).toContainText('9,999');
+    await expect(page.getByTestId('cart-grand-total')).not.toContainText('9,999');
+    await expect(page.getByTestId('cart-tax-total')).not.toContainText('999.00');
+  });
+
+  test('tax detail does not overflow the row', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/through-bolt-anchor-m12-120' });
+    await addAndOpenCart(page);
+
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
+test.describe('local quantity (Phase 23B-2)', () => {
+  test('the chosen quantity reaches the cart in one go', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
+
+    // Request counting deliberately lives in the unit tests, not here: in mock mode the
+    // API is served by an HttpClient interceptor, so nothing reaches the network and a
+    // browser-level request assertion would pass without proving anything.
+    // `item-pricing-race.spec.ts` pins the real guarantee against a testing backend -
+    // zero pricing calls while the quantity changes, one add carrying the final value.
+    const qty = page.getByTestId('item-quantity');
+    for (const value of ['2', '3', '4', '5']) {
+      await qty.fill(value);
+      await qty.blur();
+    }
+
+    await page.getByTestId('add-to-cart').click();
+    await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
+
+    await page
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('link', { name: 'Cart' })
+      .click();
+
+    // The whole quantity arrived once, rather than one unit per keystroke.
+    await expect(page.getByTestId('cart-line-quantity').first()).toHaveText('5');
+  });
+
+  test('the displayed price does not change with the chosen quantity', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
+    const before = await page.getByTestId('item-rate').textContent();
+
+    await page.getByTestId('item-quantity').fill('40');
+    await page.getByTestId('item-quantity').blur();
+
+    // Angular does not multiply a preview and present it as the transaction price.
+    await expect(page.getByTestId('item-rate')).toHaveText(before ?? '');
+  });
+});
+
+test.describe('UOM and availability (Phase 23B-2)', () => {
+  test('the listing and the detail both show the priced UOM', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/fasteners' });
+    await expect(page.getByTestId('item-uom').first()).toContainText('Nos');
+
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
+    await expect(page.getByTestId('item-uom')).toContainText('Nos');
+  });
+
+  test('shows a real quantity, including zero', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
+    await expect(page.getByTestId('item-availability')).toContainText('25');
+
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-nut-m10' });
+    await expect(page.getByTestId('item-availability')).toContainText('0');
+  });
+
+  test('says nothing about stock for a non-stock item', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/flat-washer-m10' });
+
+    await expect(page.getByTestId('item-availability')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('Out of stock');
+  });
+
+  test('says nothing when the warehouse could not be resolved', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/through-bolt-anchor-m12-120' });
+
+    // Unknown is not zero, and must not read as sold out.
+    await expect(page.getByTestId('item-availability')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('Out of stock');
+  });
+});
+
 /**
  * Quantity, add-to-cart and the cart, in a real browser at every viewport.
  *

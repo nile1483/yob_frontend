@@ -30,20 +30,25 @@ import { CatalogApi } from '../data/catalog.api';
  * to decide whether to decorate a discount, and even the percentage shown is the
  * backend's `discount_percentage` - not something computed from those two numbers.
  *
- * ## Quantity and repricing
+ * ## Quantity is local (Phase 23B-2)
  *
- * The quantity feeds `get_item(slug, qty)`, so the backend reprices for the chosen
- * quantity and the page displays whatever it returns. Repricing is driven by the
- * input's native `change` event - fired on blur or Enter, not per keystroke - so
- * typing "250" cannot produce three requests. No debounce, no timers, nothing to tune.
+ * Choosing a quantity changes a signal and nothing else. It issues **no** request of any
+ * kind - not a reprice, not a cart call - until Add to cart.
  *
- * Stale responses cannot win: the resource keys on the quantity, so changing it
- * cancels the previous request outright. A test proves an older quantity's response
- * cannot overwrite a newer one's pricing.
+ * The price on this page is the customer's standalone preview for the backend's default
+ * quantity. The transaction rate is settled only when the whole cart is priced as one
+ * ERPNext document, where quantity rules, mixed conditions, transaction-amount rules and
+ * coupons all apply and none can be previewed per item. So the page shows the preview,
+ * sends the chosen quantity once, and takes whatever the cart comes back with as
+ * authoritative - a difference between the two is legitimate, not a defect.
+ *
+ * Repricing per committed quantity was removed with that reasoning. It also made a
+ * misconfigured Pricing Rule break the page outright: a tier conflict at one quantity
+ * turned typing into "We could not load this item".
  *
  * The verified backend rule is the only rule enforced: a float greater than zero. No
- * integer, step, maximum or stock constraint is invented, because the contract has
- * none. Non-finite input is rejected before a request is made.
+ * integer, step, maximum or stock constraint is invented, because the contract has none -
+ * and availability is shown for information, never as a purchase limit.
  */
 @Component({
   selector: 'app-item-page',
@@ -121,12 +126,6 @@ import { CatalogApi } from '../data/catalog.api';
               {{ detail.rate | currency: currency }}
             </span>
 
-            @if (isRepricing()) {
-              <span class="text-sm text-slate-500" data-testid="item-repricing">
-                <app-spinner label="Updating price" i18n-label="@@item.repricing" />
-              </span>
-            }
-
             @if (hasDiscount()) {
               <s class="text-base text-slate-400" data-testid="item-base-price">
                 {{ detail.base_price | currency: currency }}
@@ -142,6 +141,13 @@ import { CatalogApi } from '../data/catalog.api';
               <ng-container i18n="@@item.pricedPer">Priced per</ng-container>
               {{ detail.uom }}
             </p>
+
+            @if (availability(); as available) {
+              <p class="text-sm text-slate-600" data-testid="item-availability">
+                <ng-container i18n="@@item.available">Available</ng-container>:
+                {{ available.qty }} {{ available.uom }}
+              </p>
+            }
 
             @if (detail.pricing_rule_label; as label) {
               <p class="text-sm text-slate-700" data-testid="item-pricing-rule">{{ label }}</p>
@@ -274,14 +280,6 @@ export class ItemPage {
   /** Live value, updated per keystroke. Drives validation and the add payload. */
   protected readonly quantity = signal(1);
 
-  /**
-   * The quantity the backend has been asked to price for.
-   *
-   * Updated on `change` (blur/Enter) rather than `input`, which is what keeps
-   * repricing to one request per decision instead of one per digit.
-   */
-  private readonly pricedQuantity = signal(1);
-
   protected readonly isQuantityValid = computed(() => isPositiveFinite(this.quantity()));
 
   protected readonly quantityError = computed(() =>
@@ -295,9 +293,26 @@ export class ItemPage {
 
   protected readonly addedMessage = this.addedSignal.asReadonly();
 
+  /**
+   * The item, priced once for the backend's default quantity.
+   *
+   * ## Quantity does not reprice (Phase 23B-2)
+   *
+   * This used to key on the chosen quantity, so every commit issued a `get_item` call.
+   * That was wrong twice over. It implied the displayed figure was the transaction price
+   * for that quantity, when the real rate is only settled once the whole cart is priced
+   * as one document - quantity rules, mixed conditions, transaction-amount rules and
+   * coupons all apply there and cannot be previewed per item. And it made a
+   * misconfigured Pricing Rule break the page: a tier conflict at qty 5 turned typing a
+   * quantity into "We could not load this item".
+   *
+   * So the price shown is the customer's **standalone preview** at the backend's default
+   * quantity, and choosing a quantity is purely local until Add to cart. Whatever the
+   * cart comes back with afterwards is authoritative, and may legitimately differ.
+   */
   protected readonly item = rxResource({
-    params: () => ({ slug: this.itemSlug(), qty: this.pricedQuantity() }),
-    stream: ({ params }) => this.api.getItem(params.slug, params.qty),
+    params: () => ({ slug: this.itemSlug() }),
+    stream: ({ params }) => this.api.getItem(params.slug),
   });
 
   /**
@@ -311,19 +326,45 @@ export class ItemPage {
    * Keyed on the slug so it never leaks across items: navigating to a different item
    * drops the previous one immediately rather than showing it under the new URL.
    */
-  protected readonly detail = linkedSignal<
-    { slug: string; value: ItemDetailDto | undefined },
-    ItemDetailDto | undefined
-  >({
-    source: () => ({ slug: this.itemSlug(), value: this.item.value() }),
-    computation: (next, previous) =>
-      next.value ?? (previous?.source.slug === next.slug ? previous.value : undefined),
-  });
-
-  /** A reprice in flight over content that is already on screen. */
-  protected readonly isRepricing = computed(
-    () => this.item.isLoading() && this.detail() !== undefined,
+  /**
+   * The item currently on screen.
+   *
+   * A plain read of the resource since Phase 23B-2. It used to retain the previous value
+   * across a reload, because a quantity change refetched and a cleared resource would
+   * blank the page under the control the buyer was operating. Quantity no longer
+   * refetches, so the only reload is a slug change - where retaining the old item would
+   * show one product's details under another's URL.
+   */
+  protected readonly detail = computed(() =>
+    this.item.hasValue() ? this.item.value() : undefined,
   );
+
+  /**
+   * Stock on hand, or `null` when availability does not apply or is not known.
+   *
+   * Three different situations, deliberately not collapsed:
+   *
+   * - **not a stock item** - availability is meaningless, so nothing is shown. Saying
+   *   "out of stock" about a service would be wrong, not merely unhelpful.
+   * - **stock item, `actual_qty` is `null`** - ERPNext resolved no transaction warehouse,
+   *   so the quantity is unknown. Rendering `0` here would invent a stock position the
+   *   system never reported, and telling a buyer a stocked product is sold out when it
+   *   may not be is the more damaging of the two possible mistakes.
+   * - **stock item with a number, including `0`** - a real quantity from a real
+   *   warehouse, shown as it is. Zero is a fact worth telling the buyer.
+   *
+   * Counted in `stock_uom`: `actual_qty` is a stock figure, and labelling it with the
+   * selling UOM would misstate it whenever the two differ.
+   *
+   * Informational only. Nothing here restricts what may be added - ERPNext owns that.
+   */
+  protected readonly availability = computed(() => {
+    const item = this.detail();
+    if (item === undefined || item.is_stock_item !== 1 || item.actual_qty === null) {
+      return null;
+    }
+    return { qty: item.actual_qty, uom: item.stock_uom };
+  });
 
   /**
    * Wording for an add whose outcome we could not determine.
@@ -364,13 +405,15 @@ export class ItemPage {
     this.quantity.set(readNumber(event));
   }
 
-  /** Reprice only for a quantity the backend would accept. */
+  /**
+   * Commit the typed quantity. Local only - no request of any kind.
+   *
+   * Kept as a separate handler from `onQuantityInput` because `change` also fires for
+   * the spinner buttons and for Enter, and the value should settle the same way however
+   * it was entered.
+   */
   protected onQuantityCommitted(event: Event): void {
-    const value = readNumber(event);
-    this.quantity.set(value);
-    if (isPositiveFinite(value)) {
-      this.pricedQuantity.set(value);
-    }
+    this.quantity.set(readNumber(event));
   }
 
   protected addToCart(event: Event, itemCode: string): void {
