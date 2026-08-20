@@ -117,9 +117,23 @@ export interface CartPricingRowDto {
   readonly item_code: string;
   readonly item_name: string;
 
-  /** The UOM this row is priced in. */
+  /**
+   * The authoritative UOM **for this row**, as ERPNext priced it.
+   *
+   * Read from the row and nowhere else. It is not the cart item's unit, not the item's
+   * `stock_uom`, and not inferred from the rate or the conversion factor - and it is
+   * emphatically not the paid row's unit copied onto a promotion row. ERPNext gives a
+   * free Product Discount row `Pricing Rule.free_item_uom` or, failing that, the item's
+   * `stock_uom`, so a paid `2 Box` legitimately sits beside a promotional `1 Nos`.
+   */
   readonly uom: string;
   readonly stock_uom: string;
+  /**
+   * How many `stock_uom` make one {@link uom}, as ERPNext derived it.
+   *
+   * Carried because the projection supplies it. Never used for arithmetic here: every
+   * figure on the row is already expressed in {@link uom}, by the backend.
+   */
   readonly conversion_factor: number;
 
   readonly qty: number;
@@ -150,7 +164,8 @@ export interface CartPricingRowDto {
 
   /**
    * Pricing Rule names that produced this row. Already normalized to a list by the
-   * backend - unlike `CartLineDto.pricing_rules`, which is still a JSON **string**.
+   * backend - unlike the cart item's own `pricing_rules`, which the backend sends as a
+   * JSON **string** and which {@link CartLineDto} therefore does not type at all.
    */
   readonly pricing_rules: readonly string[];
 
@@ -252,4 +267,25 @@ export interface CartPayloadDto {
   readonly removed_items: readonly string[];
   /** Item **codes** whose quantity, rate or line total the backend changed. */
   readonly price_updated_items: readonly string[];
+  /**
+   * Item **codes** whose cart line is held in a UOM the item no longer sells in.
+   *
+   * Added by backend Phase 23B-5U alongside the `cart_item_uom_changed` refusal from
+   * `add_to_cart`: the same fact, reported on a read instead of a mutation. The cart is
+   * left exactly as it is - the backend does not silently restate a line in a new unit,
+   * and neither does the browser - so the line has to be removed and the product added
+   * again. Reported to the buyer as a count, like the two arrays above.
+   */
+  readonly uom_changed_items: readonly string[];
 }
+
+/**
+ * `add_to_cart` refused because the cart line's UOM is no longer the selling UOM.
+ *
+ * HTTP **409**, with `details.existing_uom` and `details.current_uom`. A definite
+ * refusal: nothing was added, so nothing is retried and no re-read is needed. The
+ * recovery is the buyer's - remove the line, add the product again - because adopting a
+ * new unit for an existing line would mean deciding what its quantity becomes, and that
+ * is a conversion the browser must never perform.
+ */
+export const CART_ITEM_UOM_CHANGED = 'cart_item_uom_changed';

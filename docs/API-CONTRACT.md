@@ -505,7 +505,13 @@ Inputs:
 
 ```text
 add_to_cart: item_code?, qty? (default 1) - qty is a DELTA, added to the
-             existing line; NOT idempotent, never auto-retry
+             existing line; NOT idempotent, never auto-retry.
+             NO uom, conversion_factor or warehouse is ever sent: ERPNext
+             owns all three. Can answer 409 `cart_item_uom_changed` with
+             details.item_code / existing_uom / current_uom when the line
+             is held in a unit the item no longer sells in - a definite
+             refusal, so no retry and no re-read; the buyer removes the
+             line and adds the product again.
 apply_coupon: code?
 clear_cart: empty body
 remove_coupon: empty body
@@ -542,7 +548,13 @@ The documented cart response includes server reconciliation fields:
 cart_updated
 price_updated_items
 removed_items
+uom_changed_items        (backend Phase 23B-5U)
 ```
+
+`uom_changed_items` lists item codes whose line is held in a UOM the item no longer sells
+in. The backend does **not** restate the line in the new unit, so this is a condition to
+report, not an edit that already happened - and it is deliberately not folded into
+`cart_updated`.
 
 Verified live: those three fields are present on a **plain `get_cart` load**, not only
 after a mutation, so reconciliation must be handled on every cart response.
@@ -569,12 +581,14 @@ empty. Capture it before building the cart domain (Phase 10).
 `ordered_on` is a naive `YYYY-MM-DD HH:MM:SS.ffffff` string with no timezone marker;
 do not feed it to `new Date()` and assume UTC.
 
-### Catalog - 3
+### Catalog - 5
 
 ```text
 GET yob_storefront.api.catalog.get_categories      secure
 GET yob_storefront.api.catalog.get_category        secure
+GET yob_storefront.api.catalog.get_items           secure   (Phase 22B-2)
 GET yob_storefront.api.catalog.get_item            secure
+GET yob_storefront.api.catalog.resolve_variant     secure   (Phase 24B - ASSUMED VERB)
 ```
 
 Inputs:
@@ -582,8 +596,33 @@ Inputs:
 ```text
 get_categories: parent_slug? query
 get_category: slug?, qty? query
+get_items: scope_type, scope_value, search, filters (JSON), sort, page_size, cursor, qty
 get_item: slug?, qty? query
+resolve_variant: template, attributes (JSON object), qty
 ```
+
+**`get_item` answers one of two payloads** since Phase 24B: an ordinary salable item, or
+an Item Template carrying `is_template: 1`, `is_purchasable`, `attributes[]` and
+`variants[]`. `variants[]` holds the combinations that **actually exist** - it is not the
+cross-product of the attribute values, and a client must never treat it as one. A resolved
+item may also carry `variant_of` and the echoed `selected` map.
+
+`resolve_variant` is the **only** authority on variant identity: the client sends the
+template code and the chosen attribute values, and the reply is a fully priced item whose
+`name` is the SKU. Clients must not construct, concatenate or guess an item code, and must
+not treat the family matrix as transaction authority - it can be stale, and the resolver
+refuses with `variant_not_available` when it is. Other documented refusals:
+`variant_attributes_required`, `variant_family_unsupported` (Manufacturer-based families).
+
+**Not yet wire-verified.** This section is written from the Phase 24C brief, not from a
+captured response: the HTTP verb for `resolve_variant` (assumed GET, matching every other
+catalog endpoint and the JSON-in-query precedent set by `get_items.filters`) and the
+statuses for the three refusals are inference. The frontend branches on `code` only.
+
+Listing rows (`get_items`) additionally carry `has_variants` and `price_state`
+(`priced` | `select_options`). A family is one row; its children are not listed
+separately, and `select_options` means **no price may be shown or derived** - not a
+cheapest variant, not a "from" figure.
 
 Catalog examples show B2B pricing information such as:
 
@@ -596,11 +635,20 @@ rate
 net_amount
 tax_amount
 total_amount
-stock_uom
+uom                (selling UOM - what a price is per; get_items too, since 23B-5U)
+conversion_factor  (stock units per selling unit; metadata, never a client calculation)
+stock_uom          (stock-keeping UOM - what actual_qty is counted in)
+stock_qty          (get_item: qty expressed in stock_uom, computed by the backend)
 ```
 
-This means Angular must NOT recreate pricing rules, discount rules, or tax calculations.
-Quantity can affect server pricing, so quantity-aware price refresh must call the appropriate backend endpoint.
+This means Angular must NOT recreate pricing rules, discount rules, tax calculations **or
+UOM conversions**. A price label uses `uom`; a stock figure uses `stock_uom`; nothing is
+multiplied by `conversion_factor` in the browser.
+
+Quantity can affect server pricing, but item detail does **not** re-price per quantity
+(Phase 23B-2): the displayed figure is the backend's standalone preview at its own default
+quantity, and the transaction rate is settled when the whole cart is priced as one
+document. See the Phase 23B-2 entry in `docs/PROJECT-STATE.md`.
 
 The `get_item` success shape is resolved from `yob_storefront/api/catalog.py` and
 recorded in `reference/api/live/verified-responses.json`. Points that will bite:

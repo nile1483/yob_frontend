@@ -279,6 +279,24 @@ Verify phone, tablet, laptop, and wide desktop behavior.
 Run affected tests and build.
 ```
 
+## 12a. The validation gate - canonical commands
+
+```bash
+ng test --watch=false     # unit
+npm run e2e               # Playwright, ALL viewports - the authoritative gate
+ng build                  # production build
+```
+
+Plus `tsc -p tsconfig.app.json --noEmit`, `-p tsconfig.spec.json` and `-p e2e/tsconfig.json`
+for typecheck.
+
+**`npm run e2e` is the only E2E result that counts.** It starts its own mock server on
+port **4301** from the current working tree, every time, and never adopts a server that is
+already running. `npm run e2e:dev` is a fast local loop that reuses a hand-started
+`npm run start:mock` on port 4300; it is convenient and it is **not** a gate - a server
+that has stopped rebuilding will happily answer it. See the Phase 23B-5U-FE-GATE entry in
+`docs/PROJECT-STATE.md` for the incident that established this.
+
 ## 13. Definition of done for a change
 
 A change is done when:

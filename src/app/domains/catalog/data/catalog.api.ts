@@ -7,6 +7,8 @@ import type {
   CategoryMetaDto,
   CategoryPayloadDto,
   ItemDetailDto,
+  ItemPayloadDto,
+  ResolveVariantRequest,
   ItemListingDto,
   ItemListingQuery,
 } from '../contracts/catalog.types';
@@ -15,6 +17,7 @@ const GET_CATEGORIES = 'yob_storefront.api.catalog.get_categories';
 const GET_CATEGORY = 'yob_storefront.api.catalog.get_category';
 const GET_ITEM = 'yob_storefront.api.catalog.get_item';
 const GET_ITEMS = 'yob_storefront.api.catalog.get_items';
+const RESOLVE_VARIANT = 'yob_storefront.api.catalog.resolve_variant';
 
 /** `get_category` returns its counts in `meta`; the payload and counts travel together. */
 export interface CategoryResult {
@@ -120,10 +123,45 @@ export class CatalogApi {
    *
    * Failures reach the caller as a `YobApiError`: `item_not_found` (404) for an
    * unknown slug, `validation_failed` (422) for a blank one - both wire-verified.
+   *
+   * Since backend Phase 24B the answer is a **union**: a salable item, or an Item
+   * Template with its attribute matrix. Callers narrow with `isItemFamily` rather than
+   * inferring one from the other's missing fields.
    */
-  getItem(slug: string, qty?: number): Observable<ItemDetailDto> {
+  getItem(slug: string, qty?: number): Observable<ItemPayloadDto> {
     return this.api
-      .get<ItemDetailDto>(GET_ITEM, { slug, qty: qty ?? null })
+      .get<ItemPayloadDto>(GET_ITEM, { slug, qty: qty ?? null })
+      .pipe(map((response) => response.data));
+  }
+
+  /**
+   * Turn a complete attribute selection into the actual salable variant.
+   *
+   * ## The resolver owns variant identity, and this method is the only way to get it
+   *
+   * Angular does not build item codes. It does not concatenate `TSHIRT` with `RED` and
+   * `M`, does not reproduce ERPNext's variant naming, and does not treat the family
+   * matrix as transaction authority - the matrix is UX, and it can be stale. The buyer's
+   * chosen values go out; a fully priced item comes back, and its `name` is the SKU.
+   *
+   * The request carries the template, the selection and a quantity, and nothing else -
+   * no UOM, no warehouse, no conversion factor, no price list, no candidate code.
+   *
+   * `qty` is the backend's pricing input, not a client pricing engine: choosing a
+   * quantity on the page does **not** re-resolve. It is sent once, at resolution, and
+   * the cart is what finally settles the price.
+   *
+   * Documented refusals - see `VARIANT_ERROR_CODES`: `variant_attributes_required`,
+   * `variant_not_available`, `variant_family_unsupported`.
+   */
+  resolveVariant(request: ResolveVariantRequest): Observable<ItemDetailDto> {
+    return this.api
+      .get<ItemDetailDto>(RESOLVE_VARIANT, {
+        template: request.template,
+        // A structured parameter on a GET, exactly as `get_items` sends `filters`.
+        attributes: JSON.stringify(request.attributes),
+        qty: request.qty,
+      })
       .pipe(map((response) => response.data));
   }
 }

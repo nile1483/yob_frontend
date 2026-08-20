@@ -9,6 +9,8 @@
     "test": "ng test",
     "start:mock": "ng serve --configuration mock --port 4300",
     "e2e": "playwright test",
+    "e2e:dev": "E2E_REUSE_SERVER=1 playwright test",
+    "e2e:server": "ng serve --configuration mock --port 4301",
     "e2e:report": "playwright show-report"
   },
   "private": true,

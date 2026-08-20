@@ -210,6 +210,14 @@ export class CartStore {
    */
   readonly removedItemCodes = computed(() => this.payloadSignal()?.removed_items ?? []);
   readonly priceUpdatedItemCodes = computed(() => this.payloadSignal()?.price_updated_items ?? []);
+  /**
+   * Item codes whose line is held in a unit the item no longer sells in.
+   *
+   * The read-side counterpart of the `cart_item_uom_changed` refusal from `add_to_cart`.
+   * Nothing is restated or converted here: the codes are reported so the cart can tell
+   * the buyer those lines need removing and re-adding.
+   */
+  readonly uomChangedItemCodes = computed(() => this.payloadSignal()?.uom_changed_items ?? []);
   readonly wasReconciled = computed(() => this.payloadSignal()?.cart_updated ?? false);
 
   /** Load, or reload, the cart. */

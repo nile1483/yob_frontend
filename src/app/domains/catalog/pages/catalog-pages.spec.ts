@@ -70,20 +70,103 @@ describe('catalog pages', () => {
     };
   }
 
-  describe('UOM and availability (Phase 23B-2)', () => {
-    it('shows the priced UOM on a listing card', async () => {
+  describe('variant families in a listing (Phase 24C)', () => {
+    /** Let the listing's own `get_items` request land. */
+    async function openListing(url: string) {
+      const view = await open(url);
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+      view.harness.fixture.detectChanges();
+      await view.harness.fixture.whenStable();
+      view.harness.fixture.detectChanges();
+      return view;
+    }
+
+    it('lists a family as one card, not one card per variant', async () => {
+      const view = await openListing('/catalog/safety-equipment');
+
+      // Two rows: a simple item and a family. The family's two variants are not listed.
+      expect(view.all('item-card')).toHaveLength(2);
+      expect(view.text()).not.toContain('YOB-VEST-ORG-M');
+      expect(view.text()).not.toContain('YOB-VEST-YEL-L');
+    });
+
+    it('shows Select options on the family card and a price on the simple one', async () => {
+      const view = await openListing('/catalog/safety-equipment');
+
+      const cards = [...view.all('item-card')];
+      const family = cards.find((el) => (el.textContent ?? '').includes('Hi-Vis'));
+      const simple = cards.find((el) => (el.textContent ?? '').includes('Goggles'));
+
+      expect(family?.querySelector('[data-testid="item-select-options"]')).not.toBeNull();
+      expect(family?.querySelector('[data-testid="item-rate"]')).toBeNull();
+      expect(family?.textContent).not.toContain('₹');
+
+      expect(simple?.querySelector('[data-testid="item-rate"]')?.textContent).toContain('240');
+    });
+  });
+
+  describe('the family page, through the router and the mock backend (Phase 24C)', () => {
+    it('renders the family instead of a priced item', async () => {
+      const view = await open('/catalog/item/hi-vis-safety-vest');
+
+      expect(view.testId('item-attributes')).not.toBeNull();
+      expect(view.testId('item-rate')).toBeNull();
+      expect(view.testId('add-to-cart')).toBeNull();
+    });
+
+    it('resolves a real combination against the mock resolver', async () => {
+      const view = await open('/catalog/item/hi-vis-safety-vest');
+
+      const orange = [...view.all('item-attribute-value')].find(
+        (el) => el.getAttribute('data-value') === 'Orange',
+      ) as HTMLButtonElement;
+      orange.click();
+      await view.harness.fixture.whenStable();
+      const medium = [...view.all('item-attribute-value')].find(
+        (el) => el.getAttribute('data-value') === 'Medium',
+      ) as HTMLButtonElement;
+      medium.click();
+      await view.harness.fixture.whenStable();
+      view.harness.fixture.detectChanges();
+
+      // The mock resolver answered with the real SKU, priced in its own unit.
+      expect(view.text()).toContain('YOB-VEST-ORG-M');
+      expect(view.testId('item-uom')?.textContent).toContain('Box');
+      expect(view.testId('item-availability')?.textContent).toContain('125');
+    });
+
+    it('says so safely for a family it cannot configure', async () => {
+      const view = await open('/catalog/item/contractor-tool-kit');
+
+      expect(view.testId('item-family-unavailable')).not.toBeNull();
+      expect(view.testId('item-attributes')).toBeNull();
+      expect(view.testId('add-to-cart')).toBeNull();
+    });
+  });
+
+  describe('UOM and availability (Phase 23B-2, 23B-5U-FE)', () => {
+    it('labels a listing price with the selling UOM, not the stock UOM', async () => {
       const view = await open('/catalog/fasteners');
       for (let i = 0; i < 4; i++) await Promise.resolve();
       view.harness.fixture.detectChanges();
       await view.harness.fixture.whenStable();
       view.harness.fixture.detectChanges();
 
-      expect(view.testId('item-uom')?.textContent).toContain('Nos');
+      // Scoped to the bolt's own card: it sells by the Box and is stocked in Nos, while
+      // the cards around it sell in the unit they stock. Captioning that price "per Nos"
+      // would state the wrong unit for the money beside it.
+      const card = [...view.all('item-card')].find((el) =>
+        (el.textContent ?? '').includes('YOB-BOLT-M10'),
+      );
+
+      expect(card?.querySelector('[data-testid="item-uom"]')?.textContent).toContain('Box');
+      expect(card?.querySelector('[data-testid="item-uom"]')?.textContent).not.toContain('Nos');
     });
 
-    it('shows the priced UOM on item detail', async () => {
+    it('shows the selling UOM on item detail', async () => {
       const view = await open('/catalog/item/hex-bolt-m10-50');
-      expect(view.testId('item-uom')?.textContent).toContain('Nos');
+      expect(view.testId('item-uom')?.textContent).toContain('Box');
+      expect(view.testId('item-uom')?.textContent).not.toContain('Nos');
     });
 
     it('shows a real stock quantity in the stock UOM', async () => {
@@ -360,7 +443,7 @@ describe('catalog pages', () => {
 
       expect(view.testId('item-title')?.textContent).toContain('Hex Bolt M10 x 50mm');
       expect(view.text()).toContain('YOB-BOLT-M10');
-      expect(view.testId('item-uom')?.textContent).toContain('Nos');
+      expect(view.testId('item-uom')?.textContent).toContain('Box');
     });
 
     it('shows the backend pricing, not a recalculation', async () => {

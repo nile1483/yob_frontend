@@ -3,10 +3,13 @@ import type { MockContext, MockHandler } from '../core/mock-handler';
 import type { CatalogItemDto } from '../../app/domains/catalog/contracts/catalog.types';
 import {
   MOCK_CATEGORIES_BY_SLUG,
+  MOCK_FAMILIES_BY_SLUG,
   MOCK_ITEMS_BY_CATEGORY,
   MOCK_ITEM_DETAILS_BY_SLUG,
   MOCK_TOP_LEVEL_CATEGORIES,
   mockChildCategories,
+  mockFamilyByCode,
+  mockResolveVariant,
 } from '../fixtures/catalog.fixture';
 
 /**
@@ -105,6 +108,14 @@ const getItem: MockHandler = (ctx) => {
     });
   }
 
+  // Backend Phase 24B: the same endpoint answers with an Item Template and its matrix
+  // when the slug names a family. Two different payloads, one endpoint - which is why
+  // the frontend narrows on `is_template` rather than on a missing price.
+  const family = MOCK_FAMILIES_BY_SLUG[slug];
+  if (family !== undefined) {
+    return mockSuccess(family, { notice: 'Item loaded' });
+  }
+
   const detail = MOCK_ITEM_DETAILS_BY_SLUG[slug];
   if (detail === undefined) {
     return mockYobError('item_not_found', 'Item not found.', { field: 'slug', status: 404 });
@@ -113,6 +124,104 @@ const getItem: MockHandler = (ctx) => {
   // No meta on this endpoint, matching the source.
   return mockSuccess(detail, { notice: 'Item loaded' });
 };
+
+/**
+ * `resolve_variant` - the only authority on which SKU a selection is.
+ *
+ * Deliberately strict, because its whole job is to be the thing the browser cannot do
+ * for itself:
+ *
+ * - it never accepts an item code from the caller, only a template and attribute values;
+ * - an incomplete selection is refused rather than guessed at;
+ * - a combination that is not in the matrix is refused even though its individual values
+ *   all exist, which is the stale-matrix case a client must not paper over;
+ * - a family the storefront cannot configure is refused outright.
+ *
+ * Statuses mirror the rest of the catalog contract: 422 for a bad request, 404 for a
+ * thing that is not there.
+ */
+const resolveVariant: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  const template = ctx.params.get('template') ?? '';
+  if (template === '') {
+    return mockYobError('validation_failed', 'Template is required.', {
+      field: 'template',
+      status: 422,
+    });
+  }
+
+  const family = mockFamilyByCode(template);
+  if (family === undefined) {
+    return mockYobError('item_not_found', 'Item not found.', { field: 'template', status: 404 });
+  }
+
+  // Manufacturer-based families, and anything else with nothing to choose.
+  if (ctx.scenario === 'variant-family-unsupported' || family.attributes.length === 0) {
+    return mockYobError(
+      'variant_family_unsupported',
+      'This product cannot be configured online.',
+      { field: 'template', status: 422 },
+    );
+  }
+
+  const attributes = readAttributes(ctx.params.get('attributes'));
+  if (attributes === null) {
+    return mockYobError('validation_failed', 'Attributes must be an object.', {
+      field: 'attributes',
+      status: 422,
+    });
+  }
+
+  const missing = family.attributes
+    .map((attribute) => attribute.attribute)
+    .filter((name) => typeof attributes[name] !== 'string' || attributes[name] === '');
+
+  if (missing.length > 0) {
+    return mockYobError('variant_attributes_required', 'Choose an option for every field.', {
+      field: 'attributes',
+      status: 422,
+      details: { required: missing },
+    });
+  }
+
+  // The stale-matrix scenario: a combination the page believed in, refused at the source.
+  if (ctx.scenario === 'variant-unavailable') {
+    return mockYobError('variant_not_available', 'That combination is not available.', {
+      field: 'attributes',
+      status: 404,
+    });
+  }
+
+  const variant = mockResolveVariant(template, attributes);
+  if (variant === undefined) {
+    return mockYobError('variant_not_available', 'That combination is not available.', {
+      field: 'attributes',
+      status: 404,
+    });
+  }
+
+  return mockSuccess(variant, { notice: 'Variant resolved' });
+};
+
+/** The selection arrives as a JSON object string, the way `get_items` sends `filters`. */
+function readAttributes(raw: string | null): Readonly<Record<string, string>> | null {
+  if (raw === null || raw === '') {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Readonly<Record<string, string>>;
+  } catch {
+    return null;
+  }
+}
 
 /** All endpoints are login-protected; without a session Frappe refuses before YOB runs. */
 function requireSession(ctx: MockContext): MockReply | null {
@@ -305,4 +414,5 @@ export const CATALOG_HANDLERS: Readonly<Record<string, MockHandler>> = {
   'yob_storefront.api.catalog.get_category': getCategory,
   'yob_storefront.api.catalog.get_items': getItems,
   'yob_storefront.api.catalog.get_item': getItem,
+  'yob_storefront.api.catalog.resolve_variant': resolveVariant,
 };

@@ -67,6 +67,20 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
              *above* the price rather than below it: as a trailing line it was optional,
              which pushed the price down on any card that happened not to have one. -->
         <div class="mt-auto pt-3">
+          <!-- A family: its children can differ in price, so there is no single figure to
+               show and none is invented. Not "from ₹x" either - that is a cheapest-variant
+               calculation, and pricing is the backend's. The card says what to do next and
+               the family page does the rest. -->
+          @if (selectOptions()) {
+            <p class="text-sm font-medium text-slate-900" data-testid="item-select-options">
+              <ng-container i18n="@@catalog.item.selectOptions">Select options</ng-container>
+            </p>
+            <p class="mt-1 text-xs text-slate-500" data-testid="item-variants-hint">
+              <ng-container i18n="@@catalog.item.variantsAvailable"
+                >Sizes and colours available</ng-container
+              >
+            </p>
+          } @else {
           @if (item().pricing_rule_label; as label) {
             <p class="mb-1 text-xs text-slate-600" data-testid="item-pricing-rule">{{ label }}</p>
           }
@@ -84,13 +98,15 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
           </div>
 
           <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <!-- The UOM the shown price is for. get_items supplies only stock_uom,
-                 and listing prices are the backend's default-quantity preview in that
-                 unit, so it is the priced UOM here. Product detail carries a separate
-                 uom and shows that instead. -->
+            <!-- The **selling** UOM, which is the unit this price is for.
+                 Deliberately not stock_uom: since backend Phase 23B-5U get_items
+                 supplies both, and they differ whenever ERPNext sells in one unit and
+                 stocks in another - a ₹1000 Box captioned "per Nos" is simply wrong.
+                 conversion_factor arrives too and is not used: nothing here converts a
+                 price between units. -->
             <span class="text-xs text-slate-500" data-testid="item-uom">
               <ng-container i18n="@@catalog.item.perUom">per</ng-container>
-              {{ item().stock_uom }}
+              {{ item().uom }}
             </span>
 
             @if (hasDiscount()) {
@@ -99,7 +115,7 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
               </app-badge>
             }
           </div>
-
+          }
         </div>
       </div>
     </article>
@@ -109,6 +125,15 @@ export class ItemCard {
   readonly item = input.required<CatalogItemDto>();
 
   protected readonly currency = inject(CATALOG_CURRENCY);
+
+  /**
+   * Whether this row stands for a family rather than a priced item.
+   *
+   * Read from the backend's `price_state` and nothing else - not from a zero rate, which
+   * a genuinely free item could also have. An absent or unknown value keeps the ordinary
+   * priced card, so a backend that has not been upgraded behaves exactly as before.
+   */
+  protected readonly selectOptions = computed(() => this.item().price_state === 'select_options');
 
   /**
    * Whether to show the struck-through original price.

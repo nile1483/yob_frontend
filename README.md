@@ -46,13 +46,29 @@ ng test
 
 ## Running end-to-end tests
 
-For end-to-end (e2e) testing, run:
+Playwright, Chromium at three viewports, against the in-browser mock API.
 
 ```bash
-ng e2e
+npm run e2e
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+That is the **authoritative gate**: it starts its own mock server on port 4301 from the
+current working tree and never reuses one that is already running, so a result can always
+be trusted to describe the code in front of you.
+
+For a fast local loop, start a mock server yourself and reuse it:
+
+```bash
+npm run start:mock
+```
+
+```bash
+npm run e2e:dev
+```
+
+`e2e:dev` talks to whatever answers on port 4300. It is convenient, and it is not a gate:
+a dev server that has stopped rebuilding will answer it with stale code. Every run prints
+which mode it is in, and `e2e/gate-integrity.spec.ts` pins the difference.
 
 ## Additional Resources
 

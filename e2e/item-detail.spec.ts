@@ -101,7 +101,9 @@ test.describe('item detail content', () => {
     await expect(page.getByTestId('item-rate')).toContainText('11.25');
     await expect(page.getByTestId('item-base-price')).toContainText('12.50');
     await expect(page.getByTestId('item-discount')).toContainText('10');
-    await expect(page.getByTestId('item-uom')).toContainText('Nos');
+    // The selling UOM, which is what the price is per. The bolt is stocked in Nos and
+    // sold by the Box, so this line and the availability line name different units.
+    await expect(page.getByTestId('item-uom')).toContainText('Box');
     await expect(page.getByTestId('item-pricing-rule')).toContainText('YOB Demo Bulk Discount');
   });
 

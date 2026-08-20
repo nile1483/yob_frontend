@@ -128,6 +128,270 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Variant family selection (Phase 24C, 2026-08-20)
+
+Frontend for backend Phase 24B. The buyer chooses **attributes and quantity**; ERPNext
+chooses everything else. Angular never constructs a SKU.
+
+### One page, three states
+
+`ItemPage` renders a simple item, an unresolved family and a resolved variant from one
+implementation - the split is a **discriminated union**, not two components:
+
+```text
+get_item -> ItemDetailDto   (salable: rate, uom, stock, tax)
+         -> ItemFamilyDto   (is_template: 1, attributes[], variants[])
+```
+
+A family is not "an item with missing prices"; it genuinely has no rate, no UOM and no
+stock until a variant exists, so typing it as optional fields on the item shape would
+have produced a page of blanks and an unlabelled quantity box. Everything downstream -
+price, UOM, availability, tax, quantity, Add to cart - reads one `purchasable()` computed
+that is the simple item, or the **resolved** variant, or nothing.
+
+### Availability comes only from `variants[]`
+
+A candidate value is offered when at least one **real** variant row carries it alongside
+the buyer's other choices. Nothing is generated. With `Orange/Medium` and `Yellow/Large`
+the only rows, choosing Orange leaves Large visibly disabled although Orange and Large
+both exist as values.
+
+**One rule was added that the brief did not specify, because the literal rule strands the
+buyer.** Once a selection is complete, every alternative is unavailable *with the current
+choices* - Yellow is not available "with Medium" - so a strict reading disables every
+route out of the first variant reached. An attribute the buyer has already chosen
+therefore offers its values on their own terms, and choosing one **re-anchors** the
+selection: choices it contradicts are dropped, not substituted. Dropping `Size: Medium`
+asks the question again; substituting would answer it for them. This also stops the page
+ever asking the resolver to price a combination its own matrix says cannot exist.
+
+### The resolver is the only authority
+
+`catalog.resolve_variant(template, attributes, qty)` is called once the selection is
+complete, and never for a partial one. Angular sends the template code and the chosen
+values - no candidate item code, no concatenation, no UOM, no warehouse, no price list -
+and the returned payload's `name` is the SKU. The matrix is UX; it can be stale, and when
+the server refuses a combination it offered, the page says so and stops. No retry, no
+alternative SKU, no Add to cart.
+
+`variant_not_available`, `variant_attributes_required` and `variant_family_unsupported`
+each get our own wording; the server's `detail` is never rendered. A family that arrives
+with nothing to choose - Manufacturer-based variants - gets the existing safe alert and no
+bespoke UI.
+
+### Quantity cannot cross a variant boundary
+
+Quantity is hidden until a variant resolves (an unlabelled quantity box has no meaningful
+unit), then labelled with the resolved `uom`. It **resets to 1 whenever the resolved SKU
+changes**, which is not cosmetic: the two fixture variants sell in `Box` and `Nos`
+respectively, so carrying 4 across would silently reprice the buyer's intent. Changing the
+quantity issues no request; resolution sends the reset default of 1 and is never re-run to
+reprice.
+
+### Add to cart is unchanged
+
+`{ item_code, qty }` and nothing else - the resolved SKU, never the template, never the
+attributes, never a unit or warehouse. `cart_item_uom_changed` handling is untouched.
+
+### Listing
+
+`price_state` decides the card: `priced` renders the authoritative price and selling UOM
+as before; `select_options` renders **no money at all** - not zero, not "from", not a
+cheapest child - plus a Select options affordance that opens the family page. A family is
+one card and its children are not listed. An absent or unknown `price_state` keeps the
+priced card, so an older backend is unaffected. No listing quantity or Add to cart was
+added. Cursor pagination, sort and the Phase 22 behaviour are untouched.
+
+### No variant deep links
+
+The URL stays on the family slug throughout; no variant slug is constructed.
+
+### OPEN - the request contract is assumed, not verified
+
+`reference/api/` carries **no** variant contract: `resolve_variant`, `price_state`,
+`is_template` and `has_variants` appear nowhere in `openapi.json`, the Postman collection
+or the verified responses, which are still at API reference 2.0.0. The shapes here come
+from the Phase 24C brief, and two things about the *call* are inference:
+
+- **`resolve_variant` is issued as a GET**, with `attributes` as a JSON object string -
+  because every other catalog endpoint is a GET and `get_items` already sends a structured
+  `filters` parameter that way. If the backend expects POST, one method in `CatalogApi`
+  changes and nothing else does.
+- **Status codes** for the three refusals are assumed (422 / 404 / 422). The frontend
+  branches on `code`, never on status, so a mismatch changes nothing.
+
+Re-capture both against the running backend before treating this as wire-verified, and
+update `docs/API-CONTRACT.md` §8, which still documents three catalog endpoints and no
+`get_items` either.
+
+## CONFIRMED - E2E gate integrity (Phase 23B-5U-FE-GATE, 2026-08-20)
+
+Tooling only; no application behaviour changed. It closes the one defect found during
+23B-5U-FE that could invalidate every other result in this document.
+
+### The old failure mode
+
+`playwright.config.ts` had `reuseExistingServer: !process.env['CI']`, so a local run
+adopted whatever was already answering on port 4300. A `ng serve --configuration mock`
+that had been up for hours **stopped rebuilding**, kept answering the URL check, and was
+adopted twice: once reporting **green against a bundle that predated the change**, and
+once failing new-but-correct tests. Nothing in the output said which build was under test.
+
+A gate that can pass without exercising the working tree is not a gate - and the failure
+is silent in the dangerous direction, since the false green is the one nobody
+investigates.
+
+### The hardening
+
+| | Authoritative gate | Local loop |
+| --- | --- | --- |
+| Command | `npm run e2e` | `npm run e2e:dev` |
+| Port | **4301**, its own | 4300, the dev server's |
+| Server | started by Playwright, always | reused, whatever is there |
+| `reuseExistingServer` | **false** | true |
+| Trustworthy | yes | no, and it says so |
+
+Reuse is **opt in** via `E2E_REUSE_SERVER=1`, never opt out of the gate: a missing,
+empty, misspelled or `true`-spelled variable leaves the run authoritative, so the failure
+direction is "start a fresh server", which is recoverable.
+
+The two ports are deliberately distinct. A hand-started `npm run start:mock` on 4300 no
+longer blocks a gate run and can no longer be seen by one - verified both ways: the gate
+passes while a dev server holds 4300, and the reuse loop attaches to that same server.
+
+**An occupied gate port is rejected, not adopted.** With a stale server squatting on 4301,
+`npm run e2e` stops before any test with `http://localhost:4301 is already used…` and exit
+code 1. A refusal is recoverable; a false green is not.
+
+### Guards, so this cannot regress quietly
+
+- `e2e/support/global-setup.ts` reads the **resolved** config and aborts the whole run if
+  an authoritative run is paired with reuse - so re-enabling reuse in the config stops the
+  gate instead of weakening it. It also prints one line naming the mode, port and server
+  ownership, so any log says which kind of run produced it.
+- `e2e/gate-integrity.spec.ts` asserts the invariant from inside the run, reading
+  `testInfo.config.webServer`: an authoritative run has `reuseExistingServer: false` on
+  4301; a reuse run is labelled as such on 4300; the mode helper is opt-in; and the
+  browser really reached the URL the config chose.
+
+### Not attempted
+
+A per-run build stamp compiled into the mock bundle would prove freshness by content
+rather than by provenance. It needs a generated source file and a rebuild wait on every
+run, and it is unnecessary once nothing is ever adopted: a server Playwright starts is
+built from the tree under test by definition.
+
+## CONFIRMED - Authoritative selling UOM display and UOM conflict (Phase 23B-5U-FE, 2026-08-20)
+
+Frontend alignment to backend Phases 23B-5W / 23B-5U / 23B-5U-1. Display only: **the buyer
+chooses a quantity and, where they exist, variant attributes - never a unit and never a
+warehouse.** No UOM selector, no warehouse selector, and no conversion arithmetic was added,
+and the tests below exist to make adding one fail.
+
+### Three units, three jobs
+
+| Field | What it labels | Where |
+| --- | --- | --- |
+| `uom` | the price, and the quantity the buyer types | listing card, item detail, cart row |
+| `stock_uom` | `actual_qty`, and nothing else | item detail availability |
+| `conversion_factor` | **nothing on screen** | typed, carried, never multiplied |
+
+`₹100 / Strip`, `Quantity: [2] Strip`, `Available: 125 Nos` is one coherent screen, not a
+mismatch: the first two are the selling unit and the third is the stock unit, each labelled
+by the backend that produced it. Restating either in the other's unit would be a conversion,
+and ERPNext owns those.
+
+### The listing card was wrong, and is the one behaviour change
+
+`get_items` used to supply only `stock_uom`, so the card captioned every price with it. With
+a Box-priced item stocked in Nos that read `₹1000 per Nos`. `get_items` now sends `uom` and
+`conversion_factor` too, and the card uses `uom`. Nothing else about listing changed - no
+quantity control and no Add to cart was added, because none existed.
+
+### Item detail
+
+The price already used `uom`. What was missing was the quantity control's association with
+it: the label is now parameterised - **"Quantity to add (Box)"** - so the input's accessible
+name carries the unit, and the unit repeats beside the box as `aria-hidden` decoration. One
+control on the page, and it takes a number.
+
+Availability is unchanged and re-pinned: `is_stock_item: 0` shows nothing, `actual_qty: null`
+shows nothing, and a number **including `0`** is shown in `stock_uom`. A variant is just a
+different SKU with its own `get_item` response.
+
+### Cart rows already read the projection, and now prove it
+
+`pricing_rows[].uom` per row, never the cart item's unit, never `stock_uom`, never derived
+through `conversion_factor`. The case that matters is one item code with two rows: ERPNext
+prices a free Product Discount row in `Pricing Rule.free_item_uom` or, failing that, the
+item's `stock_uom`, so **a paid `2 Box` beside a promotional `1 Nos` is correct output**. The
+mock reproduces exactly that, and a test would fail if the paid row's unit were forced onto
+the free one.
+
+### `cart_item_uom_changed` - a refusal, not a repair
+
+`add_to_cart` can answer **409** with `details.item_code` / `existing_uom` / `current_uom`
+when the cart line is held in a unit the item no longer sells in.
+
+It is a **definite refusal** - the request reached the endpoint and was rejected - so it
+takes the path that already existed for those: the error is shown, **nothing is retried**,
+and **no `get_cart` follows**, because nothing changed. Its own alert with a link to the
+cart, rather than a line in the generic add failure, because it is the one add error with a
+specific action attached: remove the line, add the product again.
+
+Not done, deliberately: no automatic removal (the storefront does not delete a buyer's line
+to resolve a problem they have not been told about), no quantity conversion, and no unit in
+the request. **`existing_uom` / `current_uom` are not surfaced** - `YobApiError.context`
+stays a three-key allow-list, the same call made for the coupon thresholds in Phase 16, and
+naming the two units does not change what the buyer must do.
+
+`get_cart` reports the same fact as `uom_changed_items[]`. Typed, exposed on the store, and
+shown on the cart as a count in its own notice. It is **not** counted as `cart_updated`: the
+backend did not restate the line, so nothing about the cart actually changed.
+
+### Contract additions, all additive
+
+`CatalogItemDto` gains `uom` and `conversion_factor`; `ItemDetailDto` gains
+`conversion_factor` and `stock_qty`; `CartPayloadDto` gains `uom_changed_items`. `stock_qty`
+and `conversion_factor` are typed and deliberately **not rendered** - they exist so nothing
+here ever needs to compute the stock equivalent of a quantity.
+
+### Two mock defects found and fixed
+
+- `MockServerCart` built every cart line with `stock_uom: item.uom`, mirroring the selling
+  unit into the stock field. Invisible while every fixture sold in the unit it stocked; wrong
+  the moment one did not.
+- A `splitGst` docblock had drifted onto `freeRow`, describing a CGST/SGST split above a
+  promotion-row builder.
+
+### Stale wording cleaned
+
+`item-quantity.spec.ts` still had a `quantity-driven repricing` block whose leading test
+claimed the backend priced the committed quantity - it passed only because the fixture's
+default rate happens to be the number it asserted. Phase 23B-2 removed that refetch. The
+block, and two Playwright comments saying a committed quantity triggers repricing, now
+describe what actually happens: the quantity is local until Add to cart.
+
+### Gate
+
+Unit **758/758**, Playwright **951/951** at three viewports, typecheck clean across app,
+spec and e2e projects, production build clean, production purity clean (no mock fixture,
+scenario name, dev host or credential in the bundle).
+
+One environment lesson worth recording: a long-lived `ng serve --configuration mock` on
+port 4300 stopped rebuilding, and `reuseExistingServer` meant Playwright silently tested
+that stale bundle - new tests failed while the code was correct, and, worse, an earlier
+run reported green against pre-change output. **This is now fixed in tooling rather than
+left to memory** - see the Phase 23B-5U-FE-GATE entry above: `npm run e2e` starts its own
+server on its own port and never adopts one.
+
+### Not verified from here
+
+Live smoke was **not** run: it needs `YOB_SMOKE_PASSWORD`, which this session does not have,
+and every catalog endpoint is session-protected so there is no safe read-only substitute. The
+additive fields are typed from the stated backend contract and exercised against the mock,
+not observed on the wire from this machine. No merchant configuration was created.
+
 ## CONFIRMED - ERPNext pricing compatibility sign-off (Phase 23B-5, 2026-08-20)
 
 Verification gate. Tests and documentation only; no production behaviour changed.
@@ -1574,6 +1838,9 @@ until the backend ships it.
 | Frontend Phase 23B-2 - pricing projection, UOM, stock, local quantity | **PASS** |
 | Frontend Phase 23B-4 - authoritative row-level tax display | **PASS** |
 | **Phase 23B-5 - ERPNext pricing compatibility sign-off audit** | **PASS with environment sign-off** |
+| Frontend Phase 23B-5U-FE - authoritative selling UOM display & UOM conflict | **PASS (mock-verified; no live smoke)** |
+| Phase 23B-5U-FE-GATE - E2E gate integrity (no reused server) | **PASS** |
+| Frontend Phase 24C - variant family selection UX | **PASS (mock-verified; request contract assumed)** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

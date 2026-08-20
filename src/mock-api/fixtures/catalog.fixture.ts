@@ -1,6 +1,8 @@
 import type {
   CatalogItemDto,
   ItemDetailDto,
+  ItemFamilyDto,
+  ItemPricingDto,
   CategoryDetailDto,
   CategoryListItemDto,
   CategoryPayloadDto,
@@ -162,12 +164,30 @@ const FASTENERS: CategoryDetailDto = {
   ...NULL_MEDIA,
 };
 
+/**
+ * What a listing row says when it is one ordinary salable item.
+ *
+ * Backend Phase 24B added both fields to every row: `has_variants` says whether the row
+ * stands for a family, and `price_state` says whether the money on it means anything.
+ */
+const PRICED_SIMPLE = { has_variants: 0, price_state: 'priced' } as const;
+
 const FASTENER_ITEMS: readonly CatalogItemDto[] = [
   {
     // Discounted, with a pricing rule label.
+    //
+    // Also the one item whose **selling UOM differs from its stock UOM**: ERPNext sells
+    // it by the Box and stocks it in Nos, 25 to a Box. That split is what proves the
+    // storefront labels a price with `uom` and a stock figure with `stock_uom`, and that
+    // nothing multiplies either by `conversion_factor` on the way to the screen. The
+    // prices are deliberately unchanged, so every existing pricing assertion still means
+    // what it did.
     name: 'YOB-BOLT-M10',
     item_name: 'Hex Bolt M10 x 50mm',
     slug: 'hex-bolt-m10-50',
+    ...PRICED_SIMPLE,
+    uom: 'Box',
+    conversion_factor: 25,
     stock_uom: 'Nos',
     image: IMAGE_PORTRAIT,
     base_price: 12.5,
@@ -184,6 +204,9 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
     name: 'YOB-NUT-M10',
     item_name: 'Hex Nut M10',
     slug: 'hex-nut-m10',
+    ...PRICED_SIMPLE,
+    uom: 'Nos',
+    conversion_factor: 1,
     stock_uom: 'Nos',
     image: IMAGE_LANDSCAPE,
     base_price: 3.75,
@@ -200,6 +223,9 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
     name: 'YOB-WASH-M10',
     item_name: 'Flat Washer M10',
     slug: 'flat-washer-m10',
+    ...PRICED_SIMPLE,
+    uom: 'Nos',
+    conversion_factor: 1,
     stock_uom: 'Nos',
     image: null,
     base_price: 1.2,
@@ -216,6 +242,9 @@ const FASTENER_ITEMS: readonly CatalogItemDto[] = [
     name: 'YOB-ANCHOR-HD-12',
     item_name: 'Heavy Duty Through Bolt Anchor M12 x 120mm, Hot Dip Galvanised, Boxed Quantity',
     slug: 'through-bolt-anchor-m12-120',
+    ...PRICED_SIMPLE,
+    uom: 'Box',
+    conversion_factor: 1,
     stock_uom: 'Box',
     image: IMAGE_HUGE,
     base_price: 480,
@@ -244,6 +273,9 @@ const BULK_ITEMS: readonly CatalogItemDto[] = Array.from({ length: 30 }, (_, ind
     name: `YOB-BULK-${n}`,
     item_name: `Bulk Fastener ${n}`,
     slug: `bulk-fastener-${n}`,
+    ...PRICED_SIMPLE,
+    uom: 'Nos',
+    conversion_factor: 1,
     stock_uom: 'Nos',
     image: null,
     base_price: 100 + index,
@@ -294,6 +326,264 @@ const SAFETY: CategoryDetailDto = {
   ...NULL_MEDIA,
 };
 
+/* --------------------------------------------------------------- variant family */
+
+/**
+ * A variant family, and the two variants that actually exist under it.
+ *
+ * ## The matrix is deliberately incomplete
+ *
+ * Four attribute values are offered - Orange, Yellow, Medium, Large - and only **two**
+ * combinations were ever created. `Orange/Large` and `Yellow/Medium` do not exist and
+ * must never become selectable, which is the single most important thing a variant UI
+ * can get wrong: offering the cross-product of the attribute lists.
+ *
+ * The two variants differ in more than colour, on purpose:
+ *
+ * | Variant | Sold in | Stocked in | Image |
+ * | --- | --- | --- | --- |
+ * | Orange / Medium | Box of 25 | Nos, 125 on hand | its own |
+ * | Yellow / Large | Nos | Nos, 40 on hand | **none** - the family's is kept |
+ *
+ * So a resolved variant proves the selling UOM, the stock UOM and the image all come
+ * from the resolver, and switching between them proves a quantity cannot carry across
+ * two different selling units.
+ */
+export const MOCK_FAMILY_SLUG = 'hi-vis-safety-vest';
+const FAMILY_CODE = 'YOB-VEST';
+
+/** The quantity `resolve_variant` prices at when the caller sends the default. */
+const VARIANT_QTY = 1;
+
+/**
+ * The duplicative nested `pricing` block, as the contract carries it.
+ *
+ * Present because the wire has it; the UI reads the top-level fields, so the figures
+ * here are the same ones rather than a second set to drift from.
+ */
+function variantPricing(code: string, name: string, rate: number, uom: string): ItemPricingDto {
+  return {
+    item: { name: code, item_name: name, item_group: 'Safety Equipment', image: null, stock_uom: 'Nos' },
+    selling_price_list: 'Standard Selling',
+    qty: VARIANT_QTY,
+    base_price: rate,
+    rate,
+    discount_percentage: 0,
+    discount_amount: 0,
+    total_discount: 0,
+    net_amount: rate,
+    tax_amount: 0,
+    tax_label: null,
+    total_amount: rate,
+    pricing_rules: [],
+    pricing_rule_label: null,
+    pricing_rule_apply_on: null,
+    uom,
+  };
+}
+
+const VEST_FAMILY: ItemFamilyDto = {
+  name: FAMILY_CODE,
+  item_name: 'Hi-Vis Safety Vest',
+  image: IMAGE_LANDSCAPE,
+  item_group: 'Safety Equipment',
+  custom_slug: MOCK_FAMILY_SLUG,
+  is_template: 1,
+  // A template is never itself salable; the buyer buys one of its variants.
+  is_purchasable: 0,
+  // Backend order, preserved by the UI exactly as it arrives.
+  attributes: [
+    { attribute: 'Colour', numeric: 0, values: ['Orange', 'Yellow'] },
+    { attribute: 'Size', numeric: 0, values: ['Medium', 'Large'] },
+  ],
+  variants: [
+    { item_code: 'YOB-VEST-ORG-M', attributes: { Colour: 'Orange', Size: 'Medium' } },
+    { item_code: 'YOB-VEST-YEL-L', attributes: { Colour: 'Yellow', Size: 'Large' } },
+  ],
+};
+
+/**
+ * A family the storefront cannot configure - ERPNext Manufacturer-based variants.
+ *
+ * It arrives with nothing to choose, and the resolver refuses it outright. There is no
+ * bespoke UI for this by decision, so the fixture exists to prove the safe fallback.
+ */
+export const MOCK_UNSUPPORTED_FAMILY_SLUG = 'contractor-tool-kit';
+const UNSUPPORTED_FAMILY_CODE = 'YOB-KIT';
+
+const KIT_FAMILY: ItemFamilyDto = {
+  name: UNSUPPORTED_FAMILY_CODE,
+  item_name: 'Contractor Tool Kit',
+  image: null,
+  item_group: 'Safety Equipment',
+  custom_slug: MOCK_UNSUPPORTED_FAMILY_SLUG,
+  is_template: 1,
+  is_purchasable: 0,
+  attributes: [],
+  variants: [],
+};
+
+/** Every family the mock serves from `get_item`, by slug. */
+export const MOCK_FAMILIES_BY_SLUG: Readonly<Record<string, ItemFamilyDto>> = {
+  [MOCK_FAMILY_SLUG]: VEST_FAMILY,
+  [MOCK_UNSUPPORTED_FAMILY_SLUG]: KIT_FAMILY,
+};
+
+/**
+ * What `resolve_variant` answers for each real combination.
+ *
+ * A full item payload, exactly like `get_item` returns for a simple product - which is
+ * the point: the page renders a resolved variant with the same markup it renders a
+ * simple item with. Keyed by the backend's own attribute values, never by a constructed
+ * item code: reproducing ERPNext's naming is the thing the frontend must not do, and a
+ * fixture that did it would quietly license the application to do it too.
+ */
+const VEST_VARIANTS: readonly {
+  readonly attributes: Readonly<Record<string, string>>;
+  readonly detail: ItemDetailDto;
+}[] = [
+  {
+    attributes: { Colour: 'Orange', Size: 'Medium' },
+    detail: {
+      name: 'YOB-VEST-ORG-M',
+      item_name: 'Hi-Vis Safety Vest - Orange, Medium',
+      image: IMAGE_PORTRAIT,
+      item_group: 'Safety Equipment',
+      custom_slug: MOCK_FAMILY_SLUG,
+      qty: VARIANT_QTY,
+      variant_of: FAMILY_CODE,
+      selected: { Colour: 'Orange', Size: 'Medium' },
+      base_price: 1200,
+      rate: 1000,
+      discount_percentage: 0,
+      discount_amount: 0,
+      net_amount: 1000,
+      tax_amount: 0,
+      tax_label: null,
+      total_amount: 1000,
+      // Sold by the Box, stocked in Nos - the Phase 23B-5U split, on a variant.
+      uom: 'Box',
+      stock_uom: 'Nos',
+      conversion_factor: 25,
+      stock_qty: 25,
+      is_stock_item: 1,
+      warehouse: 'Stores - ST',
+      actual_qty: 125,
+      pricing: variantPricing('YOB-VEST-ORG-M', 'Hi-Vis Safety Vest - Orange, Medium', 1000, 'Box'),
+      pricing_rule_label: null,
+      pricing_rule_apply_on: null,
+      available_rules: [],
+    },
+  },
+  {
+    attributes: { Colour: 'Yellow', Size: 'Large' },
+    detail: {
+      name: 'YOB-VEST-YEL-L',
+      item_name: 'Hi-Vis Safety Vest - Yellow, Large',
+      // No photograph of its own: the family's must stay on screen.
+      image: null,
+      item_group: 'Safety Equipment',
+      custom_slug: MOCK_FAMILY_SLUG,
+      qty: VARIANT_QTY,
+      variant_of: FAMILY_CODE,
+      selected: { Colour: 'Yellow', Size: 'Large' },
+      base_price: 60,
+      rate: 60,
+      discount_percentage: 0,
+      discount_amount: 0,
+      net_amount: 60,
+      tax_amount: 0,
+      tax_label: null,
+      total_amount: 60,
+      // A different selling unit from its sibling, which is why a quantity may never
+      // carry across a variant change.
+      uom: 'Nos',
+      stock_uom: 'Nos',
+      conversion_factor: 1,
+      stock_qty: 1,
+      is_stock_item: 1,
+      warehouse: 'Stores - ST',
+      actual_qty: 40,
+      pricing: variantPricing('YOB-VEST-YEL-L', 'Hi-Vis Safety Vest - Yellow, Large', 60, 'Nos'),
+      pricing_rule_label: null,
+      pricing_rule_apply_on: null,
+      available_rules: [],
+    },
+  },
+];
+
+/** Resolve a selection the way the backend does: by matching the real matrix. */
+export function mockResolveVariant(
+  template: string,
+  attributes: Readonly<Record<string, string>>,
+): ItemDetailDto | undefined {
+  if (template !== FAMILY_CODE) {
+    return undefined;
+  }
+
+  return VEST_VARIANTS.find((variant) =>
+    Object.entries(variant.attributes).every(([name, value]) => attributes[name] === value),
+  )?.detail;
+}
+
+/** Which attributes a family requires, so the mock can refuse an incomplete selection. */
+export function mockFamilyByCode(template: string): ItemFamilyDto | undefined {
+  return Object.values(MOCK_FAMILIES_BY_SLUG).find((family) => family.name === template);
+}
+
+/** Every resolvable variant payload, for cart lookups by item code. */
+export const MOCK_VARIANT_DETAILS: readonly ItemDetailDto[] = VEST_VARIANTS.map((v) => v.detail);
+
+/**
+ * The listing row for a family: one card, and **no price**.
+ *
+ * `price_state: 'select_options'` is the backend saying the money is not knowable yet.
+ * The children are not listed separately - the family is the row.
+ */
+const SAFETY_ITEMS: readonly CatalogItemDto[] = [
+  {
+    name: 'YOB-GOGGLE-CLR',
+    item_name: 'Clear Safety Goggles',
+    slug: 'clear-safety-goggles',
+    ...PRICED_SIMPLE,
+    uom: 'Nos',
+    conversion_factor: 1,
+    stock_uom: 'Nos',
+    image: IMAGE_SQUARE,
+    base_price: 240,
+    rate: 240,
+    discount_percentage: 0,
+    discount_amount: 0,
+    net_amount: 240,
+    tax_amount: 0,
+    total_amount: 240,
+    pricing_rule_label: null,
+  },
+  {
+    name: FAMILY_CODE,
+    item_name: VEST_FAMILY.item_name,
+    slug: MOCK_FAMILY_SLUG,
+    has_variants: 1,
+    price_state: 'select_options',
+    // Still typed, still sent, and deliberately not rendered on a family card: they
+    // describe no single salable thing until a variant is chosen.
+    uom: 'Nos',
+    conversion_factor: 1,
+    stock_uom: 'Nos',
+    image: VEST_FAMILY.image,
+    // Zeroes rather than a plausible figure: a family card must show no money at all, and
+    // a fixture with a tempting number in it is how one eventually gets rendered.
+    base_price: 0,
+    rate: 0,
+    discount_percentage: 0,
+    discount_amount: 0,
+    net_amount: 0,
+    tax_amount: 0,
+    total_amount: 0,
+    pricing_rule_label: null,
+  },
+];
+
 /** Every category the mock can serve, by slug. */
 /**
  * `get_category` payloads.
@@ -338,8 +628,9 @@ export const MOCK_ITEMS_BY_CATEGORY: Readonly<Record<string, readonly CatalogIte
   'fasteners': FASTENER_ITEMS,
   'bulk-fasteners': BULK_ITEMS,
   'abrasives': [],
-  'safety-equipment': [],
+  'safety-equipment': SAFETY_ITEMS,
 };
+
 
 
 /** Children of a given parent slug, for `get_categories?parent_slug=`. */
@@ -386,7 +677,7 @@ const OFFERS_BY_SLUG: Readonly<Record<string, readonly string[]>> = {
  *
  * | Slug | Case |
  * | --- | --- |
- * | hex bolt | stock item, warehouse resolved, plenty on hand |
+ * | hex bolt | stock item, warehouse resolved, plenty on hand - and counted in `Nos` while the item sells in `Box` |
  * | hex nut | stock item, warehouse resolved, genuinely **zero** on hand |
  * | flat washer | **non-stock** item - availability does not apply at all |
  * | anchor | stock item, **warehouse unresolved**, so quantity is unknown (`null`) |
@@ -414,6 +705,9 @@ const DEFAULT_STOCK: MockStockMeta = {
   actual_qty: 12,
 };
 
+/** What `get_item` prices when the caller asks for no particular quantity. */
+const DEFAULT_QTY = 1;
+
 function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
   // Only the anchor item carries tax in these fixtures.
   const taxLabel = listing.tax_amount > 0 ? 'GST 18%' : null;
@@ -424,7 +718,7 @@ function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
     image: listing.image,
     item_group: ITEM_GROUP,
     custom_slug: listing.slug,
-    qty: 1,
+    qty: DEFAULT_QTY,
 
     base_price: listing.base_price,
     rate: listing.rate,
@@ -436,8 +730,13 @@ function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
     tax_label: taxLabel,
     total_amount: listing.total_amount,
 
-    uom: listing.stock_uom,
+    // The selling unit, the stock unit and the factor between them - the backend's own
+    // three answers. `stock_qty` is the server's conversion of the default `qty`, present
+    // precisely so the browser never has to do that multiplication itself.
+    uom: listing.uom,
     stock_uom: listing.stock_uom,
+    conversion_factor: listing.conversion_factor,
+    stock_qty: DEFAULT_QTY * listing.conversion_factor,
 
     ...(STOCK_BY_SLUG[listing.slug] ?? DEFAULT_STOCK),
 
@@ -463,7 +762,7 @@ function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
       pricing_rules: listing.pricing_rule_label === null ? [] : ['YOB-PRULE-0001'],
       pricing_rule_label: listing.pricing_rule_label,
       pricing_rule_apply_on: listing.pricing_rule_label === null ? null : 'Item Code',
-      uom: listing.stock_uom,
+      uom: listing.uom,
     },
 
     pricing_rule_label: listing.pricing_rule_label,

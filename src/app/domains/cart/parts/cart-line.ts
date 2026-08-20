@@ -61,17 +61,24 @@ import type { CartTaxComponentDto } from '../contracts/cart.types';
             </app-badge>
           </p>
           <p class="mt-1 text-sm text-slate-600">
-            <span data-testid="cart-line-quantity">{{ row().qty }}</span>
-            <!-- No whitespace before the comma: the surrounding elements would otherwise
-                 render "1 Nos , added by an offer". -->
-            {{ row().uom }}<ng-container i18n="@@cart.line.addedByOffer"
-              >, added by an offer</ng-container
-            >
+            <!-- &ngsp; is a real space Angular will not collapse; without it the
+                 quantity and its unit render as "1Nos". No whitespace before the comma
+                 for the opposite reason - it would render "1 Nos , added by an offer".
+                 The unit is this row's OWN, never the paid row's: ERPNext gives a free
+                 Product Discount row Pricing Rule.free_item_uom or the item's stock_uom,
+                 so a promotional 1 Nos beside a paid 2 Box is correct output. -->
+            <span data-testid="cart-line-quantity">{{ row().qty }}</span
+            >&ngsp;<span data-testid="cart-line-uom">{{ row().uom }}</span
+            ><ng-container i18n="@@cart.line.addedByOffer">, added by an offer</ng-container>
           </p>
         } @else {
           <p class="mt-1 text-sm text-slate-600">
-            <span data-testid="cart-line-quantity">{{ row().qty }}</span>
-            {{ row().uom }}
+            <!-- The priced row's own UOM. Not the cart item's, not stock_uom, and not
+                 derived through conversion_factor - the projection already says which
+                 unit this quantity and this rate are in. &ngsp; keeps the space between
+                 the number and its unit, which Angular would otherwise collapse. -->
+            <span data-testid="cart-line-quantity">{{ row().qty }}</span
+            >&ngsp;<span data-testid="cart-line-uom">{{ row().uom }}</span>
             <span class="sr-only" i18n="@@cart.line.at">at</span>
             <span aria-hidden="true">&times;</span>
             <span data-testid="cart-line-rate">{{ row().rate | currency: currency() }}</span>

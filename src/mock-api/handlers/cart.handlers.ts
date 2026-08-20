@@ -75,11 +75,33 @@ const addToCart: MockHandler = (ctx) => {
     });
   }
 
-  if (ctx.cart.findItemByCode(itemCode) === undefined) {
+  const item = ctx.cart.findItemByCode(itemCode);
+  if (item === undefined) {
     return mockYobError('item_not_found', 'Item not found.', {
       field: 'item_code',
       status: 404,
     });
+  }
+
+  // The cart already holds this item in a unit ERPNext no longer sells it in. A 409, and
+  // a refusal rather than a fix: the backend will not restate the line in the new unit,
+  // because deciding what quantity `2 Nos` becomes in `Box` is a conversion nobody has
+  // authorised. `existing_uom` stands in for the unit the line was created with - here
+  // the stock unit, which is what the item used to sell in.
+  if (ctx.scenario === 'cart-item-uom-changed' && ctx.cart.has(itemCode)) {
+    return mockYobError(
+      'cart_item_uom_changed',
+      'This item is now sold in a different unit. Remove it from your cart and add it again.',
+      {
+        field: 'item_code',
+        status: 409,
+        details: {
+          item_code: itemCode,
+          existing_uom: item.stock_uom,
+          current_uom: item.uom,
+        },
+      },
+    );
   }
 
   ctx.cart.addQuantity(itemCode, qty);

@@ -14,7 +14,7 @@ import {
   MOCK_HOME_STATE,
   MOCK_INTERSTATE_SURCHARGE_RATE,
 } from '../fixtures/address-book.fixture';
-import { MOCK_ITEM_DETAILS_BY_SLUG } from '../fixtures/catalog.fixture';
+import { MOCK_ITEM_DETAILS_BY_SLUG, MOCK_VARIANT_DETAILS } from '../fixtures/catalog.fixture';
 import { couponDiscountRate } from '../fixtures/coupon.fixture';
 import { MockApiScenario } from '../scenarios/mock-scenario';
 import { MockServerAddressBook } from './mock-server-address-book';
@@ -91,9 +91,19 @@ export class MockServerCart {
 
   readonly isEmpty = () => this.quantities().size === 0;
 
-  /** Look up an item by its Frappe item code, as `add_to_cart` does. */
+  /**
+   * Look up an item by its Frappe item code, as `add_to_cart` does.
+   *
+   * Resolved variants are included: a variant has no slug of its own to be fetched by,
+   * but it is an ordinary salable SKU once the resolver has named it, and the cart takes
+   * it exactly like any other. A template code is deliberately **not** here - nothing can
+   * add one, which is what makes the mock refuse it with `item_not_found`.
+   */
   findItemByCode(itemCode: string) {
-    return Object.values(MOCK_ITEM_DETAILS_BY_SLUG).find((item) => item.name === itemCode);
+    return (
+      Object.values(MOCK_ITEM_DETAILS_BY_SLUG).find((item) => item.name === itemCode) ??
+      MOCK_VARIANT_DETAILS.find((item) => item.name === itemCode)
+    );
   }
 
   /**
@@ -299,8 +309,9 @@ export class MockServerCart {
         base_price: item.base_price,
         rate,
         amount,
+        // Two different units, and the fixture now has an item where they differ.
         uom: item.uom,
-        stock_uom: item.uom,
+        stock_uom: item.stock_uom,
         discount_percentage: shouldReprice ? 0 : item.discount_percentage,
         discount_amount: shouldReprice ? 0 : item.discount_amount,
         tax_amount: taxAmount,
@@ -381,7 +392,26 @@ export class MockServerCart {
       cart_updated: removed.length > 0 || repriced.length > 0,
       removed_items: removed,
       price_updated_items: repriced,
+      // Reported, but NOT counted as `cart_updated`: the backend does not restate a line
+      // in the new unit, so nothing about the cart actually changed. It is a condition
+      // the buyer has to resolve, not an edit the server already made.
+      uom_changed_items: this.uomChangedCodes(lines),
     };
+  }
+
+  /**
+   * Lines whose stored UOM is no longer the item's selling UOM.
+   *
+   * Scenario-driven, because it is otherwise unreachable: the mock cart records a line
+   * with whatever unit the item sells in *now*, so the two can only disagree if the
+   * item's UOM changed in ERPNext after the line was created. The scenario stands in for
+   * that merchant edit, and it is the same fact `add_to_cart` refuses on.
+   */
+  private uomChangedCodes(lines: readonly CartLineDto[]): string[] {
+    if (this.scenario.scenario() !== 'cart-item-uom-changed') {
+      return [];
+    }
+    return lines.map((line) => line.item_code);
   }
 
   /**
@@ -393,34 +423,41 @@ export class MockServerCart {
    * what lets one SKU appear twice without the two rows colliding.
    */
   private buildPricingRows(lines: readonly CartLineDto[]): CartPricingRowDto[] {
-    const rows: CartPricingRowDto[] = lines.map((line, index) => ({
-      row_id: String(index),
-      line_role: 'Paid',
-      is_free_item: 0,
-      item_code: line.item_code,
-      item_name: line.item_name,
-      uom: line.uom,
-      stock_uom: line.stock_uom,
-      conversion_factor: 1,
-      qty: line.quantity,
-      stock_qty: line.quantity,
-      base_price: line.base_price,
-      rate: line.rate,
-      discount_percentage: line.discount_percentage,
-      discount_amount: line.discount_amount,
-      amount: line.amount,
-      net_amount: line.amount,
-      // Tax exactly as the backend reports it, so the frontend has nothing to compute.
-      tax_amount: line.tax_amount,
-      total_amount: line.total_amount,
-      tax_components: splitGst(line.tax_amount, line.amount),
-      // The frontend's CartLineDto does not carry rule names; the projection does.
-      pricing_rules: line.pricing_rule_label === null ? [] : ['PRLE-MOCK-0001'],
-      // The real backend supplies cart-item row names here. They are unresolvable in the
-      // browser because `items` carries no `name`, and the mock reproduces that faithfully
-      // rather than inventing an id the application could accidentally start relying on.
-      source_line_ids: [`mock-line-${index}`],
-    }));
+    const rows: CartPricingRowDto[] = lines.map((line, index) => {
+      // The server's own conversion, done here because here is the server. A row of
+      // 2 Box is 50 Nos of stock, and the browser is told rather than asked to work it
+      // out - which is the whole point of the field being on the wire.
+      const conversionFactor = this.findItemByCode(line.item_code)?.conversion_factor ?? 1;
+
+      return {
+        row_id: String(index),
+        line_role: 'Paid',
+        is_free_item: 0,
+        item_code: line.item_code,
+        item_name: line.item_name,
+        uom: line.uom,
+        stock_uom: line.stock_uom,
+        conversion_factor: conversionFactor,
+        qty: line.quantity,
+        stock_qty: round(line.quantity * conversionFactor),
+        base_price: line.base_price,
+        rate: line.rate,
+        discount_percentage: line.discount_percentage,
+        discount_amount: line.discount_amount,
+        amount: line.amount,
+        net_amount: line.amount,
+        // Tax exactly as the backend reports it, so the frontend has nothing to compute.
+        tax_amount: line.tax_amount,
+        total_amount: line.total_amount,
+        tax_components: splitGst(line.tax_amount, line.amount),
+        // The frontend's CartLineDto does not carry rule names; the projection does.
+        pricing_rules: line.pricing_rule_label === null ? [] : ['PRLE-MOCK-0001'],
+        // The real backend supplies cart-item row names here. They are unresolvable in the
+        // browser because `items` carries no `name`, and the mock reproduces that faithfully
+        // rather than inventing an id the application could accidentally start relying on.
+        source_line_ids: [`mock-line-${index}`],
+      };
+    });
 
     const scenario = this.scenario.scenario();
     const first = lines[0];
@@ -431,7 +468,20 @@ export class MockServerCart {
     if (scenario === 'cart-promotion-same-item') {
       // Buy some, get one of the *same* SKU free. The row that used to overwrite the
       // paid row's price before backend Phase 23B-1.
-      rows.push(this.freeRow(String(rows.length), first.item_code, first.item_name, first.uom, first.stock_uom));
+      //
+      // The free row is priced in the item's **stock** UOM, which is what ERPNext does
+      // when the Pricing Rule sets no `free_item_uom`. With the bolt - sold by the Box,
+      // stocked in Nos - that produces a paid `Box` row beside a promotional `Nos` row
+      // for one item code, which is exactly the case a UI must not "tidy up".
+      rows.push(
+        this.freeRow(
+          String(rows.length),
+          first.item_code,
+          first.item_name,
+          first.stock_uom,
+          first.stock_uom,
+        ),
+      );
     }
 
     if (scenario === 'cart-promotion-other-item') {
@@ -543,11 +593,11 @@ export class MockServerCart {
   }
 
   /**
-   * A CGST/SGST split of the line's tax, the way an intra-state sale produces.
+   * One ERPNext-generated free row.
    *
-   * Halved with the remainder on the first component, which is what makes the fixture
-   * useful: the two amounts do not always divide evenly, so a UI that summed components
-   * instead of reading `tax_amount` would drift by a paisa.
+   * `uom` is the caller's to decide, because ERPNext's is: a free Product Discount row
+   * takes `Pricing Rule.free_item_uom`, falling back to the item's `stock_uom`. It is
+   * never assumed to match the paid row it accompanies.
    */
   private freeRow(
     rowId: string,

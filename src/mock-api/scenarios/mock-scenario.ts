@@ -113,7 +113,23 @@ export type MockScenario =
   /** GST-unregistered company: a real but unclassified component named by `label`. */
   | 'cart-tax-generic'
   /** Row figures deliberately disagreeing with the document totals. */
-  | 'cart-summary-mismatch';
+  | 'cart-summary-mismatch'
+  /**
+   * `resolve_variant` refuses a combination the family matrix offered.
+   *
+   * The stale-matrix case: values that all exist, in a pairing the backend will not
+   * sell. Unreproducible otherwise, because the mock's matrix and its resolver agree.
+   */
+  | 'variant-unavailable'
+  /** The family cannot be configured in the storefront - Manufacturer-based variants. */
+  | 'variant-family-unsupported'
+  /**
+   * The item's selling UOM changed after it was put in the cart.
+   *
+   * `add_to_cart` answers 409 `cart_item_uom_changed` for a line already in the cart,
+   * and `get_cart` reports the same lines in `uom_changed_items`.
+   */
+  | 'cart-item-uom-changed';
 
 /**
  * Runtime knobs for the mock API.
@@ -178,7 +194,10 @@ export class MockApiScenario {
       scenario === 'cart-tax-inclusive' ||
       scenario === 'cart-tax-igst' ||
       scenario === 'cart-tax-generic' ||
-      scenario === 'cart-summary-mismatch'
+      scenario === 'cart-summary-mismatch' ||
+      scenario === 'cart-item-uom-changed' ||
+      scenario === 'variant-unavailable' ||
+      scenario === 'variant-family-unsupported'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

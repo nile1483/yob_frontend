@@ -62,6 +62,68 @@ test.describe('priced projection (Phase 23B-2)', () => {
   });
 });
 
+test.describe('row UOM and UOM conflict (Phase 23B-5U-FE)', () => {
+  async function addBoltAndOpenCart(page: import('@playwright/test').Page): Promise<void> {
+    await page.getByTestId('add-to-cart').click();
+    await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('link', { name: 'Cart' })
+      .click();
+    await expect(page.getByTestId('cart-line').first()).toBeVisible();
+  }
+
+  test('a paid row shows the unit ERPNext priced it in', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
+    await addBoltAndOpenCart(page);
+
+    await expect(page.getByTestId('cart-line-uom')).toHaveText('Box');
+  });
+
+  test('a promotion row keeps its own unit, different from the paid row', async ({ page }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-promotion-same-item', {
+      goTo: '/catalog/item/hex-bolt-m10-50',
+    });
+    await addBoltAndOpenCart(page);
+
+    // One item code, two rows, two legitimate units: ERPNext prices the free Product
+    // Discount row in the item's stock UOM when the Pricing Rule names none.
+    await expect(page.getByTestId('cart-line')).toHaveCount(2);
+    await expect(page.getByTestId('cart-line-uom').nth(0)).toHaveText('Box');
+    await expect(page.getByTestId('cart-line-uom').nth(1)).toHaveText('Nos');
+  });
+
+  test('a UOM conflict is explained, and the line is left for the buyer to remove', async ({
+    page,
+  }) => {
+    await signInWithMockFlags(page, 'mockScenario=cart-item-uom-changed', {
+      goTo: '/catalog/item/hex-bolt-m10-50',
+    });
+
+    // The first add creates the line; the second is refused with 409, because the line
+    // is now held in a unit the item no longer sells in.
+    await page.getByTestId('add-to-cart').click();
+    await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
+
+    await page.getByTestId('add-to-cart').click();
+    await expect(page.getByTestId('add-to-cart-uom-changed')).toContainText(
+      'sold in a different unit',
+    );
+    await expect(page.getByTestId('add-to-cart-error')).toHaveCount(0);
+    // Nothing was converted on the buyer's behalf.
+    await expect(page.getByTestId('item-quantity')).toHaveValue('1');
+
+    await page
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('link', { name: 'Cart' })
+      .click();
+
+    await expect(page.getByTestId('cart-uom-changed')).toContainText('sold in a different unit');
+    await expect(page.getByTestId('cart-line')).toHaveCount(1);
+    await expect(page.getByTestId('cart-line-remove')).toBeVisible();
+  });
+});
+
 test.describe('row-level tax (Phase 23B-4)', () => {
   /** Client-side only: a full page load restarts the app and drops the mock session. */
   async function addAndOpenCart(page: import('@playwright/test').Page): Promise<void> {
@@ -198,13 +260,47 @@ test.describe('local quantity (Phase 23B-2)', () => {
   });
 });
 
-test.describe('UOM and availability (Phase 23B-2)', () => {
-  test('the listing and the detail both show the priced UOM', async ({ page }) => {
+test.describe('UOM and availability (Phase 23B-2, 23B-5U-FE)', () => {
+  test('the listing and the detail both show the selling UOM', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: '/catalog/fasteners' });
-    await expect(page.getByTestId('item-uom').first()).toContainText('Nos');
+
+    // The bolt sells by the Box and is stocked in Nos, so its card must say "per Box".
+    // Before backend Phase 23B-5U the listing only had stock_uom and said "per Nos".
+    const bolt = page.getByTestId('item-card').filter({ hasText: 'YOB-BOLT-M10' });
+    await expect(bolt.getByTestId('item-uom')).toContainText('Box');
+    await expect(bolt.getByTestId('item-uom')).not.toContainText('Nos');
 
     await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
-    await expect(page.getByTestId('item-uom')).toContainText('Nos');
+    await expect(page.getByTestId('item-uom')).toContainText('Box');
+  });
+
+  test('the quantity box is labelled with the selling UOM', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
+
+    // The buyer types a number of Boxes, and the accessible name says so.
+    await expect(page.getByTestId('item-quantity')).toHaveAccessibleName(/Box/);
+    await expect(page.getByTestId('item-quantity-uom')).toHaveText('Box');
+  });
+
+  test('the buyer is offered no unit or warehouse to choose', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
+
+    await expect(page.locator('select')).toHaveCount(0);
+    await expect(page.getByRole('combobox')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('Warehouse');
+  });
+
+  test('stock is counted in the stock UOM, beside a price in the selling UOM', async ({
+    page,
+  }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
+
+    // 25 Nos on hand, priced per Box: two different units, both the backend's, neither
+    // converted into the other.
+    await expect(page.getByTestId('item-availability')).toContainText('25');
+    await expect(page.getByTestId('item-availability-uom')).toHaveText('Nos');
+    await expect(page.getByTestId('item-uom')).toContainText('Box');
+    await expect(page.getByTestId('item-rate')).toContainText('11.25');
   });
 
   test('shows a real quantity, including zero', async ({ page }) => {
@@ -244,7 +340,8 @@ const ANCHOR = '/catalog/item/through-bolt-anchor-m12-120';
 async function setQuantity(page: import('@playwright/test').Page, value: string) {
   const input = page.getByTestId('item-quantity');
   await input.fill(value);
-  // Commit as blur/Enter does, which is what triggers repricing.
+  // Commit the value the way blur or Enter does. Nothing is requested when it lands -
+  // the quantity is local until Add to cart.
   await input.blur();
 }
 
@@ -300,7 +397,7 @@ test.describe('quantity on item detail', () => {
     await expect(page.getByTestId('add-to-cart')).toBeDisabled();
   });
 
-  test('keeps the page usable while the new quantity is priced', async ({ page }) => {
+  test('keeps the page usable after a quantity is committed', async ({ page }) => {
     await setQuantity(page, '50');
 
     await expect(page.getByTestId('item-title')).toBeVisible();

@@ -74,6 +74,27 @@ export interface CatalogItemDto {
   readonly name: string;
   readonly item_name: string;
   readonly slug: string;
+
+  /**
+   * The **selling** UOM the listed price is for. This is what a price label says.
+   *
+   * Added by backend Phase 23B-5U. Before it existed the card labelled the price with
+   * `stock_uom`, which is a different unit whenever ERPNext sells in one and stocks in
+   * another - a ₹1000 price for a Box was captioned "per Nos". The buyer never chooses
+   * this; ERPNext resolves it.
+   */
+  readonly uom: string;
+
+  /**
+   * How many {@link stock_uom} make one {@link uom}, as ERPNext derived it.
+   *
+   * Metadata, and **never an input to a calculation here**. Angular does not multiply a
+   * price, a quantity or a stock figure by it: every number the buyer sees is already
+   * expressed in the unit it is labelled with, by the backend that owns the conversion.
+   */
+  readonly conversion_factor: number;
+
+  /** The stock-keeping UOM. Stock figures are counted in this, prices are not. */
   readonly stock_uom: string;
   readonly image: string | null;
 
@@ -87,7 +108,28 @@ export interface CatalogItemDto {
   readonly total_amount: number;
 
   readonly pricing_rule_label: string | null;
+
+  /**
+   * Whether this row is a variant **family** rather than one salable item, as `0`/`1`.
+   *
+   * Backend Phase 24B: a template and its children collapse into a single listing row.
+   * The children are no longer listed separately, so a family card is one card.
+   */
+  readonly has_variants: number;
+
+  /**
+   * Whether the money on this row means anything yet.
+   *
+   * `priced` - an ordinary salable item; the figures are the backend's and are shown.
+   * `select_options` - a family. Its children can differ in price, and choosing one for
+   * the buyer (cheapest, first, default) would be **inventing** a price the backend did
+   * not quote. The card shows no money at all and sends the buyer to the family page.
+   */
+  readonly price_state: ItemPriceState;
 }
+
+/** What a listing row's price means. See {@link CatalogItemDto.price_state}. */
+export type ItemPriceState = 'priced' | 'select_options';
 
 /** The `data` payload of `get_category`. */
 /**
@@ -266,6 +308,32 @@ export interface ItemDetailDto {
   readonly custom_slug: string;
   readonly qty: number;
 
+  /**
+   * Always absent or `0` here - this shape is a **salable** item.
+   *
+   * The discriminant of {@link ItemPayloadDto}: `get_item` answers either this or an
+   * {@link ItemFamilyDto}, and the two are genuinely different payloads rather than one
+   * shape with optional halves. Narrow with {@link isItemFamily} before reading either.
+   */
+  readonly is_template?: 0;
+
+  /**
+   * The template this item is a variant of, when it is one.
+   *
+   * Informational. It is **never** used to construct, guess or validate an item code:
+   * the resolver owns variant identity, and this is the backend telling us where a
+   * resolved SKU came from.
+   */
+  readonly variant_of?: string | null;
+
+  /**
+   * The attribute values the resolver matched, echoed back.
+   *
+   * Present on a `resolve_variant` result. Read for display only - the authority for
+   * what was bought is {@link name}, the SKU the backend chose.
+   */
+  readonly selected?: Readonly<Record<string, string>>;
+
   readonly base_price: number;
   readonly rate: number;
   readonly discount_percentage: number;
@@ -276,10 +344,36 @@ export interface ItemDetailDto {
   readonly tax_label: string | null;
   readonly total_amount: number;
 
-  /** The UOM the shown price is for. May differ from {@link stock_uom}. */
+  /**
+   * The **selling** UOM the shown price and the buyer's quantity are in.
+   *
+   * Authoritative and ERPNext-resolved. The storefront has no UOM selector: the buyer
+   * enters a quantity, and this says what that quantity is counted in. May differ from
+   * {@link stock_uom} - an item sold by the Box and stocked in Nos is ordinary.
+   */
   readonly uom: string;
   /** The item's stock-keeping UOM, which is what `actual_qty` is counted in. */
   readonly stock_uom: string;
+
+  /**
+   * How many {@link stock_uom} make one {@link uom}, as ERPNext derived it.
+   *
+   * Typed because the contract supplies it (backend Phase 23B-5U) and it explains the
+   * relationship between the two units above. It is **not** used for arithmetic: the
+   * browser never converts a price, a quantity or a stock figure between units, and
+   * never sends a conversion factor back.
+   */
+  readonly conversion_factor: number;
+
+  /**
+   * The default quantity expressed in {@link stock_uom}, as the backend computed it.
+   *
+   * The backend's own answer to "what is `qty` in stock units", supplied so nothing here
+   * has to multiply {@link qty} by {@link conversion_factor}. Typed, carried, and
+   * deliberately not rendered: the page shows the buyer's own unit for what they buy and
+   * the stock unit only for {@link actual_qty}, which is already a stock figure.
+   */
+  readonly stock_qty: number;
 
   /**
    * Whether ERPNext tracks stock for this item, as `0` or `1`.
@@ -317,6 +411,121 @@ export interface ItemDetailDto {
   /** Human-readable offer labels, already sorted by the backend. Strings, not objects. */
   readonly available_rules: readonly string[];
 }
+
+/**
+ * One attribute of a variant family, in the backend's own order.
+ *
+ * Order is the backend's editorial decision - Colour before Size - and is preserved
+ * exactly, both for the attributes and for the values inside each one. Sorting them
+ * would quietly re-rank a merchant's choices.
+ */
+export interface ItemAttributeDto {
+  /** The ERPNext Item Attribute name, e.g. `Colour`. Also the control's label. */
+  readonly attribute: string;
+  /** Frappe check field, `0`/`1`. Typed because the contract sends it. */
+  readonly numeric: number;
+  readonly values: readonly string[];
+}
+
+/**
+ * One **actually salable** variant, as the backend enumerated it.
+ *
+ * ## This list is the whole truth about which combinations exist
+ *
+ * It is deliberately not a cross-product. If a family offers Orange, Yellow, Medium and
+ * Large but only `Orange/Medium` and `Yellow/Large` were ever created, those are the only
+ * two rows here - and `Orange/Large` must not become selectable merely because both
+ * values appear somewhere in the attribute lists. Every availability decision in the UI
+ * is a lookup in this array.
+ *
+ * `item_code` is present because the backend sent it, and is used for **nothing** but
+ * counting distinct rows. Angular never puts it in a cart request: a selection is turned
+ * into a purchasable SKU by `resolve_variant`, which is the only authority.
+ */
+export interface ItemVariantDto {
+  readonly item_code: string;
+  /** Attribute name to value, e.g. `{ Colour: 'Orange', Size: 'Medium' }`. */
+  readonly attributes: Readonly<Record<string, string>>;
+}
+
+/**
+ * The `data` payload of `get_item` for an ERPNext Item Template.
+ *
+ * A family is **not** a product with missing prices; it is a different thing. It has no
+ * rate, no UOM, no stock and no tax, because none of those exist until a variant is
+ * chosen - which is why this is a separate type rather than `ItemDetailDto` with a dozen
+ * optional fields. A template that tried to render as a priced item would show a page of
+ * blanks and an unlabelled quantity box.
+ */
+export interface ItemFamilyDto {
+  /** The template's item code, e.g. `YOB-VEST`. Never sent to the cart. */
+  readonly name: string;
+  readonly item_name: string;
+  readonly image: string | null;
+  readonly item_group: string;
+  readonly custom_slug: string;
+
+  /** Always `1` - the discriminant of {@link ItemPayloadDto}. */
+  readonly is_template: 1;
+
+  /**
+   * Whether the template itself may be bought, as `0`/`1`.
+   *
+   * `0` for every family: the buyer buys a variant. Typed because the contract sends it
+   * and because a future purchasable template would be a real product decision, not
+   * something to infer.
+   */
+  readonly is_purchasable: number;
+
+  /** The attributes to choose, in backend order. */
+  readonly attributes: readonly ItemAttributeDto[];
+
+  /** The combinations that actually exist. See {@link ItemVariantDto}. */
+  readonly variants: readonly ItemVariantDto[];
+}
+
+/**
+ * What `get_item` can answer: one salable item, or a family to choose from.
+ *
+ * Narrow it with {@link isItemFamily} - never by looking for a missing price.
+ */
+export type ItemPayloadDto = ItemDetailDto | ItemFamilyDto;
+
+/** Whether this payload is a template the buyer must choose a variant from. */
+export function isItemFamily(payload: ItemPayloadDto): payload is ItemFamilyDto {
+  return payload.is_template === 1;
+}
+
+/**
+ * The request `resolve_variant` takes.
+ *
+ * `attributes` is the buyer's complete selection, by attribute name. Angular sends the
+ * template code and the chosen values and **nothing else**: no candidate item code, no
+ * concatenation of values, no UOM, no warehouse, no price list. What comes back is the
+ * SKU the backend chose, fully priced.
+ */
+export interface ResolveVariantRequest {
+  readonly template: string;
+  readonly attributes: Readonly<Record<string, string>>;
+  readonly qty: number;
+}
+
+/**
+ * Backend refusals from `resolve_variant`, as stable codes.
+ *
+ * - `variant_attributes_required` - the selection was incomplete. The UI does not send
+ *   an incomplete selection, so this means our idea of "complete" disagreed with the
+ *   backend's; the safe answer is to say so, not to guess which attribute is missing.
+ * - `variant_not_available` - the combination does not exist, or no longer does. Our
+ *   matrix can be stale; the resolver cannot be.
+ * - `variant_family_unsupported` - the family is not configurable in the storefront
+ *   (Manufacturer-based variants, for one). There is no UI for it, by decision.
+ */
+export const VARIANT_ERROR_CODES = {
+  attributesRequired: 'variant_attributes_required',
+  notAvailable: 'variant_not_available',
+  familyUnsupported: 'variant_family_unsupported',
+} as const;
 
 /**
  * What a category card needs, regardless of which endpoint produced it.

@@ -11,7 +11,13 @@ function item(overrides: Partial<CatalogItemDto> = {}): CatalogItemDto {
     name: 'YOB-BOLT-M10',
     item_name: 'Hex Bolt M10 x 50mm',
     slug: 'hex-bolt-m10-50',
+    // Sold by the Box, stocked in Nos: the two units are different fields for a reason,
+    // and the card must caption the price with the selling one.
+    uom: 'Box',
+    conversion_factor: 25,
     stock_uom: 'Nos',
+    has_variants: 0,
+    price_state: 'priced',
     image: null,
     base_price: 12.5,
     rate: 11.25,
@@ -61,9 +67,81 @@ describe('ItemCard', () => {
     expect(view.text()).toContain('YOB-BOLT-M10');
   });
 
-  it('shows the unit of measure the backend reported', async () => {
+  it('labels the price with the selling UOM, never the stock UOM', async () => {
     const view = await render();
-    expect(view.testId('item-uom')?.textContent).toContain('Nos');
+
+    // The fixture sells by the Box and stocks in Nos. Before backend Phase 23B-5U the
+    // card only had `stock_uom` to work with and captioned a Box price "per Nos".
+    expect(view.testId('item-uom')?.textContent).toContain('Box');
+    expect(view.testId('item-uom')?.textContent).not.toContain('Nos');
+  });
+
+  describe('a variant family (Phase 24C)', () => {
+    /** One card for the family, with no money on it. */
+    function family(): CatalogItemDto {
+      return item({
+        name: 'YOB-VEST',
+        item_name: 'Hi-Vis Safety Vest',
+        slug: 'hi-vis-safety-vest',
+        has_variants: 1,
+        price_state: 'select_options',
+        // The backend still sends these fields; a family card renders none of them.
+        base_price: 0,
+        rate: 0,
+        discount_percentage: 0,
+        pricing_rule_label: null,
+      });
+    }
+
+    it('says Select options instead of a price', async () => {
+      const view = await render(family());
+
+      expect(view.testId('item-select-options')?.textContent).toContain('Select options');
+      expect(view.testId('item-rate')).toBeNull();
+    });
+
+    it('invents no price, not even a cheapest or a zero', async () => {
+      const view = await render(family());
+
+      // A family has no single price. Showing ₹0.00, or the lowest child's price, would
+      // both be figures the backend never quoted.
+      expect(view.text()).not.toContain('₹');
+      expect(view.text()).not.toContain('0.00');
+      expect(view.testId('item-base-price')).toBeNull();
+      expect(view.testId('item-discount')).toBeNull();
+      expect(view.testId('item-uom')).toBeNull();
+    });
+
+    it('still links to the family page', async () => {
+      const view = await render(family());
+
+      expect(view.testId('item-link')?.getAttribute('href')).toBe(
+        '/catalog/item/hi-vis-safety-vest',
+      );
+    });
+
+    it('keeps the ordinary priced card for a simple item', async () => {
+      const view = await render();
+
+      expect(view.testId('item-select-options')).toBeNull();
+      expect(view.testId('item-rate')?.textContent).toContain('11.25');
+    });
+
+    it('shows a price whenever the backend has not said otherwise', async () => {
+      // A row from a backend that predates price_state must not lose its price.
+      const view = await render(item({ price_state: undefined as unknown as 'priced' }));
+
+      expect(view.testId('item-rate')?.textContent).toContain('11.25');
+      expect(view.testId('item-select-options')).toBeNull();
+    });
+  });
+
+  it('does not convert the price into stock units', async () => {
+    // conversion_factor is 25. A card that multiplied would show 281.25.
+    const view = await render();
+
+    expect(view.testId('item-rate')?.textContent).toContain('11.25');
+    expect(view.testId('item-rate')?.textContent).not.toContain('281');
   });
 
   describe('pricing', () => {

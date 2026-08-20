@@ -17,7 +17,15 @@ const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TES
 const BOLT_URL = '/catalog/item/hex-bolt-m10-50';
 const BOLT_CODE = 'YOB-BOLT-M10';
 
-/** Item detail's quantity, repricing and add-to-cart, through the real route tree. */
+/**
+ * Item detail's quantity and add-to-cart, through the real route tree.
+ *
+ * There is no repricing here to test. Since Phase 23B-2 a committed quantity issues no
+ * request at all: the price on the page is the backend's standalone preview for its own
+ * default quantity, and the transaction rate is settled when the cart is priced as one
+ * document. What is pinned below is that committing a quantity changes the number in the
+ * box and nothing else.
+ */
 describe('ItemPage quantity and add to cart', () => {
   let http: HttpTestingController;
   let cart: CartStore;
@@ -124,17 +132,19 @@ describe('ItemPage quantity and add to cart', () => {
     });
   });
 
-  describe('quantity-driven repricing', () => {
-    it('asks the backend to price the committed quantity', async () => {
+  describe('committing a quantity', () => {
+    it('keeps the backend preview price, unmultiplied', async () => {
       const view = await open();
       await commit(view, '50');
 
-      // 50 x the bulk rate, straight from the mock backend - not computed here.
+      // The backend's own per-unit figure, exactly as it arrived: 50 x 11.25 = 562.50 is
+      // a transaction total nothing here is entitled to compute or display.
       expect(view.testId('item-rate')?.textContent).toContain('11.25');
+      expect(view.testId('item-rate')?.textContent).not.toContain('562');
       expect(view.qty().value).toBe('50');
     });
 
-    it('does not reprice on every keystroke', async () => {
+    it('issues no cart mutation while typing', async () => {
       const view = await open();
       const spy = vi.spyOn(TestBed.inject(CartStore), 'add');
 
@@ -147,14 +157,14 @@ describe('ItemPage quantity and add to cart', () => {
       spy.mockRestore();
     });
 
-    it('does not reprice for an invalid quantity', async () => {
+    it('leaves the price alone when the quantity is invalid', async () => {
       const view = await open();
       await commit(view, '50');
       const priced = view.testId('item-rate')?.textContent;
 
       await commit(view, '0');
 
-      // The last valid quantity's pricing stays on screen.
+      // The price never depended on the quantity, so a rejected quantity cannot move it.
       expect(view.testId('item-rate')?.textContent).toBe(priced);
     });
   });
@@ -216,8 +226,8 @@ describe('ItemPage quantity and add to cart', () => {
     });
   });
 
-  describe('repricing does not disrupt the page', () => {
-    it('keeps the item on screen while the new quantity is priced', async () => {
+  describe('a committed quantity does not disrupt the page', () => {
+    it('keeps the item and the control on screen', async () => {
       const view = await open();
       await commit(view, '50');
 
@@ -228,7 +238,7 @@ describe('ItemPage quantity and add to cart', () => {
       expect(view.testId('item-loading')).toBeNull();
     });
 
-    it('does not carry one item pricing over to another item', async () => {
+    it('does not carry one item over to another item', async () => {
       const view = await open();
       await commit(view, '50');
       expect(view.testId('item-title')?.textContent).toContain('Hex Bolt');

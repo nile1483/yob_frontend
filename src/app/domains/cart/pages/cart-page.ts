@@ -33,6 +33,15 @@ import { CartStore } from '../state/cart.store';
       </div>
     }
 
+    <!-- Its own notice rather than another clause in the reconciliation sentence: this
+         one asks the buyer to do something, where the others only report what already
+         happened. -->
+    @if (uomChangedMessage(); as message) {
+      <div class="mt-6" data-testid="cart-uom-changed">
+        <app-alert tone="info">{{ message }}</app-alert>
+      </div>
+    }
+
     @if (store.justRemoved()) {
       <div class="mt-6" data-testid="cart-removed">
         <app-alert tone="success">
@@ -182,5 +191,20 @@ export class CartPage {
       return $localize`:@@cart.reconciled.repriced:Some prices in your cart were updated.`;
     }
     return null;
+  });
+
+  /**
+   * Explain a line the backend can no longer price in the unit it is held in.
+   *
+   * Counts again, not codes - and no automatic removal. Dropping a line the buyer put
+   * there, on their behalf, to resolve a units problem they have not been told about
+   * yet, would be the storefront making a purchasing decision. It tells them instead.
+   */
+  protected readonly uomChangedMessage = computed(() => {
+    const changed = this.store.uomChangedItemCodes().length;
+    if (changed === 0) {
+      return null;
+    }
+    return $localize`:@@cart.uomChanged:Some items are now sold in a different unit. Remove them from your cart and add them again to get the current price.`;
   });
 }
