@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 
 import { YobApiError } from '../../../foundation/network/yob-api-error';
+import { isItemFamily, type ItemPayloadDto } from '../contracts/catalog.types';
 import { YOB_API_CONFIG, type YobApiConfig } from '../../../foundation/network/yob-api.config';
 import { CatalogApi } from './catalog.api';
 
@@ -203,7 +204,9 @@ describe('CatalogApi', () => {
     });
 
     it('returns the unwrapped item payload', () => {
-      let result: { name?: string; custom_slug?: string; uom?: string } | undefined;
+      // Typed loosely on purpose: this test is about the envelope being unwrapped, not
+      // about the payload's shape - which is a union since API 3.3.0.
+      let result: ItemPayloadDto | undefined;
       api.getItem('hex-bolt-m10-50').subscribe((item) => (result = item));
 
       http
@@ -223,7 +226,7 @@ describe('CatalogApi', () => {
 
       // Note the detail-only field names: custom_slug, not slug; uom, not stock_uom.
       expect(result?.custom_slug).toBe('hex-bolt-m10-50');
-      expect(result?.uom).toBe('Nos');
+      expect(result === undefined || isItemFamily(result) ? null : result.uom).toBe('Nos');
       expect(JSON.stringify(result)).not.toContain('message');
     });
 

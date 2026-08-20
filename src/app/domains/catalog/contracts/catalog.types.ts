@@ -82,8 +82,11 @@ export interface CatalogItemDto {
    * `stock_uom`, which is a different unit whenever ERPNext sells in one and stocks in
    * another - a ₹1000 price for a Box was captioned "per Nos". The buyer never chooses
    * this; ERPNext resolves it.
+   *
+   * **`null` on a family card** (API 3.3.0 `ListingCard.uom`): a template is not priced,
+   * so there is no unit a price could be per.
    */
-  readonly uom: string;
+  readonly uom: string | null;
 
   /**
    * How many {@link stock_uom} make one {@link uom}, as ERPNext derived it.
@@ -91,21 +94,31 @@ export interface CatalogItemDto {
    * Metadata, and **never an input to a calculation here**. Angular does not multiply a
    * price, a quantity or a stock figure by it: every number the buyer sees is already
    * expressed in the unit it is labelled with, by the backend that owns the conversion.
+   * `null` on a family, which has no single conversion.
    */
-  readonly conversion_factor: number;
+  readonly conversion_factor: number | null;
 
   /** The stock-keeping UOM. Stock figures are counted in this, prices are not. */
   readonly stock_uom: string;
   readonly image: string | null;
 
-  readonly base_price: number;
-  readonly rate: number;
-  readonly discount_percentage: number;
-  readonly discount_amount: number;
+  /**
+   * The money on this row - **every field is `null` when {@link price_state} is
+   * `select_options`**.
+   *
+   * Not zero: ERPNext cannot price a template, and quoting one variant's rate would show
+   * a number no buyer is charged. `null` is the backend saying there is no answer yet,
+   * and a family card renders none of it. API 3.3.0 types all of these nullable for
+   * exactly that reason.
+   */
+  readonly base_price: number | null;
+  readonly rate: number | null;
+  readonly discount_percentage: number | null;
+  readonly discount_amount: number | null;
 
-  readonly net_amount: number;
-  readonly tax_amount: number;
-  readonly total_amount: number;
+  readonly net_amount: number | null;
+  readonly tax_amount: number | null;
+  readonly total_amount: number | null;
 
   readonly pricing_rule_label: string | null;
 
@@ -305,20 +318,28 @@ export interface ItemDetailDto {
   readonly item_name: string;
   readonly image: string | null;
   readonly item_group: string;
-  readonly custom_slug: string;
+  /** `null` is possible per API 3.3.0 - an item need not have a public slug. */
+  readonly custom_slug: string | null;
   readonly qty: number;
 
   /**
-   * Always absent or `0` here - this shape is a **salable** item.
+   * Always `0` here - this shape is a **salable** item (API 3.3.0 pins the enum).
    *
    * The discriminant of {@link ItemPayloadDto}: `get_item` answers either this or an
    * {@link ItemFamilyDto}, and the two are genuinely different payloads rather than one
    * shape with optional halves. Narrow with {@link isItemFamily} before reading either.
+   *
+   * Optional only so that a payload captured before Phase 24B still satisfies the type;
+   * the guard treats anything that is not `1` as a salable item, which is the safe way
+   * round - a family missing its flag would render as a product with no price.
    */
   readonly is_template?: 0;
 
+  /** Always `1` here: the contract only calls this shape a product when it can be sold. */
+  readonly is_purchasable?: 1;
+
   /**
-   * The template this item is a variant of, when it is one.
+   * The template this item is a variant of, or `null`.
    *
    * Informational. It is **never** used to construct, guess or validate an item code:
    * the resolver owns variant identity, and this is the backend telling us where a
@@ -327,12 +348,13 @@ export interface ItemDetailDto {
   readonly variant_of?: string | null;
 
   /**
-   * The attribute values the resolver matched, echoed back.
+   * The attribute values the resolver matched, or `null` for a plain item.
    *
-   * Present on a `resolve_variant` result. Read for display only - the authority for
-   * what was bought is {@link name}, the SKU the backend chose.
+   * Read from the variant's **stored** rows, so the contract says it is safe to trust
+   * over what was sent. Display only: the authority for what was bought is {@link name},
+   * the SKU the backend chose.
    */
-  readonly selected?: Readonly<Record<string, string>>;
+  readonly selected?: Readonly<Record<string, string>> | null;
 
   readonly base_price: number;
   readonly rate: number;
@@ -471,11 +493,17 @@ export interface ItemFamilyDto {
   /**
    * Whether the template itself may be bought, as `0`/`1`.
    *
-   * `0` for every family: the buyer buys a variant. Typed because the contract sends it
-   * and because a future purchasable template would be a real product decision, not
-   * something to infer.
+   * `0` for every family - API 3.3.0 pins the enum. The buyer buys a variant, and
+   * `add_to_cart` refuses a template outright with `item_is_template`.
    */
   readonly is_purchasable: number;
+
+  /**
+   * The template this family is itself a variant of. `null` in practice.
+   *
+   * Required by API 3.3.0 `VariantFamily`, so it is typed; nothing reads it.
+   */
+  readonly variant_of?: string | null;
 
   /** The attributes to choose, in backend order. */
   readonly attributes: readonly ItemAttributeDto[];

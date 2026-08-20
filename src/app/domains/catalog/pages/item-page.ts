@@ -87,6 +87,17 @@ import { CatalogApi } from '../data/catalog.api';
           >
         </app-empty-state>
       </div>
+    } @else if (familyUnsupported()) {
+      <!-- A Manufacturer-based family. API 3.3.0 refuses it at get_item with
+           variant_family_unsupported, so there is no matrix to render - and "please try
+           again" would be false advice, because trying again cannot help. -->
+      <div class="mt-6" data-testid="item-family-unavailable">
+        <app-alert tone="info">
+          <span i18n="@@item.family.unavailable"
+            >This product cannot be configured online. Please contact us to order it.</span
+          >
+        </app-alert>
+      </div>
     } @else if (item.error()) {
       <div class="mt-6" data-testid="item-error">
         <app-alert tone="error">
@@ -882,6 +893,14 @@ export class ItemPage {
         return $localize`:@@item.add.quantityInvalid:Enter a quantity greater than zero.`;
       case 'item_not_found':
         return $localize`:@@item.add.itemNotFound:This item is no longer available.`;
+      // The server revalidates the SKU on every add. These two say the code was real but
+      // not sellable - a template, or a variant that is disabled, discontinued or
+      // orphaned. Neither is retryable, so neither says "try again", and neither is
+      // followed by an attempt at some other SKU.
+      case 'item_is_template':
+        return $localize`:@@item.add.isTemplate:Choose the options for this product before adding it to your cart.`;
+      case 'item_not_purchasable':
+        return $localize`:@@item.add.notPurchasable:This item cannot be ordered at the moment.`;
       default:
         return $localize`:@@item.add.failed:We could not add this item to your cart. Please try again.`;
     }
@@ -949,6 +968,20 @@ export class ItemPage {
   protected readonly notFound = computed(() => {
     const error = this.item.error();
     return error instanceof YobApiError && error.code === 'item_not_found';
+  });
+
+  /**
+   * Whether the load was refused because this family cannot be configured online.
+   *
+   * Its own state rather than the generic load error: the published contract raises
+   * `variant_family_unsupported` from `get_item` for a Manufacturer-based family, and
+   * that is a permanent property of the product, not a transient failure to retry.
+   */
+  protected readonly familyUnsupported = computed(() => {
+    const error = this.item.error();
+    return (
+      error instanceof YobApiError && error.code === VARIANT_ERROR_CODES.familyUnsupported
+    );
   });
 
   protected readonly hasDiscount = computed(() => {

@@ -614,15 +614,23 @@ not treat the family matrix as transaction authority - it can be stale, and the 
 refuses with `variant_not_available` when it is. Other documented refusals:
 `variant_attributes_required`, `variant_family_unsupported` (Manufacturer-based families).
 
-**Not yet wire-verified.** This section is written from the Phase 24C brief, not from a
-captured response: the HTTP verb for `resolve_variant` (assumed GET, matching every other
-catalog endpoint and the JSON-in-query precedent set by `get_items.filters`) and the
-statuses for the three refusals are inference. The frontend branches on `code` only.
+**Confirmed against API 3.3.0 (Phase 24D-2).** The backend published the canonical
+package into `reference/api/` and `docs/api-handoff/`; `resolve_variant` is a **GET**
+taking `template` (required), `attributes` (required, JSON object URL-encoded) and `qty`
+(optional, defaults to 1), and all three variant refusals are **422**.
+`variant_family_unsupported` is raised by **`get_item`**, not the resolver. Those files are
+the authority - this section is a summary of them and is never edited to disagree.
 
 Listing rows (`get_items`) additionally carry `has_variants` and `price_state`
 (`priced` | `select_options`). A family is one row; its children are not listed
 separately, and `select_options` means **no price may be shown or derived** - not a
-cheapest variant, not a "from" figure.
+cheapest variant, not a "from" figure. On such a row **every money field is `null`**, along
+with `uom` and `conversion_factor`: ERPNext cannot price a template, so there is no answer
+rather than an answer of zero.
+
+`add_to_cart` revalidates the SKU server-side and refuses a family's own code with
+`item_is_template` (422), or a disabled/discontinued/orphaned variant with
+`item_not_purchasable` (422).
 
 Catalog examples show B2B pricing information such as:
 

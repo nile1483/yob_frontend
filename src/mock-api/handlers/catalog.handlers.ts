@@ -113,6 +113,16 @@ const getItem: MockHandler = (ctx) => {
   // the frontend narrows on `is_template` rather than on a missing price.
   const family = MOCK_FAMILIES_BY_SLUG[slug];
   if (family !== undefined) {
+    // A Manufacturer-based family is refused **here**, by `get_item` - API 3.3.0 lists
+    // `variant_family_unsupported` as a get_item error, not a resolver one. It has no
+    // attribute selector, so there is nothing to render and nothing to choose.
+    if (family.attributes.length === 0) {
+      return mockYobError(
+        'variant_family_unsupported',
+        'This family cannot be configured online.',
+        { field: 'slug', status: 422 },
+      );
+    }
     return mockSuccess(family, { notice: 'Item loaded' });
   }
 
@@ -189,10 +199,11 @@ const resolveVariant: MockHandler = (ctx) => {
   }
 
   // The stale-matrix scenario: a combination the page believed in, refused at the source.
+  // 422, as published - the client branches on the code, but the mock matches the wire.
   if (ctx.scenario === 'variant-unavailable') {
     return mockYobError('variant_not_available', 'That combination is not available.', {
       field: 'attributes',
-      status: 404,
+      status: 422,
     });
   }
 
@@ -200,7 +211,7 @@ const resolveVariant: MockHandler = (ctx) => {
   if (variant === undefined) {
     return mockYobError('variant_not_available', 'That combination is not available.', {
       field: 'attributes',
-      status: 404,
+      status: 422,
     });
   }
 

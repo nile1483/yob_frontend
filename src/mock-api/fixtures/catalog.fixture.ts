@@ -391,6 +391,7 @@ const VEST_FAMILY: ItemFamilyDto = {
   is_template: 1,
   // A template is never itself salable; the buyer buys one of its variants.
   is_purchasable: 0,
+  variant_of: null,
   // Backend order, preserved by the UI exactly as it arrives.
   attributes: [
     { attribute: 'Colour', numeric: 0, values: ['Orange', 'Yellow'] },
@@ -419,6 +420,7 @@ const KIT_FAMILY: ItemFamilyDto = {
   custom_slug: MOCK_UNSUPPORTED_FAMILY_SLUG,
   is_template: 1,
   is_purchasable: 0,
+  variant_of: null,
   attributes: [],
   variants: [],
 };
@@ -451,7 +453,11 @@ const VEST_VARIANTS: readonly {
       item_group: 'Safety Equipment',
       custom_slug: MOCK_FAMILY_SLUG,
       qty: VARIANT_QTY,
+      is_template: 0,
+      is_purchasable: 1,
       variant_of: FAMILY_CODE,
+      // Read from the variant's stored rows by the real backend, so the contract says it
+      // is safe to trust over what the browser sent.
       selected: { Colour: 'Orange', Size: 'Medium' },
       base_price: 1200,
       rate: 1000,
@@ -485,6 +491,8 @@ const VEST_VARIANTS: readonly {
       item_group: 'Safety Equipment',
       custom_slug: MOCK_FAMILY_SLUG,
       qty: VARIANT_QTY,
+      is_template: 0,
+      is_purchasable: 1,
       variant_of: FAMILY_CODE,
       selected: { Colour: 'Yellow', Size: 'Large' },
       base_price: 60,
@@ -565,21 +573,22 @@ const SAFETY_ITEMS: readonly CatalogItemDto[] = [
     slug: MOCK_FAMILY_SLUG,
     has_variants: 1,
     price_state: 'select_options',
-    // Still typed, still sent, and deliberately not rendered on a family card: they
-    // describe no single salable thing until a variant is chosen.
-    uom: 'Nos',
-    conversion_factor: 1,
+    // **Every money field null**, exactly as API 3.3.0 specifies for a family card - and
+    // deliberately not zero. ERPNext cannot price a template, so there is no answer; a
+    // zero is an answer, and a fixture holding a plausible number is how one eventually
+    // gets rendered. The selling unit and conversion are null for the same reason: they
+    // describe a price that does not exist yet.
+    uom: null,
+    conversion_factor: null,
     stock_uom: 'Nos',
     image: VEST_FAMILY.image,
-    // Zeroes rather than a plausible figure: a family card must show no money at all, and
-    // a fixture with a tempting number in it is how one eventually gets rendered.
-    base_price: 0,
-    rate: 0,
-    discount_percentage: 0,
-    discount_amount: 0,
-    net_amount: 0,
-    tax_amount: 0,
-    total_amount: 0,
+    base_price: null,
+    rate: null,
+    discount_percentage: null,
+    discount_amount: null,
+    net_amount: null,
+    tax_amount: null,
+    total_amount: null,
     pricing_rule_label: null,
   },
 ];
@@ -708,9 +717,26 @@ const DEFAULT_STOCK: MockStockMeta = {
 /** What `get_item` prices when the caller asks for no particular quantity. */
 const DEFAULT_QTY = 1;
 
+/**
+ * Read a money field off a **priced** listing row.
+ *
+ * The listing card's money is nullable because a family card carries none (API 3.3.0),
+ * but `get_item` detail is only ever built here from priced rows. Asserting rather than
+ * defaulting: a `?? 0` would let the mock quietly invent a price, which is the one thing
+ * these fixtures exist to make impossible.
+ */
+function priced(value: number | null, field: string, listing: CatalogItemDto): number {
+  if (value === null) {
+    throw new Error(`Mock fixture: ${listing.name} has no ${field}; it is not a priced row.`);
+  }
+  return value;
+}
+
 function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
+  const taxAmount = priced(listing.tax_amount, 'tax_amount', listing);
+  const conversionFactor = priced(listing.conversion_factor, 'conversion_factor', listing);
   // Only the anchor item carries tax in these fixtures.
-  const taxLabel = listing.tax_amount > 0 ? 'GST 18%' : null;
+  const taxLabel = taxAmount > 0 ? 'GST 18%' : null;
 
   return {
     name: listing.name,
@@ -719,24 +745,30 @@ function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
     item_group: ITEM_GROUP,
     custom_slug: listing.slug,
     qty: DEFAULT_QTY,
+    // A simple item is a resolved product: never a template, always purchasable, and it
+    // came from no family. Required fields in API 3.3.0 `ProductDetail`.
+    is_template: 0,
+    is_purchasable: 1,
+    variant_of: null,
+    selected: null,
 
-    base_price: listing.base_price,
-    rate: listing.rate,
-    discount_percentage: listing.discount_percentage,
-    discount_amount: listing.discount_amount,
+    base_price: priced(listing.base_price, 'base_price', listing),
+    rate: priced(listing.rate, 'rate', listing),
+    discount_percentage: priced(listing.discount_percentage, 'discount_percentage', listing),
+    discount_amount: priced(listing.discount_amount, 'discount_amount', listing),
 
-    net_amount: listing.net_amount,
-    tax_amount: listing.tax_amount,
+    net_amount: priced(listing.net_amount, 'net_amount', listing),
+    tax_amount: taxAmount,
     tax_label: taxLabel,
-    total_amount: listing.total_amount,
+    total_amount: priced(listing.total_amount, 'total_amount', listing),
 
     // The selling unit, the stock unit and the factor between them - the backend's own
     // three answers. `stock_qty` is the server's conversion of the default `qty`, present
     // precisely so the browser never has to do that multiplication itself.
-    uom: listing.uom,
+    uom: listing.uom ?? listing.stock_uom,
     stock_uom: listing.stock_uom,
-    conversion_factor: listing.conversion_factor,
-    stock_qty: DEFAULT_QTY * listing.conversion_factor,
+    conversion_factor: conversionFactor,
+    stock_qty: DEFAULT_QTY * conversionFactor,
 
     ...(STOCK_BY_SLUG[listing.slug] ?? DEFAULT_STOCK),
 
@@ -750,19 +782,19 @@ function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
       },
       selling_price_list: 'Standard Selling',
       qty: 1,
-      base_price: listing.base_price,
-      rate: listing.rate,
-      discount_percentage: listing.discount_percentage,
-      discount_amount: listing.discount_amount,
-      total_discount: listing.discount_amount,
-      net_amount: listing.net_amount,
-      tax_amount: listing.tax_amount,
+      base_price: priced(listing.base_price, 'base_price', listing),
+      rate: priced(listing.rate, 'rate', listing),
+      discount_percentage: priced(listing.discount_percentage, 'discount_percentage', listing),
+      discount_amount: priced(listing.discount_amount, 'discount_amount', listing),
+      total_discount: priced(listing.discount_amount, 'discount_amount', listing),
+      net_amount: priced(listing.net_amount, 'net_amount', listing),
+      tax_amount: taxAmount,
       tax_label: taxLabel,
-      total_amount: listing.total_amount,
+      total_amount: priced(listing.total_amount, 'total_amount', listing),
       pricing_rules: listing.pricing_rule_label === null ? [] : ['YOB-PRULE-0001'],
       pricing_rule_label: listing.pricing_rule_label,
       pricing_rule_apply_on: listing.pricing_rule_label === null ? null : 'Item Code',
-      uom: listing.uom,
+      uom: listing.uom ?? listing.stock_uom,
     },
 
     pricing_rule_label: listing.pricing_rule_label,

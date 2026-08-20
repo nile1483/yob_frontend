@@ -1,3 +1,4 @@
+import { mockFamilyByCode } from '../fixtures/catalog.fixture';
 import { isRecord } from '../../app/foundation/network/yob-api.types';
 import { MOCK_COUPON_REJECTIONS, MOCK_COUPON_VALID } from '../fixtures/coupon.fixture';
 import type { MockContext, MockHandler } from '../core/mock-handler';
@@ -71,6 +72,16 @@ const addToCart: MockHandler = (ctx) => {
   if (!Number.isFinite(qty) || qty <= 0) {
     return mockYobError('quantity_invalid', 'Quantity must be greater than zero.', {
       field: 'qty',
+      status: 422,
+    });
+  }
+
+  // A family's own code is never buyable - the buyer adds a resolved variant. Checked
+  // before the catalog lookup, because a template *is* a real item code; it is simply not
+  // a product. API 3.3.0: `item_is_template`, 422.
+  if (mockFamilyByCode(itemCode) !== undefined) {
+    return mockYobError('item_is_template', 'Choose the options for this product first.', {
+      field: 'item_code',
       status: 422,
     });
   }

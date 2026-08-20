@@ -142,7 +142,14 @@ export class ItemCard {
    * below the base price. Guarding on `> 0` as well avoids advertising a "0% off"
    * badge when a pricing rule matched but changed nothing.
    */
-  protected readonly hasDiscount = computed(
-    () => this.item().rate < this.item().base_price && this.item().discount_percentage > 0,
-  );
+  protected readonly hasDiscount = computed(() => {
+    const { rate, base_price: basePrice, discount_percentage: discount } = this.item();
+
+    // Every money field is null on a family card (API 3.3.0). A null is not a zero and
+    // not a comparison: with no price there is no discount to advertise.
+    if (rate === null || basePrice === null || discount === null) {
+      return false;
+    }
+    return rate < basePrice && discount > 0;
+  });
 }
