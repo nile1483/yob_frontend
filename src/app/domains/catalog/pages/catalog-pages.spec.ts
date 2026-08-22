@@ -664,7 +664,15 @@ describe('catalog pages', () => {
       expect(ctx.session.isAuthenticated()).toBe(true);
     });
 
-    afterEach(() => ctx.http.verify());
+    afterEach(() => {
+      // The secure shell asks for the merchant menu on render (Phase 25D). It is not what
+      // these tests are about, and answering it keeps `verify()` meaningful for the
+      // requests that are: an unmatched one still fails the test.
+      for (const request of ctx.http.match((r) => r.url.includes('get_menu'))) {
+        request.flush({ message: { data: { key: 'main', label: 'Main', items: [] } } });
+      }
+      ctx.http.verify();
+    });
 
     function refuseItem(slug = 'some-real-item'): YobApiError | undefined {
       const api = TestBed.inject(CatalogApi);

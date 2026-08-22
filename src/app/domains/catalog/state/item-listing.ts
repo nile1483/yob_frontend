@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 
 import { normalizeYobFailure } from '../../../foundation/network/yob-api-error';
 import type { CatalogApi } from '../data/catalog.api';
+import { NO_FILTERS, type StorefrontFilterSelection } from '../storefront-filters';
 import {
   categoryListingQuery,
   type CatalogItemDto,
@@ -89,24 +90,34 @@ export class ItemListing {
   private inFlight: Subscription | null = null;
 
   /**
-   * Start a listing over: new category, or new sort.
+   * Start a listing over: new category, new sort, or a new filter selection.
    *
-   * Everything resets. The old cursor is bound to the old query on the backend and
-   * would be rejected, and appending a differently sorted page to the previous one would
-   * produce an order that is neither.
+   * Everything resets, **including the cursor**. A cursor is bound to the query that
+   * issued it - the merchandising selection is part of its fingerprint - so replaying one
+   * under a different selection answers `cursor_invalid`. Even if it were accepted,
+   * appending a page drawn under one selection to rows drawn under another would produce
+   * a listing that matches neither.
+   *
+   * So there is no "apply filters" path that keeps the cursor: changing the selection is
+   * starting over, and that is this one method.
    */
-  load(slug: string, sort: ItemListingSort): void {
+  load(
+    slug: string,
+    sort: ItemListingSort,
+    storefrontFilters: StorefrontFilterSelection = NO_FILTERS,
+  ): void {
     this.generation++;
     this.inFlight?.unsubscribe();
     this.inFlight = null;
 
-    this.query = categoryListingQuery(slug, sort);
+    this.query = categoryListingQuery(slug, sort, storefrontFilters);
     this.rows.set([]);
     this.cursorSignal.set(null);
     this.hasMoreSignal.set(false);
     this.loadedSignal.set(false);
     this.loadMoreErrorSignal.set(false);
     this.initialErrorSignal.set(false);
+    this.initialErrorCodeSignal.set(null);
     this.loadingMoreSignal.set(false);
     this.initialLoadingSignal.set(true);
 
@@ -132,6 +143,16 @@ export class ItemListing {
     const next: ItemListingQuery = { ...this.query, cursor: this.cursorSignal() };
     this.request(next, this.generation, 'append');
   }
+
+  /**
+   * The code of a first-page failure, when the backend named one.
+   *
+   * Kept because the merchandising failures are the one class the page can act on: a
+   * stale selection is fixable by clearing it, where a transport failure is fixable by
+   * retrying. Everything else stays a generic error, as before.
+   */
+  private readonly initialErrorCodeSignal = signal<string | null>(null);
+  readonly initialErrorCode = this.initialErrorCodeSignal.asReadonly();
 
   /** Cancel anything outstanding. Called when the page goes away. */
   destroy(): void {
@@ -165,12 +186,15 @@ export class ItemListing {
         if (generation !== this.generation) {
           return;
         }
-        // Normalized so nothing raw can reach a template; the code is not branched on
-        // here because every listing failure has the same two possible consequences.
-        normalizeYobFailure(failure);
+        // Normalized so nothing raw can reach a template. The code is carried, not acted
+        // on: this class does not decide what a merchandising refusal means for the UI,
+        // and it never re-requests - a rejected selection re-sent unchanged is refused
+        // again, which is a retry loop rather than a recovery.
+        const error = normalizeYobFailure(failure);
 
         if (mode === 'replace') {
           this.initialLoadingSignal.set(false);
+          this.initialErrorCodeSignal.set(error.code);
           this.initialErrorSignal.set(true);
         } else {
           // Rows, cursor and hasMore are all left exactly as they were, so the products

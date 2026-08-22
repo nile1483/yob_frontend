@@ -4,6 +4,7 @@ import { map, type Observable } from 'rxjs';
 import { YobApiClient } from '../../../foundation/network/yob-api-client';
 import type {
   CategoryListItemDto,
+  CategoryFiltersDto,
   CategoryMetaDto,
   CategoryPayloadDto,
   ItemDetailDto,
@@ -12,12 +13,14 @@ import type {
   ItemListingDto,
   ItemListingQuery,
 } from '../contracts/catalog.types';
+import { serializeSelection } from '../storefront-filters';
 
 const GET_CATEGORIES = 'yob_storefront.api.catalog.get_categories';
 const GET_CATEGORY = 'yob_storefront.api.catalog.get_category';
 const GET_ITEM = 'yob_storefront.api.catalog.get_item';
 const GET_ITEMS = 'yob_storefront.api.catalog.get_items';
 const RESOLVE_VARIANT = 'yob_storefront.api.catalog.resolve_variant';
+const GET_CATEGORY_FILTERS = 'yob_storefront.api.catalog.get_category_filters';
 
 /** `get_category` returns its counts in `meta`; the payload and counts travel together. */
 export interface CategoryResult {
@@ -106,7 +109,34 @@ export class CatalogApi {
         page_size: query.pageSize,
         cursor: query.cursor,
         qty: 1,
+        // Omitted entirely when nothing is selected - `serializeSelection` answers null,
+        // and the client drops null parameters. An empty selection is the absence of a
+        // constraint, and sending `{}` would be a second spelling of it that the cursor
+        // fingerprint would treat as a different query.
+        storefront_filters: serializeSelection(query.storefrontFilters),
       })
+      .pipe(map((response) => response.data));
+  }
+
+  /**
+   * The merchandising filters one category page offers.
+   *
+   * Named for the endpoint, not for what a frontend might prefer to call it. What comes
+   * back is a **runtime projection**: that category's own Filter Set, already reduced to
+   * the values actually present on its products, in the merchant's order and with no
+   * counts. Angular renders it and sends the chosen keys back to `get_items`; it never
+   * assembles a filter list from anywhere else, and knows nothing of the admin-side Item
+   * Filter Set that governs what a merchant may tag an item with.
+   *
+   * `filters: []` is a normal answer, not an empty state to apologise for: that category
+   * has no Filter Set, so no facet UI is shown.
+   *
+   * Wire-documented failures: `category_not_found` (404), `category_not_listable` (422)
+   * for a group category, which has no listing of its own to filter.
+   */
+  getCategoryFilters(scopeValue: string): Observable<CategoryFiltersDto> {
+    return this.api
+      .get<CategoryFiltersDto>(GET_CATEGORY_FILTERS, { scope_value: scopeValue })
       .pipe(map((response) => response.data));
   }
 

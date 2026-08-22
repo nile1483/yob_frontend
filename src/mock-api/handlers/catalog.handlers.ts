@@ -3,6 +3,8 @@ import type { MockContext, MockHandler } from '../core/mock-handler';
 import type { CatalogItemDto } from '../../app/domains/catalog/contracts/catalog.types';
 import {
   MOCK_CATEGORIES_BY_SLUG,
+  mockCategoryFilters,
+  mockItemMatchesFilters,
   MOCK_FAMILIES_BY_SLUG,
   MOCK_ITEMS_BY_CATEGORY,
   MOCK_ITEM_DETAILS_BY_SLUG,
@@ -234,6 +236,53 @@ function readAttributes(raw: string | null): Readonly<Record<string, string>> | 
   }
 }
 
+/**
+ * `get_category_filters` - the merchandising filters one category page offers.
+ *
+ * Its own endpoint, and its own projection: this category's Filter Set only. It never
+ * consults a parent category, the admin-side Item Filter Set, or an ERPNext Item Group,
+ * because none of those is part of the storefront contract.
+ *
+ * A category with no Filter Set answers `{filters: []}` - a normal answer, not an error.
+ */
+const getCategoryFilters: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  if (ctx.scenario === 'category-filters-unavailable') {
+    return mockYobError('internal_server_error', 'Something went wrong.', { status: 500 });
+  }
+
+  const slug = ctx.params.get('scope_value');
+  if (slug === null || slug === '') {
+    return mockYobError('validation_failed', 'Category slug is required.', {
+      field: 'scope_value',
+      status: 422,
+    });
+  }
+
+  const payload = MOCK_CATEGORIES_BY_SLUG[slug];
+  if (payload === undefined) {
+    return mockYobError('category_not_found', 'Category not found.', {
+      field: 'scope_value',
+      status: 404,
+    });
+  }
+
+  // A group category holds sub-categories rather than products, so there is no listing
+  // for facets to narrow.
+  if (payload.category.is_group === 1) {
+    return mockYobError('category_not_listable', 'That category does not list items.', {
+      field: 'scope_value',
+      status: 422,
+    });
+  }
+
+  return mockSuccess(mockCategoryFilters(slug), { notice: 'Filters loaded' });
+};
+
 /** All endpoints are login-protected; without a session Frappe refuses before YOB runs. */
 function requireSession(ctx: MockContext): MockReply | null {
   return ctx.session.isAuthenticated() ? null : mockPermissionError(ctx.rpcMethod);
@@ -267,6 +316,15 @@ interface MockCursor {
   readonly slug: string;
   readonly sort: string;
   readonly offset: number;
+  /**
+   * The merchandising selection this cursor was issued under, serialised.
+   *
+   * The real backend puts the selection in the cursor's fingerprint, so a cursor
+   * replayed under a different selection answers `cursor_invalid`. Reproduced here
+   * because it is exactly the mistake a paginated filter UI makes - and a mock that
+   * accepted the stale cursor would let that bug through to production.
+   */
+  readonly filters: string;
 }
 
 function encodeCursor(cursor: MockCursor): string {
@@ -281,7 +339,8 @@ function decodeCursor(raw: string): MockCursor | null {
       parsed !== null &&
       typeof (parsed as MockCursor).slug === 'string' &&
       typeof (parsed as MockCursor).sort === 'string' &&
-      typeof (parsed as MockCursor).offset === 'number'
+      typeof (parsed as MockCursor).offset === 'number' &&
+      typeof (parsed as MockCursor).filters === 'string'
     ) {
       return parsed as MockCursor;
     }
@@ -289,6 +348,46 @@ function decodeCursor(raw: string): MockCursor | null {
   } catch {
     return null;
   }
+}
+
+/** Returned when `storefront_filters` is present but is not an object of string lists. */
+const INVALID_FILTERS: Record<string, readonly string[]> = Object.freeze({ __invalid__: [] });
+
+/**
+ * Read the selection the client sent.
+ *
+ * Strict on purpose: the parameter is a JSON object of `key -> [value keys]`, and
+ * anything else is a client bug that the backend answers with
+ * `storefront_filter_invalid` rather than guessing at. An absent or empty parameter is
+ * simply no selection.
+ */
+function parseStorefrontFilters(raw: string | null): Record<string, readonly string[]> {
+  if (raw === null || raw === '') {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return INVALID_FILTERS;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return INVALID_FILTERS;
+  }
+
+  const selection: Record<string, readonly string[]> = {};
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+      return INVALID_FILTERS;
+    }
+    if (value.length > 0) {
+      selection[key] = value as readonly string[];
+    }
+  }
+
+  return selection;
 }
 
 /** Deterministic ordering, so a page boundary falls in the same place every run. */
@@ -367,13 +466,66 @@ const getItems: MockHandler = (ctx) => {
     });
   }
 
+  // --- merchandising selection -------------------------------------------------
+  //
+  // Validated against this category's own projection before anything is listed, and
+  // refused with the published code when it does not match. Each refusal is final for
+  // that selection: the client's remedy is to change it, never to re-send it.
+  const rawFilters = ctx.params.get('storefront_filters');
+  const parsedFilters = parseStorefrontFilters(rawFilters);
+
+  if (parsedFilters === INVALID_FILTERS) {
+    return mockYobError('storefront_filter_invalid', 'Filters must be an object of keys.', {
+      field: 'storefront_filters',
+      status: 422,
+    });
+  }
+
+  // A selection the projection still advertises, refused at the source: the merchant
+  // retired the filter between the facet fetch and the click.
+  if (ctx.scenario === 'storefront-filter-refused' && Object.keys(parsedFilters).length > 0) {
+    return mockYobError('storefront_filter_unknown', 'That filter is not available here.', {
+      field: 'storefront_filters',
+      status: 422,
+    });
+  }
+
+  const published = mockCategoryFilters(slug).filters;
+  for (const [filterKey, values] of Object.entries(parsedFilters)) {
+    const filter = published.find((candidate) => candidate.key === filterKey);
+    if (filter === undefined) {
+      return mockYobError('storefront_filter_unknown', 'That filter is not available here.', {
+        field: 'storefront_filters',
+        status: 422,
+        details: { filter: filterKey },
+      });
+    }
+    for (const value of values) {
+      if (!filter.values.some((candidate) => candidate.key === value)) {
+        return mockYobError(
+          'storefront_filter_value_unknown',
+          'That filter value is not available here.',
+          { field: 'storefront_filters', status: 422, details: { filter: filterKey, value } },
+        );
+      }
+    }
+  }
+
+  // The selection as the cursor will remember it, so a cursor cannot cross a change.
+  const filterFingerprint = JSON.stringify(parsedFilters);
+
   let offset = 0;
   const rawCursor = ctx.params.get('cursor');
   if (rawCursor !== null && rawCursor !== '') {
     const cursor = decodeCursor(rawCursor);
-    // Bound to the query that issued it, so a cursor cannot survive a sort or category
-    // change - the same protection the real backend's cursor binding provides.
-    if (cursor === null || cursor.slug !== slug || cursor.sort !== sort) {
+    // Bound to the query that issued it, so a cursor cannot survive a sort, a category
+    // or a **filter** change - the same protection the real backend's binding provides.
+    if (
+      cursor === null ||
+      cursor.slug !== slug ||
+      cursor.sort !== sort ||
+      cursor.filters !== filterFingerprint
+    ) {
       return mockYobError('cursor_invalid', 'That cursor is no longer valid.', {
         field: 'cursor',
         status: 422,
@@ -382,7 +534,10 @@ const getItems: MockHandler = (ctx) => {
     offset = cursor.offset;
   }
 
-  const all = sortItems(MOCK_ITEMS_BY_CATEGORY[slug] ?? [], sort);
+  const matching = (MOCK_ITEMS_BY_CATEGORY[slug] ?? []).filter((item) =>
+    mockItemMatchesFilters(item.name, parsedFilters),
+  );
+  const all = sortItems(matching, sort);
 
   // A page that returns nothing while more remains: the scan-budget continuation.
   if (ctx.scenario === 'catalog-empty-page' && offset === 0 && all.length > 0) {
@@ -393,7 +548,7 @@ const getItems: MockHandler = (ctx) => {
           returned_count: 0,
           page_size: pageSize,
           has_more: true,
-          next_cursor: encodeCursor({ slug, sort, offset: 0 }),
+          next_cursor: encodeCursor({ slug, sort, offset: 0, filters: filterFingerprint }),
         },
         query: { scope_type: 'category', scope_value: slug, search: '', sort },
       },
@@ -412,7 +567,9 @@ const getItems: MockHandler = (ctx) => {
         returned_count: rows.length,
         page_size: pageSize,
         has_more: hasMore,
-        next_cursor: hasMore ? encodeCursor({ slug, sort, offset: nextOffset }) : null,
+        next_cursor: hasMore
+          ? encodeCursor({ slug, sort, offset: nextOffset, filters: filterFingerprint })
+          : null,
       },
       query: { scope_type: 'category', scope_value: slug, search: '', sort },
     },
@@ -426,4 +583,5 @@ export const CATALOG_HANDLERS: Readonly<Record<string, MockHandler>> = {
   'yob_storefront.api.catalog.get_items': getItems,
   'yob_storefront.api.catalog.get_item': getItem,
   'yob_storefront.api.catalog.resolve_variant': resolveVariant,
+  'yob_storefront.api.catalog.get_category_filters': getCategoryFilters,
 };

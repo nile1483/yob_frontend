@@ -128,6 +128,116 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Storefront navigation and category filters (Phase 25D, 2026-08-22)
+
+Frontend for backend Phases 25B/25C, against API **3.4.0**. Navigation and merchandising
+filters only: Storefront Pages and Content Blocks are the next phase, and `cms.get_page`
+is deliberately neither typed nor mocked here.
+
+### The mirror was stale, and was re-synced before anything was written
+
+`reference/api/` and `docs/api-handoff/` were at 3.4.0 already, but three files differed
+from the backend's canonical `frontend-api-handoff/`: the backend had regenerated them
+three hours after the drop. The delta was **documentation only** - the `Destination`
+schema's `href` description changed from "null until the SPA owns that route" to "always
+null for `storefront_page`" - with identical fields, enums and required lists. All nine
+files were copied from canonical before implementation, and both mirrors are again
+byte-identical to it.
+
+### Navigation
+
+`cms.get_menu('main')` is fetched **once**, by a store, because the shell renders the nav
+component twice - wide header and narrow row - and the phase requires one dataset rather
+than two that could drift. The store is idempotent: a second instance, and every
+subsequent navigation, reuses the tree instead of re-asking for a customer-independent
+menu on every page.
+
+Publication rules are **not** re-implemented. The backend has already removed disabled
+items, disabled descendants, unresolvable destinations and emptied groups; what arrives is
+rendered in the merchant's order, unsorted.
+
+| Node | Rendered as |
+| --- | --- |
+| leaf with `href` | router link, or a plain anchor when `external` |
+| **group** | a `button` with `aria-expanded` + `aria-controls`, never a link |
+| `destination: null` | text, not clickable - a group and a retired target look alike |
+| `storefront_page` | **`/pages/<target>`, built on the client** - `href` is always null |
+| `external_url` | the backend URL; `target=_blank` **only** when `open_in_new_tab`, with `rel="noopener noreferrer"` |
+
+`external` and `open_in_new_tab` are independent flags and the fixture carries a node for
+each combination, because inferring one from the other is the easy mistake.
+
+**Application controls stay code-owned.** Cart, Orders and Account are how the application
+works, not merchandising: an empty menu, or a failed one, leaves them untouched. A menu
+that fails to load is silent - `menu_not_found` covers "no such menu" and "disabled"
+indistinguishably, so an error banner on every page would be noise about a decoration.
+
+### Category filters
+
+`get_category_filters(scope_value)` is fetched per **leaf** category, keyed on the slug.
+A group category is never asked, because it answers `category_not_listable` by design.
+`{filters: []}` renders no facet UI at all. Order is preserved for filters and values, and
+**no counts are shown** - the contract publishes none, and one computed from the loaded
+page would be wrong for every page after the first.
+
+Angular implements **no matching**. OR-within-a-filter and AND-across-filters are the
+backend's rules; the frontend carries grouped keys.
+
+### The URL is the state
+
+The selection lives in `storefront_filters` and nowhere else. Clicks navigate; the new URL
+updates the page. That is what makes reload, back, forward and a shared link all work
+without a second copy of the state to disagree with the address bar.
+
+One canonical form per query, so that a link, a reload and a re-click produce the same
+request and the same cursor fingerprint: filter keys sorted, values sorted, duplicates
+dropped, empty arrays removed, and the parameter **absent** rather than `{}` when nothing
+is selected.
+
+`parseSelection` is a boundary, not a parser: bad JSON, arrays, strings, numbers, nested
+objects and non-string members all collapse to "no filters". Arbitrary URL JSON never
+becomes query grammar.
+
+### Reconciliation, and why it happens before the request
+
+A selection outlives the category it was made in. It is trimmed against the new
+category's own projection **before** anything is sent, so a stale link produces a valid
+listing rather than a `storefront_filter_unknown`. Trimming only: an unavailable value is
+dropped and **nothing is chosen in its place**. When the reconciled form differs from what
+the URL asked for, the URL is corrected with `replaceUrl` - a correction is not somewhere
+the buyer navigated to and should not be a stop on the way back.
+
+### Cursors never cross a selection change
+
+`ItemListing.load()` is the only path that applies a selection, and it resets rows, cursor
+and flags. There is deliberately no "apply filters" route that keeps a cursor. The mock
+puts the selection in its cursor fingerprint exactly as the backend does, so a reused
+cursor surfaces as `cursor_invalid` in the tests rather than as a silent mismatch.
+
+### Errors
+
+The four `storefront_filter_*` refusals get their own state with a **Clear filters**
+action and no retry button: re-sending a selection the backend has already refused earns
+the same refusal, which is a loop rather than a recovery. Clearing is a different request.
+No server text is rendered.
+
+### No ERPNext Item Group
+
+Nothing in navigation, the filter projection, the selection, the request or the URL refers
+to an Item Group. It is not storefront taxonomy, and the Item Filter Set that governs what
+a merchant may tag an item with is an admin-side concept the storefront never sees.
+Regression tests assert its absence in all of those places.
+
+### Not implemented, by instruction
+
+`/pages/:slug` renders nothing yet - navigation only *generates* the route. No Image
+Banner, Rich Text, Carousel, Product Grid or Promo Grid.
+
+### Live smoke - PENDING
+
+No credentials in this environment. Nothing was created on `yob.localhost`, which is also
+still awaiting the backend's slug patch.
+
 ## CONFIRMED - Variant wire-contract sign-off (Phase 24D-2, 2026-08-20)
 
 Verification only; no product behaviour was designed here. Backend Phase 24D-1 published
@@ -1928,6 +2038,7 @@ until the backend ships it.
 | Phase 23B-5U-FE-GATE - E2E gate integrity (no reused server) | **PASS** |
 | Frontend Phase 24C - variant family selection UX | **PASS** |
 | Phase 24D-2 - variant wire-contract sign-off (API 3.3.0) | **PASS (live smoke pending)** |
+| Frontend Phase 25D - storefront navigation & category filters (API 3.4.0) | **PASS (live smoke pending)** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

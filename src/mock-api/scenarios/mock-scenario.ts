@@ -115,6 +115,24 @@ export type MockScenario =
   /** Row figures deliberately disagreeing with the document totals. */
   | 'cart-summary-mismatch'
   /**
+   * `get_items` refuses a selection this category's projection still advertises.
+   *
+   * The genuinely stale facet list: the filters were fetched, the buyer chose from them,
+   * and the merchant retired one in between. Unreproducible otherwise, because the mock's
+   * projection and its listing agree.
+   */
+  | 'storefront-filter-refused'
+  /**
+   * `get_category_filters` fails outright.
+   *
+   * An older backend, a transient fault, anything. The products must still load: facets
+   * are decoration, and a category that shows a spinner for ever because its filter list
+   * failed is a worse page than one with no filter panel.
+   */
+  | 'category-filters-unavailable'
+  /** The configured menu is missing or disabled - `cms.get_menu` answers 404. */
+  | 'menu-missing'
+  /**
    * `resolve_variant` refuses a combination the family matrix offered.
    *
    * The stale-matrix case: values that all exist, in a pairing the backend will not
@@ -197,7 +215,10 @@ export class MockApiScenario {
       scenario === 'cart-summary-mismatch' ||
       scenario === 'cart-item-uom-changed' ||
       scenario === 'variant-unavailable' ||
-      scenario === 'variant-family-unsupported'
+      scenario === 'variant-family-unsupported' ||
+      scenario === 'menu-missing' ||
+      scenario === 'storefront-filter-refused' ||
+      scenario === 'category-filters-unavailable'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

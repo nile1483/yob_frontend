@@ -1,3 +1,5 @@
+import { NO_FILTERS, type StorefrontFilterSelection } from '../storefront-filters';
+
 /**
  * Catalog API contracts.
  *
@@ -167,6 +169,37 @@ export interface CategoryPayloadDto {
 
 // ------------------------------------------------------------------ item listing
 
+/**
+ * One value a merchandising filter offers, from `get_category_filters`.
+ *
+ * `key` is the stable machine key sent back in `storefront_filters`; `label` is what the
+ * buyer reads. **There are no counts** - the contract is explicit that a truthful count
+ * would need the whole eligibility pipeline run per value, so none is published and none
+ * may be invented.
+ */
+export interface StorefrontFilterValueDto {
+  readonly key: string;
+  readonly label: string;
+}
+
+/**
+ * One merchandising filter for a category page (API 3.4.0 `StorefrontFilter`).
+ *
+ * The projection of that category's **own** Filter Set - never a parent's, and never the
+ * admin-side Item Filter Set, which decides what a merchant may tag an item with and is
+ * no business of the storefront. Order is the merchant's: do not sort filters or values.
+ */
+export interface StorefrontFilterDto {
+  readonly key: string;
+  readonly label: string;
+  readonly values: readonly StorefrontFilterValueDto[];
+}
+
+/** The `data` payload of `get_category_filters`. `filters: []` means render no facet UI. */
+export interface CategoryFiltersDto {
+  readonly filters: readonly StorefrontFilterDto[];
+}
+
 /** Sort orders `get_items` accepts. Price sorting is deliberately absent - see below. */
 export type ItemListingSort = 'name_asc' | 'name_desc' | 'newest';
 
@@ -200,6 +233,15 @@ export interface ItemListingQuery {
   readonly pageSize: number;
   /** `null` for the first page; the previous page's `next_cursor` thereafter. */
   readonly cursor: string | null;
+  /**
+   * The buyer's merchandising selection, sent as the `storefront_filters` parameter.
+   *
+   * Distinct from {@link ItemListingQuery.filters} above, which is a different and still
+   * unsupported parameter: this one is the Phase 25C facet selection, and the backend
+   * accepts it today. **It is part of the cursor's fingerprint** - a cursor issued under
+   * one selection is refused under another - so changing it restarts at page one.
+   */
+  readonly storefrontFilters: StorefrontFilterSelection;
 }
 
 /**
@@ -241,6 +283,7 @@ export const ITEM_PAGE_SIZE = 24;
 export function categoryListingQuery(
   slug: string,
   sort: ItemListingSort = 'name_asc',
+  storefrontFilters: StorefrontFilterSelection = NO_FILTERS,
 ): ItemListingQuery {
   return {
     scopeType: 'category',
@@ -250,6 +293,7 @@ export function categoryListingQuery(
     sort,
     pageSize: ITEM_PAGE_SIZE,
     cursor: null,
+    storefrontFilters,
   };
 }
 

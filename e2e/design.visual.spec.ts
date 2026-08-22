@@ -17,7 +17,9 @@ import { expectNoHorizontalOverflow } from './support/layout';
  */
 
 const nav = (page: Page, name: string) =>
-  page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name });
+  // `exact`, because role-name matching is substring-based by default: a merchant menu
+  // entry called "Catalogue PDF" would otherwise also answer to "Catalog".
+  page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name, exact: true });
 
 async function openLeafCategory(page: Page): Promise<boolean> {
   for (let depth = 0; depth < 4; depth++) {

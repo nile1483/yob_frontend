@@ -1,4 +1,5 @@
 import type {
+  CategoryFiltersDto,
   CatalogItemDto,
   ItemDetailDto,
   ItemFamilyDto,
@@ -325,6 +326,102 @@ const SAFETY: CategoryDetailDto = {
   parent_category: null,
   ...NULL_MEDIA,
 };
+
+
+/* ------------------------------------------------------- merchandising filters */
+
+/**
+ * The Filter projection each category publishes, and the tags its products carry.
+ *
+ * Two separate things on purpose, exactly as the backend has them:
+ *
+ * - `MOCK_FILTERS_BY_CATEGORY` is what `get_category_filters` returns - the **category's
+ *   own** Filter Set, in the merchant's order, with no counts. A category absent from the
+ *   map has no Filter Set and answers `{filters: []}`.
+ * - `MOCK_ITEM_FILTER_TAGS` is what each product is tagged with, which only the "server"
+ *   sees. The storefront never receives it and never matches on it; it exists so the mock
+ *   can answer a filtered listing the way a real backend would.
+ *
+ * Deliberately **not** derived from ERPNext Item Group, and deliberately not the
+ * admin-side Item Filter Set: neither is part of the storefront contract.
+ */
+export const MOCK_FILTERS_BY_CATEGORY: Readonly<Record<string, CategoryFiltersDto>> = {
+  fasteners: {
+    filters: [
+      {
+        key: 'material',
+        label: 'Material',
+        // Merchant order, not alphabetical: Steel before Stainless.
+        values: [
+          { key: 'steel', label: 'Steel' },
+          { key: 'stainless', label: 'Stainless' },
+        ],
+      },
+      {
+        key: 'finish',
+        label: 'Finish',
+        values: [
+          { key: 'zinc', label: 'Zinc' },
+          { key: 'black', label: 'Black' },
+        ],
+      },
+    ],
+  },
+  'bulk-fasteners': {
+    filters: [
+      {
+        key: 'grade',
+        label: 'Grade',
+        values: [
+          { key: 'a', label: 'Grade A' },
+          { key: 'b', label: 'Grade B' },
+        ],
+      },
+    ],
+  },
+  // `safety-equipment` is absent on purpose: a category with no Filter Set, which must
+  // render no facet UI at all.
+};
+
+/** item code -> filter key -> value key. Server-side only. */
+export const MOCK_ITEM_FILTER_TAGS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  'YOB-BOLT-M10': { material: 'steel', finish: 'zinc' },
+  'YOB-NUT-M10': { material: 'steel', finish: 'black' },
+  'YOB-WASH-M10': { material: 'stainless', finish: 'zinc' },
+  'YOB-ANCHOR-HD-12': { material: 'stainless', finish: 'black' },
+  // 26 of the 30 bulk rows are Grade A, so a filtered listing still spans two pages at a
+  // page size of 24 - which is what makes Load More testable *under* a filter.
+  ...Object.fromEntries(
+    Array.from({ length: 30 }, (_, index) => [
+      `YOB-BULK-${String(index + 1).padStart(2, '0')}`,
+      { grade: index < 26 ? 'a' : 'b' },
+    ]),
+  ),
+};
+
+/** The filters a category publishes, or none. */
+export function mockCategoryFilters(slug: string): CategoryFiltersDto {
+  return MOCK_FILTERS_BY_CATEGORY[slug] ?? { filters: [] };
+}
+
+/**
+ * Whether one product satisfies a selection.
+ *
+ * The backend's documented semantics, reproduced only as far as the frontend needs to be
+ * proven: values inside one filter are **OR**-ed, and different filters are **AND**-ed.
+ * An item tagged with nothing for a selected filter cannot match it.
+ */
+export function mockItemMatchesFilters(
+  itemCode: string,
+  selection: Readonly<Record<string, readonly string[]>>,
+): boolean {
+  const tags = MOCK_ITEM_FILTER_TAGS[itemCode] ?? {};
+
+  return Object.entries(selection).every(([filterKey, values]) => {
+    const tag = tags[filterKey];
+    return tag !== undefined && values.includes(tag);
+  });
+}
 
 /* --------------------------------------------------------------- variant family */
 

@@ -82,7 +82,10 @@ async function onlyRequestTo(page: Page, rpcMethod: string): Promise<MockRequest
  */
 test.describe('published contract, as the browser uses it', () => {
   test('the mirrored contract is present, versioned and identical in both locations', () => {
-    expect(REFERENCE.info.version).toBe('3.3.0');
+    // Pinned on purpose, and bumped by hand. A backend release that changes the contract
+    // should stop the gate until someone has reconciled Angular against it - which is
+    // what Phase 25D did for 3.4.0, and what this line records.
+    expect(REFERENCE.info.version).toBe('3.4.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(JSON.stringify(HANDOFF)).toBe(JSON.stringify(REFERENCE));
 
@@ -90,6 +93,9 @@ test.describe('published contract, as the browser uses it', () => {
     for (const method of [
       'yob_storefront.api.catalog.get_item',
       'yob_storefront.api.catalog.get_items',
+      // Added in 3.4.0 and consumed since Phase 25D.
+      'yob_storefront.api.catalog.get_category_filters',
+      'yob_storefront.api.cms.get_menu',
       RESOLVE_METHOD,
       ADD_METHOD,
     ]) {

@@ -8,9 +8,20 @@ the full package (markdown + OpenAPI + Postman + examples) is mirrored at
 
 | File | Version | Contents |
 |---|---|---|
-| `openapi.json` | **3.3.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract |
-| `postman_collection.json` | 3.3.0 | runnable requests, including the family → resolve → add-to-cart flow |
+| `openapi.json` | **3.4.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract |
+| `postman_collection.json` | 3.4.0 | runnable requests, including the family → resolve → add-to-cart flow |
 | `live/` | 2.0.0 (**superseded**) | a 2026-08-13 response capture, kept for history only |
+
+## What changed in 3.4.0 (Phase 25C)
+
+* `cms.get_menu` — **new**. Published navigation tree, max two levels, with
+  normalised destinations (type + public slug, never a database id).
+* `cms.get_page` — **new**. A published page as ordered, discriminated blocks.
+  Contains customer-priced Product Grid cards: **never cache across users**.
+* `catalog.get_category_filters` — **new**. Facets for a category, from that
+  category's own Filter Set only. No counts.
+* `catalog.get_items` — additive `storefront_filters` parameter: OR within a
+  filter, AND across filters, and part of the cursor binding.
 
 ## What changed in 3.3.0 (Phase 23B-5U / 24B / 24D-1)
 
