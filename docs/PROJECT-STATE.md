@@ -208,7 +208,7 @@ needing two tags is not the case that should invent one. `meta_title ?? title`, 
 description is **removed** when the next page has none, so a stale one never describes a
 page the buyer has left.
 
-### Contract discrepancies found
+### Contract discrepancies found - BOTH CLOSED in API 3.4.1
 
 1. **`slides` and `cards` are untyped** in the published OpenAPI (`array<object>`). Shapes
    taken from the backend projector; worth publishing properly.
@@ -216,8 +216,21 @@ page the buyer has left.
    but the backend also projects them for `banner_carousel` and `promo_grid`. Typed where
    the backend sends them.
 
-Neither changed any behaviour, and neither is a defect in the backend - only in what the
-document says about it.
+Neither changed any behaviour, and neither was a defect in the backend - only in what the
+document said about it.
+
+**Resolved by backend Phase 25C-1 (API 3.4.1).** `BannerCarouselSlide` and `PromoCard`
+are now real schemas that `slides` and `cards` `$ref`, and `x-block-fields` records
+machine-readably which fields each block type carries. Every DTO in `page.types.ts` was
+compared field-by-field against 3.4.1 and **matches exactly** - the shapes read from the
+projector were right, so **no application change was needed**; only the mirrored
+reference moved. The backend now runs a guard asserting its published schemas against
+blocks it actually projected, so this cannot drift again.
+
+One deliberate asymmetry remains: the contract publishes two schemas of identical shape
+where this repo has one `ContentMediaRowDto`. The backend keeps them separate because a
+slide and a promo card are separate stored types that may diverge; if they ever do, this
+type splits.
 
 ### Live smoke - PENDING
 
