@@ -13,6 +13,7 @@ import { YOB_API_CONFIG, type YobApiConfig } from '../../../foundation/network/y
 import { SessionStore } from '../../../foundation/session/session.store';
 import { YOB_CLIENT_ERROR_CODES, YobApiError } from '../../../foundation/network/yob-api-error';
 import { CatalogApi } from '../data/catalog.api';
+import { answerRouteContent } from '../../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 
@@ -53,6 +54,7 @@ describe('catalog pages', () => {
 
   afterEach(() => {
     scenario.reset();
+    answerRouteContent(http);
     http.verify();
   });
 
@@ -671,6 +673,7 @@ describe('catalog pages', () => {
       for (const request of ctx.http.match((r) => r.url.includes('get_menu'))) {
         request.flush({ message: { data: { key: 'main', label: 'Main', items: [] } } });
       }
+      answerRouteContent(ctx.http);
       ctx.http.verify();
     });
 

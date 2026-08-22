@@ -46,6 +46,7 @@ const FILTER_ERROR_CODES = new Set([
 ]);
 import { CategoryCard } from '../parts/category-card';
 import { ItemCard } from '../parts/item-card';
+import { ContentSlot } from '../../content/parts/content-slot';
 
 /**
  * One category: its details, its subcategories and its items.
@@ -60,13 +61,17 @@ import { ItemCard } from '../parts/item-card';
 @Component({
   selector: 'app-category-page',
   imports: [
-    CategoryFilters,Alert, Button, CategoryCard, EmptyState, Field, ItemCard, RouterLink, Spinner],
+    CategoryFilters,Alert, Button, CategoryCard, EmptyState, Field, ItemCard, RouterLink, Spinner, ContentSlot],
   template: `
     <nav aria-label="Breadcrumb" i18n-aria-label="@@catalog.breadcrumb.label">
       <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
         ><ng-container i18n="@@catalog.breadcrumb.back">Back to catalog</ng-container></a
       >
     </nav>
+
+    <!-- Merchant content for this route. The position is ours; what appears
+         in it is the merchant's, and an empty slot renders nothing. -->
+    <yob-content-slot routeKey="category" slotKey="above_listing" />
 
     @if (category.isLoading()) {
       <div class="mt-8 flex justify-center" data-testid="category-loading">
@@ -305,6 +310,8 @@ import { ItemCard } from '../parts/item-card';
         </div>
       }
     }
+
+    <yob-content-slot routeKey="category" slotKey="below_listing" />
   `,
 })
 export class CategoryPage {

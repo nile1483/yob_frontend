@@ -49,7 +49,9 @@ import { SecureNav } from './parts/secure-nav';
       <header class="z-20 border-b border-slate-200 bg-white/95 backdrop-blur sm:sticky sm:top-0">
         <div [class]="container">
           <div class="flex min-h-16 flex-wrap items-center gap-x-8 gap-y-2 py-2">
-            <a routerLink="/catalog" class="text-lg font-semibold tracking-tight">Your Order Book</a>
+            <!-- The brand goes home, and home is application-owned - so it works in a
+                 store with no menu and no content configured at all. -->
+            <a routerLink="/home" class="text-lg font-semibold tracking-tight">Your Order Book</a>
 
             <!-- Desktop: navigation sits beside the brand. -->
             <div class="hidden sm:block">

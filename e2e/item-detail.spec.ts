@@ -18,7 +18,7 @@ const ANCHOR = '/catalog/item/through-bolt-anchor-m12-120';
 
 test.describe('reaching item detail from the catalog', () => {
   test('login to catalog to category to item', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
 
     await page
       .getByRole('link', { name: /Industrial Fasteners/ })

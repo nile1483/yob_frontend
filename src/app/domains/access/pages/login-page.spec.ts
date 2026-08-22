@@ -12,6 +12,7 @@ import { MOCK_CREDENTIALS } from '../../../../mock-api/fixtures/session.fixture'
 import { mockApiInterceptor } from '../../../../mock-api/mock-api.interceptor';
 import { MockApiScenario } from '../../../../mock-api/scenarios/mock-scenario';
 import { routes } from '../../../app.routes';
+import { answerRouteContent } from '../../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 
@@ -44,7 +45,13 @@ describe('LoginPage', () => {
     sessionStorage.clear();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
   /** Resolve the session as the app initializer does, then open the sign-in page. */
   async function openLogin(url = '/login'): Promise<RouterTestingHarness> {
@@ -157,13 +164,13 @@ describe('LoginPage', () => {
   });
 
   describe('successful sign-in', () => {
-    it('establishes the session and lands on the catalog', async () => {
+    it('establishes the session and lands on the storefront home page', async () => {
       const harness = await openLogin();
       await signIn(harness);
 
       expect(session.isAuthenticated()).toBe(true);
       expect(session.user()?.email).toBe(MOCK_CREDENTIALS.username);
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
     });
 
     it('goes to a valid return URL instead of the default', async () => {
@@ -177,7 +184,7 @@ describe('LoginPage', () => {
       const harness = await openLogin('/login?returnUrl=https://phish.example/steal');
       await signIn(harness);
 
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
       expect(router.url).not.toContain('phish.example');
     });
 
@@ -185,7 +192,7 @@ describe('LoginPage', () => {
       const harness = await openLogin('/login?returnUrl=%2F%2Fphish.example');
       await signIn(harness);
 
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
     });
 
     it('does not retain the password anywhere afterwards', async () => {
@@ -213,7 +220,7 @@ describe('LoginPage', () => {
     it('clears the form model, so a re-entered page starts empty', async () => {
       const harness = await openLogin();
       await signIn(harness);
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
 
       // Returning to sign-in must not resurrect the previous credentials.
       await harness.navigateByUrl('/login?returnUrl=%2Faccount');
@@ -274,7 +281,7 @@ describe('LoginPage', () => {
       await harness.fixture.whenStable();
 
       expect(session.isAuthenticated()).toBe(true);
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
     });
 
     it('clears the previous error when a retry succeeds', async () => {
@@ -286,12 +293,12 @@ describe('LoginPage', () => {
       el.form.dispatchEvent(new Event('submit', { cancelable: true }));
       await harness.fixture.whenStable();
 
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
     });
   });
 
   describe('already authenticated', () => {
-    it('leaves the sign-in page for the catalog', async () => {
+    it('leaves the sign-in page for the storefront home page', async () => {
       session.restore().subscribe();
       mockServer.signIn('TEST_APP', 'password');
       session.restore().subscribe();
@@ -301,7 +308,7 @@ describe('LoginPage', () => {
       await harness.navigateByUrl('/login');
       await harness.fixture.whenStable();
 
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
     });
 
     it('honours a valid return URL instead of the default', async () => {
@@ -325,7 +332,7 @@ describe('LoginPage', () => {
       await harness.navigateByUrl('/login?returnUrl=https://phish.example');
       await harness.fixture.whenStable();
 
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
     });
   });
 

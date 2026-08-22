@@ -1,5 +1,6 @@
 import type { MenuDto } from '../../app/domains/content/contracts/cms.types';
 import type { StorefrontPageDto } from '../../app/domains/content/contracts/page.types';
+import type { RouteContentDto } from '../../app/domains/content/contracts/route-content.types';
 import {
   IMAGE_HUGE,
   IMAGE_LANDSCAPE,
@@ -231,6 +232,249 @@ export const MOCK_PAGES_BY_SLUG: Readonly<Record<string, StorefrontPageDto>> = {
   'about-us': ABOUT_PAGE,
   support: SUPPORT_PAGE,
   future: FUTURE_PAGE,
+};
+
+
+/* --------------------------------------------------- system route content (25H) */
+
+/**
+ * Merchant content placed into application routes, shaped from API 3.5.0
+ * `RouteContentResponse`.
+ *
+ * ## What this fixture has to prove, and what it deliberately does not
+ *
+ * The blocks here are the **same** union the page fixture above already exercises, and
+ * every renderer is already covered there. So this does not restate the whole page
+ * fixture in a second place - it proves the things that are *new*:
+ *
+ * | Route | Proves |
+ * | --- | --- |
+ * | `home` | three regions at once, and a Product Grid arriving already priced |
+ * | `cart` | content on a route that has its own business behaviour |
+ * | `category` | a route whose content is generic, not per-category |
+ * | `product` | content coexisting with variant resolution |
+ * | `orders` / `order_detail` | one filled slot, one empty, on the same route |
+ * | `catalog` / `account` | declared and entirely empty - the ordinary case |
+ *
+ * **Every declared slot is present, empty ones included**, exactly as the backend
+ * answers. A client that only rendered keys it found would pass against a fixture that
+ * omitted them and fail against the real thing.
+ *
+ * Slot order matches `x-route-slots`, because the backend returns slots in render order.
+ */
+const ROUTE_MEDIA = IMAGE_LANDSCAPE;
+
+export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
+  home: {
+    route_key: 'home',
+    slots: [
+      {
+        key: 'hero',
+        blocks: [
+          {
+            type: 'image_banner',
+            block_name: 'Home hero',
+            desktop_image: ROUTE_MEDIA,
+            mobile_image: IMAGE_SQUARE,
+            alt_text: 'Everything for the trade',
+            desktop_height_px: 420,
+            mobile_height_px: 240,
+            destination: {
+              type: 'storefront_category',
+              target: 'fasteners',
+              href: '/catalog/fasteners',
+              external: false,
+              open_in_new_tab: false,
+            },
+          },
+        ],
+      },
+      {
+        key: 'main',
+        // Two blocks in one slot: the merchant's sequence is the only order there is.
+        blocks: [
+          {
+            type: 'rich_text',
+            block_name: 'Home welcome',
+            title: 'Welcome back',
+            html: '<p>Your trade prices, ready to order.</p>',
+            text_alignment: 'left',
+          },
+          {
+            type: 'product_grid',
+            block_name: 'Home featured',
+            card_type: 'square',
+            item_limit: 12,
+            category: 'safety-equipment',
+            // Already selected and priced by the backend: a simple item with its own
+            // rate and selling UOM, and a family that must show no money at all.
+            items: MOCK_ITEMS_BY_CATEGORY['safety-equipment'] ?? [],
+          },
+        ],
+      },
+      {
+        key: 'bottom',
+        blocks: [
+          {
+            type: 'promo_grid',
+            block_name: 'Home promos',
+            cards_per_row: 2,
+            desktop_height_px: 220,
+            mobile_height_px: 160,
+            cards: [
+              {
+                desktop_image: ROUTE_MEDIA,
+                mobile_image: null,
+                title: 'Trade accounts',
+                alt_text: 'Handshake',
+                destination: {
+                  type: 'storefront_page',
+                  target: 'support',
+                  href: null,
+                  external: false,
+                  open_in_new_tab: false,
+                },
+              },
+              {
+                desktop_image: IMAGE_SQUARE,
+                mobile_image: null,
+                title: 'Coming soon',
+                alt_text: 'Placeholder',
+                destination: null,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+
+  cart: {
+    route_key: 'cart',
+    slots: [
+      {
+        key: 'above_cart',
+        blocks: [
+          {
+            type: 'rich_text',
+            block_name: 'Delivery notice',
+            title: null,
+            html: '<p>Free delivery on orders over 5000.</p>',
+            text_alignment: 'center',
+          },
+        ],
+      },
+      {
+        key: 'below_cart',
+        blocks: [
+          {
+            type: 'image_banner',
+            block_name: 'Cart footer banner',
+            desktop_image: ROUTE_MEDIA,
+            mobile_image: null,
+            alt_text: 'Bulk order desk',
+            desktop_height_px: 180,
+            mobile_height_px: 140,
+            destination: null,
+          },
+        ],
+      },
+    ],
+  },
+
+  category: {
+    route_key: 'category',
+    slots: [
+      {
+        key: 'above_listing',
+        blocks: [
+          {
+            type: 'rich_text',
+            block_name: 'Category notice',
+            title: null,
+            html: '<p>Bulk pricing applies from 100 units.</p>',
+            text_alignment: 'left',
+          },
+        ],
+      },
+      { key: 'below_listing', blocks: [] },
+    ],
+  },
+
+  product: {
+    route_key: 'product',
+    slots: [
+      { key: 'above_product', blocks: [] },
+      {
+        key: 'below_product',
+        blocks: [
+          {
+            type: 'rich_text',
+            block_name: 'Product footer',
+            title: 'Need a different size?',
+            html: '<p>Call the trade desk on 0800 000 000.</p>',
+            text_alignment: 'left',
+          },
+        ],
+      },
+    ],
+  },
+
+  orders: {
+    route_key: 'orders',
+    slots: [
+      {
+        key: 'above_list',
+        blocks: [
+          {
+            type: 'rich_text',
+            block_name: 'Orders notice',
+            title: null,
+            html: '<p>Orders placed before 3pm ship the same day.</p>',
+            text_alignment: 'left',
+          },
+        ],
+      },
+      { key: 'below_list', blocks: [] },
+    ],
+  },
+
+  order_detail: {
+    route_key: 'order_detail',
+    slots: [
+      { key: 'above_order', blocks: [] },
+      {
+        key: 'below_order',
+        blocks: [
+          {
+            type: 'rich_text',
+            block_name: 'Order footer',
+            title: null,
+            html: '<p>Questions about this order? Quote its number.</p>',
+            text_alignment: 'left',
+          },
+        ],
+      },
+    ],
+  },
+
+  // Declared, and entirely empty. The ordinary case for a store that has configured
+  // nothing here, and the one a client is most likely to get wrong by rendering a gap.
+  catalog: {
+    route_key: 'catalog',
+    slots: [
+      { key: 'above_listing', blocks: [] },
+      { key: 'below_listing', blocks: [] },
+    ],
+  },
+
+  account: {
+    route_key: 'account',
+    slots: [
+      { key: 'above_content', blocks: [] },
+      { key: 'below_content', blocks: [] },
+    ],
+  },
 };
 
 

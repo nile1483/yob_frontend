@@ -82,7 +82,7 @@ async function expectLanded(
     return;
   }
 
-  const expected = new URL(destination ?? '/catalog', 'http://localhost');
+  const expected = new URL(destination ?? '/home', 'http://localhost');
   await expect
     .poll(() => {
       const actual = new URL(page.url());

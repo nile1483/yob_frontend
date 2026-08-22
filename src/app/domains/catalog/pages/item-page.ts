@@ -22,6 +22,7 @@ import {
   type ItemVariantDto,
 } from '../contracts/catalog.types';
 import { CatalogApi } from '../data/catalog.api';
+import { ContentSlot } from '../../content/parts/content-slot';
 
 /**
  * Item detail.
@@ -59,13 +60,17 @@ import { CatalogApi } from '../data/catalog.api';
  */
 @Component({
   selector: 'app-item-page',
-  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, Media, RouterLink, Spinner],
+  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, Media, RouterLink, Spinner, ContentSlot],
   template: `
     <nav aria-label="Breadcrumb" i18n-aria-label="@@item.breadcrumb.label">
       <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
         ><ng-container i18n="@@item.breadcrumb.back">Back to catalog</ng-container></a
       >
     </nav>
+
+    <!-- Merchant content for this route. The position is ours; what appears
+         in it is the merchant's, and an empty slot renders nothing. -->
+    <yob-content-slot routeKey="product" slotKey="above_product" />
 
     @if (item.isLoading() && payload() === undefined) {
       <div class="mt-8 flex justify-center" data-testid="item-loading">
@@ -402,6 +407,8 @@ import { CatalogApi } from '../data/catalog.api';
         </div>
       </article>
     }
+
+    <yob-content-slot routeKey="product" slotKey="below_product" />
   `,
 })
 export class ItemPage {

@@ -8,6 +8,7 @@ import { PageHeader } from '../../../design/page-header/page-header';
 import { CatalogApi } from '../data/catalog.api';
 import { toCategoryLink } from '../contracts/catalog.types';
 import { CategoryCard } from '../parts/category-card';
+import { ContentSlot } from '../../content/parts/content-slot';
 
 /**
  * Top-level category listing.
@@ -26,7 +27,7 @@ import { CategoryCard } from '../parts/category-card';
  */
 @Component({
   selector: 'app-catalog-page',
-  imports: [PageHeader, Alert, CategoryCard, EmptyState, Spinner],
+  imports: [PageHeader, Alert, CategoryCard, EmptyState, Spinner, ContentSlot],
   template: `
     <app-page-header
       heading="Catalog"
@@ -34,6 +35,10 @@ import { CategoryCard } from '../parts/category-card';
       lead="Browse everything available to your account."
       i18n-lead="@@catalog.lead"
     />
+
+    <!-- Merchant content for this route. The position is ours; what appears
+         in it is the merchant's, and an empty slot renders nothing. -->
+    <yob-content-slot routeKey="catalog" slotKey="above_listing" />
 
     @if (categories.isLoading()) {
       <div class="mt-8 flex justify-center" data-testid="catalog-loading">
@@ -66,6 +71,8 @@ import { CategoryCard } from '../parts/category-card';
         }
       </ul>
     }
+
+    <yob-content-slot routeKey="catalog" slotKey="below_listing" />
   `,
 })
 export class CatalogPage {

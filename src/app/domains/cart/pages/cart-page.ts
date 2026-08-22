@@ -10,6 +10,7 @@ import { CartSummary } from '../parts/cart-summary';
 import { CouponCode } from '../parts/coupon-code/coupon-code';
 import { toCartRowViews } from '../cart.rows';
 import { CartStore } from '../state/cart.store';
+import { ContentSlot } from '../../content/parts/content-slot';
 
 /**
  * The cart.
@@ -20,9 +21,13 @@ import { CartStore } from '../state/cart.store';
  */
 @Component({
   selector: 'app-cart-page',
-  imports: [PageHeader, Alert, CartLine, CartSummary, CouponCode, EmptyState, RouterLink, Spinner],
+  imports: [PageHeader, Alert, CartLine, CartSummary, CouponCode, EmptyState, RouterLink, Spinner, ContentSlot],
   template: `
     <app-page-header heading="Your cart" i18n-heading="@@cart.heading" />
+
+    <!-- Merchant content for this route. The position is ours; what appears
+         in it is the merchant's, and an empty slot renders nothing. -->
+    <yob-content-slot routeKey="cart" slotKey="above_cart" />
 
     <!-- Outside the state branches on purpose: when the server withdraws every line
          the cart becomes empty, and "your cart is empty" with no explanation is
@@ -124,6 +129,8 @@ import { CartStore } from '../state/cart.store';
         </div>
       </div>
     }
+
+    <yob-content-slot routeKey="cart" slotKey="below_cart" />
   `,
 })
 export class CartPage {

@@ -17,6 +17,7 @@ import { yobCsrfInterceptor } from '../../foundation/network/csrf.interceptor';
 import { YOB_API_CONFIG, type YobApiConfig } from '../../foundation/network/yob-api.config';
 import { SessionStore } from '../../foundation/session/session.store';
 import { ItemPage } from '../catalog/pages/item-page';
+import { answerRouteContent } from '../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 const BOLT = 'YOB-BOLT-M10';
@@ -138,7 +139,13 @@ describe('add_to_cart UOM conflict', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
   it('tells the buyer to remove the line and add it again', async () => {
     await open();
@@ -252,6 +259,7 @@ describe('CartPage UOM conflict notice', () => {
 
   afterEach(() => {
     scenario.reset();
+    answerRouteContent(http);
     http.verify();
   });
 

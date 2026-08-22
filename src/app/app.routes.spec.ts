@@ -13,6 +13,7 @@ import { MOCK_CREDENTIALS } from '../mock-api/fixtures/session.fixture';
 import { mockApiInterceptor } from '../mock-api/mock-api.interceptor';
 import { MockApiScenario } from '../mock-api/scenarios/mock-scenario';
 import { routes } from './app.routes';
+import { answerRouteContent } from './domains/content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 
@@ -40,7 +41,13 @@ describe('application routes', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
   /** Resolve the session the way the app initializer does, before any navigation. */
   function restore(): void {
@@ -319,7 +326,7 @@ describe('application routes', () => {
       mockServer.signIn('TEST_APP', 'password');
       await clickRetry(harness);
 
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
     });
 
     it('ignores an attacker-supplied external destination and uses the fallback', async () => {
@@ -336,7 +343,7 @@ describe('application routes', () => {
       mockServer.signIn('TEST_APP', 'password');
       await clickRetry(harness);
 
-      expect(router.url).toBe('/catalog');
+      expect(router.url).toBe('/home');
       expect(router.url).not.toContain('phish.example');
     });
 
@@ -417,7 +424,10 @@ describe('application routes', () => {
       const harness = await RouterTestingHarness.create();
       await harness.navigateByUrl('/');
 
-      expect(router.url).toBe('/catalog');
+      // The authenticated landing page since Phase 25H. `/catalog` is still a route,
+      // reached directly or from the merchant's own menu - it is just no longer where
+      // an unqualified arrival ends up.
+      expect(router.url).toBe('/home');
     });
   });
 });

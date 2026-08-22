@@ -17,6 +17,7 @@ import {
   orderStatusTone,
 } from '../orders.status';
 import { OrderAddress } from '../parts/order-address';
+import { ContentSlot } from '../../content/parts/content-slot';
 
 /**
  * One order, in full.
@@ -39,13 +40,17 @@ import { OrderAddress } from '../parts/order-address';
  */
 @Component({
   selector: 'app-order-page',
-  imports: [Alert, Badge, CurrencyPipe, DatePipe, EmptyState, OrderAddress, RouterLink, Spinner],
+  imports: [Alert, Badge, CurrencyPipe, DatePipe, EmptyState, OrderAddress, RouterLink, Spinner, ContentSlot],
   template: `
     <nav aria-label="Breadcrumb" i18n-aria-label="@@orders.breadcrumb.label">
       <a routerLink="/orders" class="text-sm text-slate-600 underline underline-offset-4"
         ><ng-container i18n="@@orders.breadcrumb.back">Back to your orders</ng-container></a
       >
     </nav>
+
+    <!-- Merchant content for this route. The position is ours; what appears
+         in it is the merchant's, and an empty slot renders nothing. -->
+    <yob-content-slot routeKey="order_detail" slotKey="above_order" />
 
     @if (order.isLoading()) {
       <div class="mt-8 flex justify-center" data-testid="order-loading">
@@ -266,6 +271,8 @@ import { OrderAddress } from '../parts/order-address';
         </section>
       </article>
     }
+
+    <yob-content-slot routeKey="order_detail" slotKey="below_order" />
   `,
 })
 export class OrderPage {

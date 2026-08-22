@@ -87,7 +87,8 @@ test.describe('fallbacks', () => {
     await page.goto('/');
 
     // Guest, so the storefront redirect lands on sign-in with the destination kept.
-    await expect(page).toHaveURL('/login?returnUrl=%2Fcatalog');
+    // `/home` since Phase 25H: the root redirect follows DEFAULT_AUTHENTICATED_PATH.
+    await expect(page).toHaveURL('/login?returnUrl=%2Fhome');
   });
 });
 

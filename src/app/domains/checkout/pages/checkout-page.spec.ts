@@ -22,6 +22,7 @@ import { yobCsrfInterceptor } from '../../../foundation/network/csrf.interceptor
 import { YOB_API_CONFIG, type YobApiConfig } from '../../../foundation/network/yob-api.config';
 import { SessionStore } from '../../../foundation/session/session.store';
 import { CartStore } from '../../cart/state/cart.store';
+import { answerRouteContent } from '../../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 const BOLT = 'YOB-BOLT-M10';
@@ -54,6 +55,7 @@ describe('CheckoutPage', () => {
     scenario.reset();
     mockCart.reset();
     mockBook.reset();
+    answerRouteContent(http);
     http.verify();
   });
 

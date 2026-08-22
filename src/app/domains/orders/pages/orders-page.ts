@@ -10,6 +10,7 @@ import { PageHeader } from '../../../design/page-header/page-header';
 import { Spinner } from '../../../design/spinner/spinner';
 import { OrdersApi } from '../data/orders.api';
 import { orderStatusLabel, orderStatusTone } from '../orders.status';
+import { ContentSlot } from '../../content/parts/content-slot';
 
 /**
  * Order history.
@@ -38,7 +39,7 @@ import { orderStatusLabel, orderStatusTone } from '../orders.status';
  */
 @Component({
   selector: 'app-orders-page',
-  imports: [Alert, Badge, CurrencyPipe, DatePipe, EmptyState, PageHeader, RouterLink, Spinner],
+  imports: [Alert, Badge, CurrencyPipe, DatePipe, EmptyState, PageHeader, RouterLink, Spinner, ContentSlot],
   template: `
     <app-page-header
       heading="Your orders"
@@ -46,6 +47,10 @@ import { orderStatusLabel, orderStatusTone } from '../orders.status';
       lead="Everything you have ordered, most recent first."
       i18n-lead="@@orders.lead"
     />
+
+    <!-- Merchant content for this route. The position is ours; what appears
+         in it is the merchant's, and an empty slot renders nothing. -->
+    <yob-content-slot routeKey="orders" slotKey="above_list" />
 
     @if (orders.isLoading()) {
       <div class="mt-8 flex justify-center" data-testid="orders-loading">
@@ -121,6 +126,8 @@ import { orderStatusLabel, orderStatusTone } from '../orders.status';
         }
       </ul>
     }
+
+    <yob-content-slot routeKey="orders" slotKey="below_list" />
   `,
 })
 export class OrdersPage {

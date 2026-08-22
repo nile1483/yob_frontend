@@ -9,6 +9,7 @@ import { provideRouter } from '@angular/router';
 
 import { YOB_API_CONFIG, type YobApiConfig } from '../../../foundation/network/yob-api.config';
 import { ItemPage } from './item-page';
+import { answerRouteContent } from '../../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 
@@ -111,6 +112,9 @@ describe('ItemPage local quantity', () => {
     fixture = TestBed.createComponent(ItemPage);
     fixture.componentRef.setInput('itemSlug', 'hex-bolt-m10-50');
     fixture.detectChanges();
+    // The product route's content slots ask once on render. Answered here so the
+    // assertions below still mean "no *catalog* request", which is their subject.
+    answerRouteContent(http);
 
     // Initial load for the default quantity of 1.
     pendingItemRequest().flush(itemPayload(1, 11.25));
@@ -118,7 +122,13 @@ describe('ItemPage local quantity', () => {
     expect(rate()).toContain('11.25');
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
   it('issues no pricing request when a quantity is committed', async () => {
     await commit('7');

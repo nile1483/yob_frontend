@@ -1,11 +1,17 @@
 import { mockPermissionError, mockSuccess, mockYobError, type MockReply } from '../core/mock-reply';
 import type { MockContext, MockHandler } from '../core/mock-handler';
-import { MOCK_MENU, MOCK_MENU_KEY, MOCK_PAGES_BY_SLUG } from '../fixtures/cms.fixture';
+import {
+  MOCK_MENU,
+  MOCK_MENU_KEY,
+  MOCK_PAGES_BY_SLUG,
+  MOCK_ROUTE_CONTENT,
+} from '../fixtures/cms.fixture';
 
 /**
  * CMS handlers.
  *
- * Navigation (Phase 25D) and merchant pages (Phase 25E).
+ * Navigation (Phase 25D), merchant pages (Phase 25E) and system route content
+ * (Phase 25H).
  */
 
 /**
@@ -75,6 +81,47 @@ const getPage: MockHandler = (ctx) => {
   return mockSuccess(page, { notice: 'Page loaded' });
 };
 
+/**
+ * `cms.get_route_content` - every content slot of ONE application route.
+ *
+ * Answers with **all** of a route's slots, empty ones included, exactly as the backend
+ * does. That shape is the point: a client that asked per slot, or that only rendered
+ * keys it happened to find, would pass against a thinner fixture and fail against the
+ * real API. It is also what makes "one request per route" observable - a second call
+ * for the same route shows up in the request log.
+ *
+ * `content_route_unknown` (422) covers both an unrecognised key and a deliberately
+ * excluded flow - login, checkout, payment - which have no slots by decision.
+ */
+const getRouteContent: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  if (ctx.scenario === 'route-content-unavailable') {
+    return mockYobError('internal_server_error', 'Something went wrong.', { status: 500 });
+  }
+
+  const routeKey = ctx.params.get('route_key');
+  if (routeKey === null || routeKey === '') {
+    return mockYobError('validation_failed', 'Route key is required.', {
+      field: 'route_key',
+      status: 422,
+    });
+  }
+
+  const content = MOCK_ROUTE_CONTENT[routeKey];
+  if (content === undefined) {
+    return mockYobError('content_route_unknown', 'Route cannot hold content.', {
+      field: 'route_key',
+      status: 422,
+    });
+  }
+
+  return mockSuccess(content, { notice: 'Route content loaded' });
+};
+
 function requireSession(ctx: MockContext): MockReply | null {
   return ctx.session.isAuthenticated() ? null : mockPermissionError(ctx.rpcMethod);
 }
@@ -82,4 +129,5 @@ function requireSession(ctx: MockContext): MockReply | null {
 export const CMS_HANDLERS: Readonly<Record<string, MockHandler>> = {
   'yob_storefront.api.cms.get_menu': getMenu,
   'yob_storefront.api.cms.get_page': getPage,
+  'yob_storefront.api.cms.get_route_content': getRouteContent,
 };

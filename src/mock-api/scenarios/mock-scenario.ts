@@ -147,7 +147,16 @@ export type MockScenario =
    * `add_to_cart` answers 409 `cart_item_uom_changed` for a line already in the cart,
    * and `get_cart` reports the same lines in `uom_changed_items`.
    */
-  | 'cart-item-uom-changed';
+  | 'cart-item-uom-changed'
+  /**
+   * `cms.get_route_content` fails.
+   *
+   * The supplemental-content case: system route content is decoration on top of a route
+   * that works without it, so a cart whose banner failed must still be a working cart.
+   * Nothing retries, and nothing tells the buyer - the alternative is an error message
+   * about content they never asked to see.
+   */
+  | 'route-content-unavailable';
 
 /**
  * Runtime knobs for the mock API.
@@ -218,7 +227,8 @@ export class MockApiScenario {
       scenario === 'variant-family-unsupported' ||
       scenario === 'menu-missing' ||
       scenario === 'storefront-filter-refused' ||
-      scenario === 'category-filters-unavailable'
+      scenario === 'category-filters-unavailable' ||
+      scenario === 'route-content-unavailable'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

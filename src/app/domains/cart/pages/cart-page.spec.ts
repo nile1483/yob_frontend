@@ -12,6 +12,7 @@ import { routes } from '../../../app.routes';
 import { yobCsrfInterceptor } from '../../../foundation/network/csrf.interceptor';
 import { YOB_API_CONFIG, type YobApiConfig } from '../../../foundation/network/yob-api.config';
 import { SessionStore } from '../../../foundation/session/session.store';
+import { answerRouteContent } from '../../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 const BOLT = 'YOB-BOLT-M10';
@@ -40,6 +41,7 @@ describe('CartPage', () => {
 
   afterEach(() => {
     scenario.reset();
+    answerRouteContent(http);
     http.verify();
   });
 

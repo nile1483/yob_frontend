@@ -17,6 +17,7 @@ import { SessionStore } from '../../foundation/session/session.store';
 import { ItemPage } from '../catalog/pages/item-page';
 import { CartApi } from './data/cart.api';
 import { CartStore } from './state/cart.store';
+import { answerRouteContent } from '../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 const ADD_TO_CART = '/api/method/yob_storefront.api.cart.add_to_cart';
@@ -244,6 +245,7 @@ describe('add_to_cart is a non-idempotent delta', () => {
       expect(store.lines()[0]?.quantity).toBe(7);
       // And it is not reported as a refusal, because we do not know that it was one.
       expect(store.addError()).toBeNull();
+      answerRouteContent(http);
       http.verify();
     });
 
@@ -256,6 +258,7 @@ describe('add_to_cart is a non-idempotent delta', () => {
       expect(store.addError()).toBeNull();
       // Still no second add.
       http.expectNone(ADD_TO_CART);
+      answerRouteContent(http);
       http.verify();
     });
 
@@ -278,6 +281,7 @@ describe('add_to_cart is a non-idempotent delta', () => {
       });
 
       expect(store.addUnconfirmed()).toBe('refreshed');
+      answerRouteContent(http);
       http.verify();
     });
 
@@ -296,6 +300,7 @@ describe('add_to_cart is a non-idempotent delta', () => {
       expect(store.addError()?.code).toBe('quantity_invalid');
       expect(store.addUnconfirmed()).toBeNull();
       http.expectNone(GET_CART);
+      answerRouteContent(http);
       http.verify();
     });
 
@@ -312,6 +317,7 @@ describe('add_to_cart is a non-idempotent delta', () => {
       expect(store.addError()).not.toBeNull();
       expect(store.addUnconfirmed()).toBeNull();
       http.expectNone(GET_CART);
+      answerRouteContent(http);
       http.verify();
     });
   });

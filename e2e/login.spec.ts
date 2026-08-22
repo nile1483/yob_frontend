@@ -67,13 +67,13 @@ test.describe('sign-in page', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('signs in with valid credentials and lands on the catalog', async ({ page }) => {
+  test('signs in with valid credentials and lands on the storefront home page', async ({ page }) => {
     await page.goto('/login');
     await fillCredentials(page);
 
     await page.getByTestId('login-submit').click();
 
-    await expect(page).toHaveURL('/catalog');
+    await expect(page).toHaveURL('/home');
     await expect(page.getByTestId('secure-shell')).toBeVisible();
   });
 
@@ -111,7 +111,7 @@ test.describe('return URL', () => {
 
     await page.getByTestId('login-submit').click();
 
-    await expect(page).toHaveURL('/catalog');
+    await expect(page).toHaveURL('/home');
     expect(page.url()).not.toContain('phish.example');
   });
 
@@ -121,7 +121,7 @@ test.describe('return URL', () => {
 
     await page.getByTestId('login-submit').click();
 
-    await expect(page).toHaveURL('/catalog');
+    await expect(page).toHaveURL('/home');
   });
 });
 
@@ -139,11 +139,11 @@ test.describe('already authenticated', () => {
     await page.goto('/login');
     await fillCredentials(page);
     await page.getByTestId('login-submit').click();
-    await expect(page).toHaveURL('/catalog');
+    await expect(page).toHaveURL('/home');
 
     await page.goBack();
 
-    await expect(page).toHaveURL('/catalog');
+    await expect(page).toHaveURL('/home');
     await expect(page.getByRole('heading', { name: 'Sign in' })).toHaveCount(0);
     await expect(page.getByTestId('secure-shell')).toBeVisible();
   });
@@ -178,7 +178,7 @@ test.describe('pending state', () => {
     // A determined second click cannot start another sign-in.
     await submit.click({ force: true });
 
-    await expect(page).toHaveURL('/catalog', { timeout: 10_000 });
+    await expect(page).toHaveURL('/home', { timeout: 10_000 });
   });
 });
 
@@ -220,7 +220,7 @@ test.describe('keyboard', () => {
     await page.keyboard.type(MOCK_CREDENTIALS.password);
     await page.keyboard.press('Enter');
 
-    await expect(page).toHaveURL('/catalog');
+    await expect(page).toHaveURL('/home');
   });
 });
 
@@ -229,7 +229,7 @@ test.describe('secure shell after sign-in', () => {
     await page.goto('/login');
     await fillCredentials(page);
     await page.getByTestId('login-submit').click();
-    await expect(page).toHaveURL('/catalog');
+    await expect(page).toHaveURL('/home');
   });
 
   test('renders with its header, navigation and routed content', async ({ page }) => {
@@ -237,7 +237,8 @@ test.describe('secure shell after sign-in', () => {
     await expect(page.getByTestId('public-shell')).toHaveCount(0);
 
     await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Catalog' })).toBeVisible();
+    // The routed content is now the storefront home page, which the merchant fills.
+    await expect(page.getByTestId('home-page')).toBeVisible();
     await expect(page.getByRole('banner')).toContainText('Mock Buyer');
   });
 

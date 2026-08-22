@@ -34,6 +34,7 @@ import {
 import { PaymentApi } from './data/payment.api';
 import { PaymentPage } from './pages/payment-page';
 import { RazorpayCheckout } from './razorpay/razorpay-checkout';
+import { answerRouteContent } from '../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 const GET_CHECKOUT_DATA = '/api/method/yob_storefront.api.payment.get_checkout_data';
@@ -59,7 +60,13 @@ describe('Payment', () => {
       http = TestBed.inject(HttpTestingController);
     });
 
-    afterEach(() => http.verify());
+    afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
     it('reads checkout data with the token as a query parameter', () => {
       api.getCheckoutData('tok-123').subscribe();

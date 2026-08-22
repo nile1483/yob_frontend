@@ -263,9 +263,9 @@ export class SecureNav {
   /**
    * The application's own controls, in source and not configurable.
    *
-   * **Catalog is deliberately not here.** Browsing the store is storefront navigation, so
+ * **Catalog is deliberately not here.** Browsing the store is storefront navigation, so
    * it belongs to the merchant's menu - and listing it in both places put two "Catalog"
-   * links in one header. The brand link goes to `/catalog` regardless, so the storefront
+   * links in one header. The brand link goes to `/home` regardless, so the storefront
    * stays reachable even for a store with no menu configured.
    *
    * What remains is what the application needs whatever a merchant publishes: the cart

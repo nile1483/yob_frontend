@@ -11,6 +11,7 @@ import { routes } from '../../app.routes';
 import { yobCsrfInterceptor } from '../../foundation/network/csrf.interceptor';
 import { YOB_API_CONFIG, type YobApiConfig } from '../../foundation/network/yob-api.config';
 import { SessionStore } from '../../foundation/session/session.store';
+import { answerRouteContent } from './route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 
@@ -39,7 +40,13 @@ describe('storefront page', () => {
     TestBed.inject(SessionStore).restore().subscribe();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
   async function open(url: string) {
     const harness = await RouterTestingHarness.create();

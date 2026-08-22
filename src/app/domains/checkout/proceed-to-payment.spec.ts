@@ -19,6 +19,7 @@ import { SessionStore } from '../../foundation/session/session.store';
 import { CartStore } from '../cart/state/cart.store';
 import { CheckoutApi } from './data/checkout.api';
 import { CheckoutPage } from './pages/checkout-page';
+import { answerRouteContent } from '../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 const PROCEED = '/api/method/yob_storefront.api.checkout.proceed_to_payment';
@@ -41,7 +42,13 @@ describe('Proceed to payment', () => {
       http = TestBed.inject(HttpTestingController);
     });
 
-    afterEach(() => http.verify());
+    afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
     it('posts to the documented RPC method with an empty body', () => {
       api.proceedToPayment().subscribe();
@@ -137,6 +144,7 @@ describe('Proceed to payment', () => {
       scenario.reset();
       mockCart.reset();
       mockBook.reset();
+      answerRouteContent(http);
       http.verify();
     });
 

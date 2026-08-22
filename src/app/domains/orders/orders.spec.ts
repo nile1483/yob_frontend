@@ -21,6 +21,7 @@ import { YOB_API_CONFIG, type YobApiConfig } from '../../foundation/network/yob-
 import { SessionStore } from '../../foundation/session/session.store';
 import { OrdersApi } from './data/orders.api';
 import { orderStatusLabel } from './orders.status';
+import { answerRouteContent } from '../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 const GET_ORDERS = '/api/method/yob_storefront.api.order.get_orders';
@@ -45,7 +46,13 @@ describe('Orders', () => {
       http = TestBed.inject(HttpTestingController);
     });
 
-    afterEach(() => http.verify());
+    afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
     it('reads the list from the documented RPC method, with no parameters', () => {
       api.getOrders().subscribe();

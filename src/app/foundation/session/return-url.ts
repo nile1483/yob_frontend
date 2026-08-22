@@ -20,8 +20,12 @@ export const RETURN_URL_PARAM = 'returnUrl';
  *
  * The safe fallback for every return-URL consumer, and the target of the root
  * redirect, so the two cannot drift apart.
+ *
+ * `/home` since Phase 25H. It was `/catalog`, which put a buyer straight into a
+ * category index; the landing page is now a merchant-composed one, and `/catalog`
+ * remains a first-class route reachable directly and from the merchant's own menu.
  */
-export const DEFAULT_AUTHENTICATED_PATH = '/catalog';
+export const DEFAULT_AUTHENTICATED_PATH = '/home';
 
 /**
  * Accept a return URL only if it is a path inside this application.

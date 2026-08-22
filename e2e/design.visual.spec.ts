@@ -34,7 +34,7 @@ async function openLeafCategory(page: Page): Promise<boolean> {
 
 test.describe('shell and navigation', () => {
   test.beforeEach(async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
   });
 
   test('every primary destination is reachable from the header', async ({ page }) => {
@@ -91,7 +91,7 @@ test.describe('shell and navigation', () => {
 
 test.describe('catalog grid', () => {
   test('product cards form an even grid', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
 
     const cards = page.getByTestId('item-card');
@@ -122,7 +122,7 @@ test.describe('catalog grid', () => {
   });
 
   test('a long product name does not widen its card', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
 
     await expectNoHorizontalOverflow(page);
@@ -137,7 +137,7 @@ test.describe('catalog grid', () => {
 
 test.describe('the image standard', () => {
   test('a source image cannot change the box it sits in', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
 
     // The fixtures deliberately mix a 2:3 portrait, a 3:2 landscape, a 3000x2000
@@ -156,7 +156,7 @@ test.describe('the image standard', () => {
   });
 
   test('products are shown whole rather than cropped', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
 
     const img = page.getByTestId('item-media-image').first();
@@ -185,7 +185,7 @@ test.describe('the image standard', () => {
   test('a missing image and a broken URL look the same, and take the same space', async ({
     page,
   }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
 
     // The first category page carries a subcategory whose thumbnail 404s.
     await page.getByTestId('category-card').first().click();
@@ -210,7 +210,7 @@ test.describe('the image standard', () => {
   });
 
   test('catalog images load lazily and the detail image does not', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
 
     const loading = await page
@@ -234,7 +234,7 @@ test.describe('the image standard', () => {
   });
 
   test('the detail image fits the viewport and keeps the buy box reachable', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
     await page.getByTestId('item-card').first().click();
 
@@ -254,7 +254,7 @@ test.describe('the image standard', () => {
       }
     });
 
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     await openLeafCategory(page);
 
     expect(failed.filter((f) => !f.includes('deliberately-missing'))).toEqual([]);
@@ -263,7 +263,7 @@ test.describe('the image standard', () => {
 
 test.describe('action hierarchy', () => {
   test('checkout offers exactly one primary action', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
 
     await page.getByTestId('item-card').first().click();
@@ -288,7 +288,7 @@ test.describe('action hierarchy', () => {
   });
 
   test('the cart does not push Remove as hard as Checkout', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
 
     await page.getByTestId('item-card').first().click();
@@ -303,7 +303,7 @@ test.describe('action hierarchy', () => {
 
 test.describe('transactional reading order', () => {
   test('the summary is above the primary action when stacked', async ({ page }, testInfo) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
     await page.getByTestId('item-card').first().click();
     await page.getByTestId('add-to-cart').click();
@@ -330,7 +330,7 @@ test.describe('transactional reading order', () => {
   });
 
   test('the mobile header does not hold a third of the screen', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
 
     const header = await page.getByRole('banner').boundingBox();
     const viewport = page.viewportSize()!;
@@ -388,7 +388,7 @@ test.describe('states look like one storefront', () => {
 
 test.describe('page rhythm', () => {
   test('every page starts at the same place and has one h1', async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
 
     const tops: number[] = [];
     for (const [name, url] of [

@@ -9,6 +9,7 @@ import { provideRouter } from '@angular/router';
 
 import { YOB_API_CONFIG, type YobApiConfig } from '../../../foundation/network/yob-api.config';
 import { ItemPage } from './item-page';
+import { answerRouteContent } from '../../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 
@@ -154,6 +155,9 @@ describe('ItemPage variant family', () => {
     fixture = TestBed.createComponent(ItemPage);
     fixture.componentRef.setInput('itemSlug', 'hi-vis-safety-vest');
     fixture.detectChanges();
+    // The product route's content slots ask once on render. Answered here so the
+    // assertions below still mean "no *catalog* request", which is their subject.
+    answerRouteContent(http);
     http.expectOne((r) => r.url.includes('get_item')).flush(payload);
     await settle();
   }
@@ -182,7 +186,13 @@ describe('ItemPage variant family', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
   describe('the family page', () => {
     it('renders one control per attribute, in the backend order', async () => {

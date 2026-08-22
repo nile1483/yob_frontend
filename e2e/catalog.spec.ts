@@ -20,8 +20,17 @@ test.describe('login to catalog', () => {
     await page.getByTestId('login-password').fill('mock-password-not-a-secret');
     await page.getByTestId('login-submit').click();
 
-    await expect(page).toHaveURL('/catalog');
+    // Since Phase 25H an unqualified sign-in lands on the merchant home page; the
+    // catalog is one navigation away rather than the landing itself.
+    await expect(page).toHaveURL('/home');
     await expect(page.getByTestId('secure-shell')).toBeVisible();
+
+    // On to the catalog the way a buyer gets there: the merchant's own navigation.
+    await page
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('link', { name: 'Catalog', exact: true })
+      .click();
+    await expect(page).toHaveURL('/catalog');
     await expect(page.getByRole('heading', { name: 'Catalog', level: 1 })).toBeVisible();
     await expect(page.getByTestId('category-grid')).toBeVisible();
   });
@@ -29,7 +38,7 @@ test.describe('login to catalog', () => {
 
 test.describe('category listing', () => {
   test.beforeEach(async ({ page }) => {
-    await signInAsMockBuyer(page);
+    await signInAsMockBuyer(page, { goTo: '/catalog' });
   });
 
   test('lists the top-level categories inside the secure shell', async ({ page }) => {
@@ -290,7 +299,7 @@ test.describe('bounded item listing (Phase 22B-2)', () => {
 test.describe('failure and edge states', () => {
   test('shows an empty catalog safely', async ({ page }) => {
     // Reproduces what the real bench returns today: a 200 with an empty list.
-    await signInWithMockFlags(page, 'mockScenario=empty');
+    await signInWithMockFlags(page, 'mockScenario=empty', { goTo: '/catalog' });
 
     await expect(page.getByTestId('catalog-empty')).toBeVisible();
     await expect(page.getByText('No categories yet')).toBeVisible();
@@ -299,7 +308,7 @@ test.describe('failure and edge states', () => {
   });
 
   test('shows a safe error when the catalog request fails', async ({ page }) => {
-    await signInWithMockFlags(page, 'mockScenario=server-error');
+    await signInWithMockFlags(page, 'mockScenario=server-error', { goTo: '/catalog' });
 
     const error = page.getByTestId('catalog-error');
     await expect(error).toBeVisible();
@@ -311,7 +320,7 @@ test.describe('failure and edge states', () => {
   });
 
   test('shows a loading indicator while the catalog is slow', async ({ page }) => {
-    await signInWithMockFlags(page, 'mockLatency=2000');
+    await signInWithMockFlags(page, 'mockLatency=2000', { goTo: '/catalog' });
 
     // The sign-in navigation lands on /catalog while its request is still in flight.
     await expect(page.getByTestId('catalog-loading')).toBeVisible();

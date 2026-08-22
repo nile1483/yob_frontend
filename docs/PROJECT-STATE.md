@@ -128,6 +128,142 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - System route content slots and Home (Phase 25H, 2026-08-22)
+
+Frontend for backend Phase 25G, against API **3.5.0**. The same Content Blocks that
+Phase 25E draws on a merchant-authored page can now appear at fixed positions inside
+application pages - above the cart, below a product - without those pages knowing what a
+block is.
+
+### The distinction that defines this phase
+
+| | Standalone dynamic Page | System route content |
+| --- | --- | --- |
+| What it is | a `YOB Storefront Page` record | a position inside an existing app route |
+| URL | `/pages/:slug`, merchant-named | the route's own URL, application-owned |
+| Endpoint | `cms.get_page(slug)` | `cms.get_route_content(route_key)` |
+| Who decides it exists | the merchant | Angular source, in `ROUTE_SLOTS` |
+| Who decides what is in it | the merchant | the merchant |
+
+**Angular owns slot locations. The merchant owns the blocks and their order inside one.**
+A merchant cannot create a route, invent a position, or reorder Home's three regions -
+adding a slot is a source change in *both* repositories. **This is not a generic layout
+builder**, and the registry being a `const` rather than something read from the response
+is what keeps it from becoming one.
+
+**The response can be customer-specific.** A slot may hold a Product Grid, which is
+priced through the buyer's own context, so a route's content is never shared across
+customers - unlike a menu, which the contract states is customer-independent. That is why
+`RouteContentStore` empties itself when the session identity changes and `MenuStore` does
+not.
+
+### One renderer, extracted
+
+Phase 25E kept the block-type `@switch` inside `StorefrontPage`, because a page was the
+only thing that had blocks. That would now mean the cart, the account page and the order
+list each learning what a carousel is. So the dispatch moved into `ContentBlocks`, and
+`StorefrontPage` and `ContentSlot` both render it.
+
+Adding a sixth block type is therefore a change to one component. A guard test asserts
+that `@case ('image_banner')` exists in **exactly one file**, and that no host page names
+a block type at all.
+
+### One request per route, never per slot
+
+The backend deliberately returns every slot of a route - empty ones included - in one
+answer. `RouteContentStore` is the coordinator: a slot asks for its *route*, the first ask
+starts the one request, and every later ask reads what it produced. Home's three regions
+and the cart's two placements are one request each, asserted in both the unit suite and
+the browser.
+
+Entries are keyed by route because slot keys are **not** unique on their own:
+`above_listing` is declared by both `catalog` and `category`, so only the (route, slot)
+pair identifies a position.
+
+### Supplemental means supplemental
+
+Content is decoration on a route that works without it. Loading leaves the host usable,
+empty renders nothing at all - no wrapper, no gap, no placeholder - and a failure leaves
+the page working with no error shown for content the buyer never asked to see. **Nothing
+retries**: a retry loop behind a page someone is using is a request storm, not a recovery.
+
+Home is the one exception worth a loading treatment, because Home is almost entirely
+content and an empty frame reads as a broken store. It uses the existing `Spinner`; there
+is no second loading framework.
+
+### Type safety for positions
+
+`ContentSlot<R>` is generic on the route key, so `slotKey` is the slots **that** route
+declares:
+
+```html
+<yob-content-slot routeKey="cart" slotKey="hero" />
+<!-- error TS2322: Type '"hero"' is not assignable to type '"above_cart" | "below_cart"'. -->
+```
+
+That is a compile error under `strictTemplates`, not a runtime surprise.
+
+`e2e/route-content-contract.spec.ts` then asserts the local `ROUTE_SLOTS` is **exactly**
+the published `x-route-slots` - not a subset and not a superset - that every declared
+`<yob-content-slot>` names a real pair, and that every published position is rendered
+somewhere. This also closes the Phase 25F recommendation about DTO/contract drift, without
+adding a code generator.
+
+### Slot placement, and why it is route-level
+
+Slots sit at the **outer edges of each route's template**, above everything the route
+renders and below all of it. That follows from what the endpoint is: `get_route_content`
+takes a route key and **no slug**, so the content is generic for the route *type*, not for
+the category or product being viewed. Placing it inside a loaded-document branch would
+have implied a per-document relationship the contract does not have.
+
+| Route | Component | Slots |
+| --- | --- | --- |
+| `home` | `HomePage` | `hero`, `main`, `bottom` |
+| `catalog` | `CatalogPage` | `above_listing`, `below_listing` |
+| `category` | `CategoryPage` | `above_listing`, `below_listing` |
+| `product` | `ItemPage` | `above_product`, `below_product` |
+| `cart` | `CartPage` | `above_cart`, `below_cart` |
+| `account` | `AccountPage` | `above_content`, `below_content` |
+| `orders` | `OrdersPage` | `above_list`, `below_list` |
+| `order_detail` | `OrderPage` | `above_order`, `below_order` |
+
+**Account boundary:** `AccountPage` itself. Account is a single routed component, not a
+shell hosting child routes, so there is no shared parent to place the slot on and no risk
+of the request being repeated per sub-view.
+
+**Login, checkout, payment and the payment callback carry none**, by decision on both
+sides. The backend answers `content_route_unknown` for those keys and `ContentRouteKey`
+makes them unspellable here.
+
+### Home
+
+`/home` is the authenticated landing page, and `DEFAULT_AUTHENTICATED_PATH` moved from
+`/catalog` to it - so the root redirect, the sign-in redirect and the session-unavailable
+retry all follow, since they read that one constant. The brand link goes to `/home` too.
+
+Home is **not** a Storefront Page and does not route through `/pages/home`: it is three
+slots and nothing else, so a merchant can fill it without configuring a document, and
+cannot rename or unpublish the store's front door. `/catalog` remains a first-class route,
+reachable directly and from the merchant's own menu.
+
+### Product Grid, unchanged
+
+A grid inside a system slot arrives already hydrated by the backend's own `list_items()`
+path, exactly as it does on a page. Angular issues **no** `get_items`, `get_item`,
+`resolve_variant`, pricing or stock request for its cards, and renders the catalogue's own
+`ItemCard`. Asserted on Home in both suites.
+
+### Contract discrepancies found
+
+None. API 3.5.0 is additive - one new path and two new schemas - and the `ContentBlock`
+union is byte-identical to 3.4.1, so no existing DTO changed. The two documentation gaps
+recorded in Phase 25E were fixed by the backend in 3.4.1.
+
+### Live smoke - PENDING
+
+No credentials in this environment.
+
 ## CONFIRMED - Storefront pages and content blocks (Phase 25E, 2026-08-22)
 
 The rendering layer for `cms.get_page`, against API 3.4.0. Backend owns publication,
@@ -2148,6 +2284,7 @@ until the backend ships it.
 | Phase 24D-2 - variant wire-contract sign-off (API 3.3.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25D - storefront navigation & category filters (API 3.4.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25E - storefront pages & content blocks (API 3.4.0) | **PASS (live smoke pending)** |
+| Frontend Phase 25H - system route content slots & Home (API 3.5.0) | **PASS (live smoke pending)** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

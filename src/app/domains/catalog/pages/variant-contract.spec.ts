@@ -9,6 +9,7 @@ import { provideRouter } from '@angular/router';
 
 import { YOB_API_CONFIG, type YobApiConfig } from '../../../foundation/network/yob-api.config';
 import { ItemPage } from './item-page';
+import { answerRouteContent } from '../../content/route-content.testing';
 
 const CONFIG: YobApiConfig = { methodBasePath: '/api/method/', application: 'TEST_APP' };
 
@@ -139,6 +140,9 @@ describe('variant wire contract (API 3.3.0)', () => {
     fixture = TestBed.createComponent(ItemPage);
     fixture.componentRef.setInput('itemSlug', 'cotton-tee');
     fixture.detectChanges();
+    // The product route's content slots ask once on render. Answered here so the
+    // assertions below still mean "no *catalog* request", which is their subject.
+    answerRouteContent(http);
     http.expectOne((r) => r.url.includes('get_item')).flush(payload);
     await settle();
   }
@@ -148,6 +152,9 @@ describe('variant wire contract (API 3.3.0)', () => {
     fixture = TestBed.createComponent(ItemPage);
     fixture.componentRef.setInput('itemSlug', 'cotton-tee');
     fixture.detectChanges();
+    // The product route's content slots ask once on render. Answered here so the
+    // assertions below still mean "no *catalog* request", which is their subject.
+    answerRouteContent(http);
     http
       .expectOne((r) => r.url.includes('get_item'))
       .flush(errorBody(code), { status, statusText: 'Unprocessable Entity' });
@@ -177,7 +184,13 @@ describe('variant wire contract (API 3.3.0)', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Every content-bearing route asks for its merchant content on render.
+    // Answering it keeps `verify()` meaningful for the requests these tests
+    // are about - an unmatched one still fails.
+    answerRouteContent(http);
+    http.verify();
+  });
 
   describe('the resolver request', () => {
     it('is a GET to the published method', async () => {

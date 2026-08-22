@@ -19,6 +19,7 @@ import { SecureShell } from './shells/secure/secure-shell';
  *   /session-unavailable   content domain
  *
  * SECURE   (SecureShell, secureRouteGuard)
+ *   /home                  home domain - the authenticated landing page
  *   /catalog               catalog domain
  *   /orders                orders domain
  *   /account               account domain
@@ -77,6 +78,12 @@ export const routes: Routes = [
     component: SecureShell,
     canActivate: [secureRouteGuard],
     children: [
+      {
+        // The authenticated landing page: application-owned structure, merchant content.
+        // Deliberately not a Storefront Page - see `HomePage`.
+        path: 'home',
+        loadChildren: () => import('./domains/home/home.routes').then((m) => m.HOME_ROUTES),
+      },
       {
         path: 'catalog',
         loadChildren: () =>

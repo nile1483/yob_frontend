@@ -351,6 +351,14 @@ test.describe('the full journey', () => {
     await page.getByTestId('login-username').fill('mock.buyer@example.invalid');
     await page.getByTestId('login-password').fill('mock-password-not-a-secret');
     await page.getByTestId('login-submit').click();
+    await expect(page).toHaveURL('/home');
+
+    // The merchant's own navigation, not a fresh document load: `page.goto` restarts
+    // the app and the mock server forgets the session.
+    await page
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('link', { name: 'Catalog', exact: true })
+      .click();
     await expect(page).toHaveURL('/catalog');
 
     await page

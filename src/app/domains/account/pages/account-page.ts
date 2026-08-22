@@ -35,6 +35,7 @@ import {
 } from '../account-error-message';
 import { changedFields, hasChanges, toFormValues } from '../account.changed-fields';
 import { ConfirmDelete } from '../parts/confirm-delete';
+import { ContentSlot } from '../../content/parts/content-slot';
 
 /** Which record, if any, has its editor or confirmation open. */
 interface OpenEditor {
@@ -93,7 +94,7 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
  */
 @Component({
   selector: 'app-account-page',
-  imports: [AddressForm, Alert, Button, ConfirmDelete, ContactForm, EmptyState, PageHeader, Spinner],
+  imports: [AddressForm, Alert, Button, ConfirmDelete, ContactForm, EmptyState, PageHeader, Spinner, ContentSlot],
   template: `
     <app-page-header
       heading="Your account"
@@ -101,6 +102,10 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
       lead="Manage the addresses and contacts used when you place an order."
       i18n-lead="@@account.intro"
     />
+
+    <!-- Merchant content for this route. The position is ours; what appears
+         in it is the merchant's, and an empty slot renders nothing. -->
+    <yob-content-slot routeKey="account" slotKey="above_content" />
 
     @if (notice(); as message) {
       <div class="mt-6" aria-live="polite" data-testid="account-notice">
@@ -322,6 +327,8 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
         </ul>
       }
     </section>
+
+    <yob-content-slot routeKey="account" slotKey="below_content" />
   `,
 })
 export class AccountPage {
