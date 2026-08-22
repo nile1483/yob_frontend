@@ -3,7 +3,7 @@ import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { Badge } from '../../../design/badge/badge';
-import { Media } from '../../../design/media/media';
+import { Media, type MediaRatio } from '../../../design/media/media';
 import { CATALOG_CURRENCY } from '../catalog.currency';
 import type { CatalogItemDto } from '../contracts/catalog.types';
 
@@ -40,7 +40,7 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
         class="overflow-hidden rounded-t-lg"
         [src]="item().image"
         alt=""
-        ratio="product"
+        [ratio]="ratio()"
         testId="item-media"
       />
 
@@ -123,6 +123,16 @@ import type { CatalogItemDto } from '../contracts/catalog.types';
 })
 export class ItemCard {
   readonly item = input.required<CatalogItemDto>();
+
+  /**
+   * The shape of the card's picture. **Presentation only.**
+   *
+   * A content Product Grid lets a merchant choose square or portrait cards, and this is
+   * the whole of that difference: the same component, the same data and the same pricing
+   * rules, in a different frame. A second card implementation for content pages would be
+   * a second place for price and selling-UOM behaviour to drift from the catalogue's.
+   */
+  readonly ratio = input<MediaRatio>('product');
 
   protected readonly currency = inject(CATALOG_CURRENCY);
 

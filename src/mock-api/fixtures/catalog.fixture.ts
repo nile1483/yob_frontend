@@ -57,11 +57,11 @@ import type {
  * `mock` configuration. Production and development builds never carry them, the same
  * structural guarantee `fileReplacements` gives the mock API itself.
  */
-const IMAGE_PORTRAIT = '/mock-media/product-portrait.svg';
-const IMAGE_LANDSCAPE = '/mock-media/product-landscape.svg';
-const IMAGE_SQUARE = '/mock-media/product-square.svg';
+export const IMAGE_PORTRAIT = '/mock-media/product-portrait.svg';
+export const IMAGE_LANDSCAPE = '/mock-media/product-landscape.svg';
+export const IMAGE_SQUARE = '/mock-media/product-square.svg';
 /** Deliberately enormous, rendered into a card a few hundred pixels wide. */
-const IMAGE_HUGE = '/mock-media/product-huge.svg';
+export const IMAGE_HUGE = '/mock-media/product-huge.svg';
 const IMAGE_CATEGORY = '/mock-media/category-square.svg';
 /**
  * A well-formed path that resolves to nothing.

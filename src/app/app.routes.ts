@@ -100,6 +100,14 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./domains/account/account.routes').then((m) => m.ACCOUNT_ROUTES),
       },
+      {
+        // Merchant-authored pages. Secure because `cms.get_page` needs the storefront
+        // Customer: a page may hold a Product Grid, and a grid is priced for the buyer
+        // looking at it.
+        path: 'pages',
+        loadChildren: () =>
+          import('./domains/content/page.routes').then((m) => m.STOREFRONT_PAGE_ROUTES),
+      },
     ],
   },
 

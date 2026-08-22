@@ -128,6 +128,101 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Storefront pages and content blocks (Phase 25E, 2026-08-22)
+
+The rendering layer for `cms.get_page`, against API 3.4.0. Backend owns publication,
+block order, destinations, the Product Grid's catalogue query and its customer pricing;
+Angular draws what arrives.
+
+### One request, and the reason it matters
+
+A page is `cms.get_page(slug)` and nothing else. The Product Grid's rows are the **same
+`ListingCard`s the catalogue returns**, produced by the same service under the buyer's own
+pricing context - so there is no per-card `get_item`, no pricing call, no stock lookup and
+no variant resolution. A page with four grids is still one request, and a test asserts the
+absence of every one of those calls.
+
+### The union is strict, because the published schema cannot be
+
+`ContentBlock` lists every block's fields side by side with everything nullable, and its
+own description says why that is a description rather than a model: *"never infer the kind
+from which nullable fields are set."* Typing it that way in Angular would invite exactly
+that, and would make `block.html` readable on a product grid. So each block is its own
+interface, discriminated on `type`, narrowed once by `isRenderableBlock`.
+
+An unknown `type` is **skipped, not fatal**: a backend that adds a sixth block must not
+take an old client's page down, so the renderer draws what it knows and omits the rest.
+
+### Slide and card shapes came from the backend, not the schema
+
+`slides` and `cards` are `array<object>` in the OpenAPI document - untyped. Their fields
+were read from the backend's own projector (`content_service._media_row`), which is the
+canonical source when the published schema is silent: `desktop_image`, `mobile_image`,
+`title`, `alt_text`, `destination`. A slide and a promo card are one shape there and one
+type here. **Recorded as a contract gap** - see the discrepancies below.
+
+### One destination renderer for four callers
+
+`DestinationLink` wraps content in the link a destination describes, or in nothing.
+Written once because menu items, banners, slides and promo cards carry the identical
+shape and need the identical three decisions - clickable, internal or external, new tab.
+Four copies would be four chances to forget `rel="noopener"` or to invent a route for a
+`storefront_page`, whose `href` is always null by design.
+
+**A bug the tests caught:** the first version had three `<ng-content />` slots, one per
+branch. Angular projects a slot once, so every branch after the first rendered an empty
+element - a banner with no image inside its own link. Now the content is declared once in
+a template and stamped per branch.
+
+### Blocks
+
+- **Image banner** - both assets in a `<picture>`, so a phone never fetches the desktop
+  file; the one asset present is used at both sizes when only one is configured. Heights
+  are merchant values, **clamped** (80-900px) and applied as a height, never as style
+  text. Not `NgOptimizedImage`: it has no `<picture>` support and its `fill` needs a
+  positioned direct parent, which `<picture>` is not. `mediaUrl()` is still the only place
+  a stored path becomes a URL.
+- **Rich text** - rendered through ordinary `[innerHTML]`, so Angular's sanitiser runs.
+  **No `bypassSecurityTrustHtml` anywhere**, and a test asserts its absence in the file:
+  the backend sanitising on save is the first boundary, and this is the second - the one
+  that protects the buyer's session from a stored XSS in an admin field. Alignment is a
+  lookup in a fixed table, so a value outside the enum cannot reach the DOM as a class.
+- **Carousel** - hand-written, no library. Manual controls are real buttons with names, a
+  polite live region reports the position, and it wraps in both directions. Autoplay stops
+  on hover and focus, stops **permanently** once the buyer presses a control - they have
+  said which slide they want - and never starts under `prefers-reduced-motion`. The
+  interval is the backend's, clamped to 2-30s so a mistyped 50 cannot strobe.
+- **Product grid** - renders the catalogue's own `ItemCard`. `card_type` adds a `ratio`
+  input to that card and changes nothing else: square and portrait are a frame, not a
+  second product-card implementation with its own idea of price. An empty grid renders
+  nothing; the backend refuses to substitute other products and so does this.
+- **Promo grid** - content cards, merchandising only, no offer or pricing semantics.
+  `cards_per_row` maps through a fixed table because Tailwind compiles the classes it can
+  see: an interpolated `grid-cols-${n}` would name a class in the DOM that exists nowhere
+  in the stylesheet.
+
+### SEO
+
+`Title` and `Meta` directly - there is no SEO abstraction in this project, and one route
+needing two tags is not the case that should invent one. `meta_title ?? title`, and the
+description is **removed** when the next page has none, so a stale one never describes a
+page the buyer has left.
+
+### Contract discrepancies found
+
+1. **`slides` and `cards` are untyped** in the published OpenAPI (`array<object>`). Shapes
+   taken from the backend projector; worth publishing properly.
+2. **`desktop_height_px` / `mobile_height_px` are documented under `image_banner` only**,
+   but the backend also projects them for `banner_carousel` and `promo_grid`. Typed where
+   the backend sends them.
+
+Neither changed any behaviour, and neither is a defect in the backend - only in what the
+document says about it.
+
+### Live smoke - PENDING
+
+No credentials in this environment.
+
 ## CONFIRMED - Storefront navigation and category filters (Phase 25D, 2026-08-22)
 
 Frontend for backend Phases 25B/25C, against API **3.4.0**. Navigation and merchandising
@@ -2039,6 +2134,7 @@ until the backend ships it.
 | Frontend Phase 24C - variant family selection UX | **PASS** |
 | Phase 24D-2 - variant wire-contract sign-off (API 3.3.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25D - storefront navigation & category filters (API 3.4.0) | **PASS (live smoke pending)** |
+| Frontend Phase 25E - storefront pages & content blocks (API 3.4.0) | **PASS (live smoke pending)** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

@@ -3,15 +3,15 @@ import { map, type Observable } from 'rxjs';
 
 import { YobApiClient } from '../../../foundation/network/yob-api-client';
 import type { MenuDto } from '../contracts/cms.types';
+import type { StorefrontPageDto } from '../contracts/page.types';
 
 const GET_MENU = 'yob_storefront.api.cms.get_menu';
+const GET_PAGE = 'yob_storefront.api.cms.get_page';
 
 /**
  * The CMS endpoints the storefront reads.
  *
- * Navigation only in Phase 25D. `cms.get_page` exists on the wire and is deliberately
- * not wrapped yet: the page renderer is the next phase, and an unused method is a
- * promise this layer has not been asked to keep.
+ * Navigation (Phase 25D) and merchant pages (Phase 25E).
  */
 @Service()
 export class CmsApi {
@@ -30,6 +30,25 @@ export class CmsApi {
   getMenu(menuKey: string): Observable<MenuDto> {
     return this.api
       .get<MenuDto>(GET_MENU, { menu_key: menuKey })
+      .pipe(map((response) => response.data));
+  }
+
+  /**
+   * One published page, with its ordered blocks.
+   *
+   * **This is the whole page.** A Product Grid's rows arrive already selected and priced
+   * by the catalogue service under the buyer's own pricing context, so nothing that
+   * renders a page needs a second request to interpret a block.
+   *
+   * Customer-priced, therefore never cacheable across buyers - which is also why it needs
+   * a session, unlike a menu.
+   *
+   * Wire-documented failure: `page_not_found` (404) for an unknown **or unpublished**
+   * page, deliberately indistinguishable.
+   */
+  getPage(slug: string): Observable<StorefrontPageDto> {
+    return this.api
+      .get<StorefrontPageDto>(GET_PAGE, { slug })
       .pipe(map((response) => response.data));
   }
 }

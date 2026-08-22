@@ -1,4 +1,12 @@
 import type { MenuDto } from '../../app/domains/content/contracts/cms.types';
+import type { StorefrontPageDto } from '../../app/domains/content/contracts/page.types';
+import {
+  IMAGE_HUGE,
+  IMAGE_LANDSCAPE,
+  IMAGE_PORTRAIT,
+  IMAGE_SQUARE,
+  MOCK_ITEMS_BY_CATEGORY,
+} from './catalog.fixture';
 
 /**
  * The merchant-configured navigation tree, shaped from API 3.4.0 `MenuResponse`.
@@ -20,6 +28,212 @@ import type { MenuDto } from '../../app/domains/content/contracts/cms.types';
  * against an alphabetised fixture and fail against a real store.
  */
 export const MOCK_MENU_KEY = 'main';
+
+/* --------------------------------------------------------------- storefront pages */
+
+/**
+ * Merchant pages, shaped from API 3.4.0 `PageResponse` and the backend's own projector.
+ *
+ * `about-us` carries **all five block types** in a deliberate order, so one page proves
+ * ordering, every renderer and the shared destination handling at once. Each block also
+ * carries the case its renderer most easily gets wrong:
+ *
+ * | Block | The trap it covers |
+ * | --- | --- |
+ * | image banner | a destination, and both a desktop and a mobile asset |
+ * | rich text | markup that must be sanitised, and centre alignment |
+ * | carousel | three slides, autoplay on, one slide with no destination |
+ * | product grid | a simple priced card **and** a variant family with null money |
+ * | promo grid | three cards, an external destination, one inert |
+ *
+ * `support` is a second, minimal page: proof that navigating slug to slug replaces the
+ * content rather than merging into it.
+ */
+const PAGE_MEDIA_DESKTOP = IMAGE_LANDSCAPE;
+const PAGE_MEDIA_MOBILE = IMAGE_SQUARE;
+
+/** The unsafe markup a client must neutralise even though the backend sanitises on save. */
+const RICH_TEXT_HTML =
+  '<p>Trusted by <strong>industrial buyers</strong> since 1998.</p>' +
+  '<p><a href="/catalog">Browse the catalogue</a></p>' +
+  '<script>window.__yobXss = true;</script>' +
+  '<img src="x" onerror="window.__yobXss = true">';
+
+const ABOUT_PAGE: StorefrontPageDto = {
+  slug: 'about-us',
+  title: 'About Us',
+  meta_title: 'About Your Order Book',
+  meta_description: 'Who we are and what we stock.',
+  blocks: [
+    {
+      type: 'image_banner',
+      block_name: 'Hero banner',
+      desktop_image: PAGE_MEDIA_DESKTOP,
+      mobile_image: PAGE_MEDIA_MOBILE,
+      alt_text: 'Our warehouse',
+      desktop_height_px: 400,
+      mobile_height_px: 220,
+      destination: {
+        type: 'storefront_category',
+        target: 'fasteners',
+        href: '/catalog/fasteners',
+        external: false,
+        open_in_new_tab: false,
+      },
+    },
+    {
+      type: 'rich_text',
+      block_name: 'Intro copy',
+      title: 'Who we are',
+      html: RICH_TEXT_HTML,
+      text_alignment: 'center',
+    },
+    {
+      type: 'banner_carousel',
+      block_name: 'Seasonal carousel',
+      auto_play: true,
+      interval_ms: 3000,
+      desktop_height_px: 320,
+      mobile_height_px: 200,
+      slides: [
+        {
+          desktop_image: PAGE_MEDIA_DESKTOP,
+          mobile_image: PAGE_MEDIA_MOBILE,
+          title: 'Winter safety',
+          alt_text: 'Hi-vis clothing',
+          destination: {
+            type: 'storefront_category',
+            target: 'safety-equipment',
+            href: '/catalog/safety-equipment',
+            external: false,
+            open_in_new_tab: false,
+          },
+        },
+        {
+          desktop_image: IMAGE_PORTRAIT,
+          mobile_image: null,
+          title: 'Supplier of the year',
+          alt_text: 'Award',
+          destination: {
+            type: 'external_url',
+            target: null,
+            href: 'https://awards.example.invalid/2026',
+            external: true,
+            open_in_new_tab: true,
+          },
+        },
+        {
+          desktop_image: IMAGE_HUGE,
+          mobile_image: null,
+          title: 'Coming soon',
+          alt_text: 'Placeholder',
+          // Published, and going nowhere: rendered, not clickable.
+          destination: null,
+        },
+      ],
+    },
+    {
+      type: 'product_grid',
+      block_name: 'Featured safety',
+      card_type: 'square',
+      item_limit: 12,
+      category: 'safety-equipment',
+      // The catalogue's own rows: a priced simple item, and a family with null money.
+      items: MOCK_ITEMS_BY_CATEGORY['safety-equipment'] ?? [],
+    },
+    {
+      type: 'promo_grid',
+      block_name: 'Promotions',
+      cards_per_row: 3,
+      desktop_height_px: 240,
+      mobile_height_px: 180,
+      cards: [
+        {
+          desktop_image: PAGE_MEDIA_DESKTOP,
+          mobile_image: null,
+          title: 'Free delivery',
+          alt_text: 'Delivery van',
+          destination: {
+            type: 'storefront_page',
+            target: 'support',
+            // Always null for this type: the SPA owns /pages/:slug.
+            href: null,
+            external: false,
+            open_in_new_tab: false,
+          },
+        },
+        {
+          desktop_image: IMAGE_SQUARE,
+          mobile_image: null,
+          title: 'Trade accounts',
+          alt_text: 'Handshake',
+          destination: {
+            type: 'external_url',
+            target: null,
+            href: 'https://accounts.example.invalid/apply',
+            external: true,
+            open_in_new_tab: true,
+          },
+        },
+        {
+          desktop_image: IMAGE_PORTRAIT,
+          mobile_image: null,
+          title: 'Coming soon',
+          alt_text: 'Placeholder',
+          destination: null,
+        },
+      ],
+    },
+  ],
+};
+
+const SUPPORT_PAGE: StorefrontPageDto = {
+  slug: 'support',
+  title: 'Support',
+  meta_title: null,
+  // No description at all, so a client that left the previous page's behind is caught.
+  meta_description: null,
+  blocks: [
+    {
+      type: 'rich_text',
+      block_name: 'Support copy',
+      title: 'Contact us',
+      html: '<p>Call the trade desk on 0800 000 000.</p>',
+      text_alignment: 'left',
+    },
+  ],
+};
+
+/**
+ * A page carrying a block type this release does not know.
+ *
+ * The forward-compatibility case: an old client meeting a newer backend must render what
+ * it understands and skip the rest, not take the page down.
+ */
+const FUTURE_PAGE: StorefrontPageDto = {
+  slug: 'future',
+  title: 'Future',
+  meta_title: null,
+  meta_description: null,
+  blocks: [
+    { type: 'video_hero', block_name: 'Video hero' } as unknown as StorefrontPageDto['blocks'][number],
+    {
+      type: 'rich_text',
+      block_name: 'Still rendered',
+      title: 'Still here',
+      html: '<p>This block renders even though the one above it is unknown.</p>',
+      text_alignment: 'left',
+    },
+  ],
+};
+
+export const MOCK_PAGES_BY_SLUG: Readonly<Record<string, StorefrontPageDto>> = {
+  'about-us': ABOUT_PAGE,
+  support: SUPPORT_PAGE,
+  future: FUTURE_PAGE,
+};
+
+
 
 export const MOCK_MENU: MenuDto = {
   key: MOCK_MENU_KEY,
