@@ -12,7 +12,37 @@
  * what stops a 1440px page from looking like a mobile layout that was stretched.
  *
  * This is a shared constant, not a configuration system: there is one storefront width
- * and changing it means editing this line. A copied client project that wants a wider
- * catalog edits `max-w-6xl` here and every page follows.
+ * and changing it means editing one rule. A copied client project that wants a wider
+ * catalog edits `.yob-content-container` in `styles.css` and every page follows.
+ *
+ * ## Since Phase 25J it is a class, not a class list
+ *
+ * The width, padding and centring moved into `.yob-content-container` so that a page
+ * column, a content block's column and these bars are the **same definition** rather
+ * than three copies of one string. The rendered geometry is unchanged.
  */
-export const SHELL_CONTAINER = 'mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8';
+export const SHELL_CONTAINER = 'yob-content-container';
+
+/**
+ * The storefront's one content column.
+ *
+ * Identical to {@link SHELL_CONTAINER} by design - a block inside a full-width band has
+ * to line up with the page heading above it and the footer below it, and the only way
+ * to guarantee that is for all three to be the same class.
+ */
+export const CONTENT_CONTAINER = 'yob-content-container';
+
+/**
+ * A full-width band inside `main`, with a semantic hook for later styling.
+ *
+ * ```ts
+ * protected readonly section = pageSection('catalog-section');
+ * ```
+ *
+ * The hook is **source-owned**: a Content Placement can style its own band through
+ * `section_style`, but nothing a merchant configures may reach the cart, the product
+ * page or the order list. That separation is the point of having two mechanisms.
+ */
+export function pageSection(hook: string): string {
+  return `yob-page-section ${hook}`;
+}

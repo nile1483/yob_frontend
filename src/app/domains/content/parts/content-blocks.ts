@@ -2,6 +2,7 @@ import { Component, computed, input } from '@angular/core';
 
 import { isRenderableBlock, type AnyContentBlockDto } from '../contracts/page.types';
 import { BannerCarouselBlock } from './banner-carousel-block';
+import { ContentSection } from './content-section';
 import { ImageBannerBlock } from './image-banner-block';
 import { ProductGridBlock } from './product-grid-block';
 import { PromoGridBlock } from './promo-grid-block';
@@ -38,6 +39,7 @@ import { RichTextBlock } from './rich-text-block';
   selector: 'app-content-blocks',
   imports: [
     BannerCarouselBlock,
+    ContentSection,
     ImageBannerBlock,
     ProductGridBlock,
     PromoGridBlock,
@@ -45,30 +47,37 @@ import { RichTextBlock } from './rich-text-block';
   ],
   template: `
     @for (block of renderable(); track $index) {
-      <div data-testid="page-block" [attr.data-block-type]="block.type">
-        @switch (block.type) {
-          @case ('image_banner') {
-            <app-image-banner-block [block]="block" />
+      <!-- Each block is its own band. Consecutive blocks are therefore separate
+           full-width sections rather than one wrapper around the list, which is what
+           lets a merchant put a dark hero directly above a muted grid. -->
+      <yob-content-section [sectionStyle]="block.section_style">
+        <div data-testid="page-block" [attr.data-block-type]="block.type">
+          @switch (block.type) {
+            @case ('image_banner') {
+              <app-image-banner-block [block]="block" />
+            }
+            @case ('rich_text') {
+              <app-rich-text-block [block]="block" />
+            }
+            @case ('banner_carousel') {
+              <app-banner-carousel-block [block]="block" />
+            }
+            @case ('product_grid') {
+              <app-product-grid-block [block]="block" />
+            }
+            @case ('promo_grid') {
+              <app-promo-grid-block [block]="block" />
+            }
           }
-          @case ('rich_text') {
-            <app-rich-text-block [block]="block" />
-          }
-          @case ('banner_carousel') {
-            <app-banner-carousel-block [block]="block" />
-          }
-          @case ('product_grid') {
-            <app-product-grid-block [block]="block" />
-          }
-          @case ('promo_grid') {
-            <app-promo-grid-block [block]="block" />
-          }
-        }
-      </div>
+        </div>
+      </yob-content-section>
     }
   `,
-  // The rhythm between blocks belongs to the block list, so a page and a slot space
-  // their content identically without either one restating it.
-  host: { class: 'flex flex-col gap-10' },
+  // No gap and no column here any more. Spacing moved into the section, because a gap
+  // between two bands would show a stripe of page background between their surfaces;
+  // the width moved into the section for the same reason - a list that constrained its
+  // children could never let one of them paint full width.
+  host: { class: 'block w-full' },
 })
 export class ContentBlocks {
   readonly blocks = input.required<readonly AnyContentBlockDto[]>();

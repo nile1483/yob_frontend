@@ -62,352 +62,368 @@ import { ContentSlot } from '../../content/parts/content-slot';
   selector: 'app-item-page',
   imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, Media, RouterLink, Spinner, ContentSlot],
   template: `
-    <nav aria-label="Breadcrumb" i18n-aria-label="@@item.breadcrumb.label">
-      <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
-        ><ng-container i18n="@@item.breadcrumb.back">Back to catalog</ng-container></a
-      >
-    </nav>
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section product-section">
+      <div class="yob-content-container">
+        <nav aria-label="Breadcrumb" i18n-aria-label="@@item.breadcrumb.label">
+          <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
+            ><ng-container i18n="@@item.breadcrumb.back">Back to catalog</ng-container></a
+          >
+        </nav>
+
+      </div>
+    </section>
 
     <!-- Merchant content for this route. The position is ours; what appears
          in it is the merchant's, and an empty slot renders nothing. -->
     <yob-content-slot routeKey="product" slotKey="above_product" />
 
-    @if (item.isLoading() && payload() === undefined) {
-      <div class="mt-8 flex justify-center" data-testid="item-loading">
-        <app-spinner label="Loading item" i18n-label="@@item.loading" />
-      </div>
-    } @else if (notFound()) {
-      <div class="mt-6" data-testid="item-not-found">
-        <app-empty-state>
-          <h1 emptyTitle i18n="@@item.notFound.title">Item not found</h1>
-          <p emptyBody i18n="@@item.notFound.body">
-            This item may have been renamed or is no longer available to your account.
-          </p>
-          <a
-            emptyAction
-            routerLink="/catalog"
-            class="underline underline-offset-4"
-            i18n="@@item.notFound.action"
-            >Browse the catalog</a
-          >
-        </app-empty-state>
-      </div>
-    } @else if (familyUnsupported()) {
-      <!-- A Manufacturer-based family. API 3.3.0 refuses it at get_item with
-           variant_family_unsupported, so there is no matrix to render - and "please try
-           again" would be false advice, because trying again cannot help. -->
-      <div class="mt-6" data-testid="item-family-unavailable">
-        <app-alert tone="info">
-          <span i18n="@@item.family.unavailable"
-            >This product cannot be configured online. Please contact us to order it.</span
-          >
-        </app-alert>
-      </div>
-    } @else if (item.error()) {
-      <div class="mt-6" data-testid="item-error">
-        <app-alert tone="error">
-          <span i18n="@@item.error">We could not load this item. Please try again.</span>
-        </app-alert>
-      </div>
-    } @else if (payload(); as payload) {
-      <article class="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2 md:items-start lg:gap-12">
-        <!-- Sticky on desktop so the product stays in view while the buy box and the
-             specifications below it are read. -->
-        <div class="md:sticky md:top-24">
-          <!-- The buying surface's main image: larger than a card, the whole product
-               visible, and capped in height so a tall portrait cannot push the price and
-               Add to cart below the fold on a laptop. Named here rather than left with an
-               empty alt - unlike a card, this image is the subject of the page. It is
-               the only image in the storefront loaded with priority. -->
-          <!-- The resolved variant's own photograph once there is one, and the family's
-               until then. A resolved variant with no image of its own keeps showing the
-               template's - the backend said nothing about that variant's appearance, and
-               blanking the page would be inventing an answer. -->
-          <app-media
-            class="overflow-hidden rounded-lg border border-slate-200"
-            [src]="displayImage()"
-            [alt]="displayName()"
-            ratio="hero"
-            [priority]="true"
-            sizes="(min-width: 768px) 50vw, 100vw"
-            testId="item-image"
-          />
-        </div>
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section product-section">
+      <div class="yob-content-container">
 
-        <div class="flex flex-col gap-5">
-          <header>
-            <h1
-              class="text-2xl font-semibold tracking-tight break-words sm:text-3xl"
-              data-testid="item-title"
-            >
-              {{ displayName() }}
-            </h1>
-            <!-- The identity of what is actually being bought: the resolved variant's own
-                 SKU once one exists, the template's code while the buyer is still
-                 choosing. The template code is a label here and nowhere else - it is
-                 never sent as a purchase. -->
-            <p class="mt-1 text-sm break-words text-slate-500">
-              <span class="sr-only" i18n="@@item.code">Item code</span>
-              {{ displayCode() }}
-            </p>
-          </header>
-
-          @if (family(); as family) {
-            @if (isConfigurable()) {
-              <!-- One control group per attribute, in the backend's order. A group of
-                   radio-style choices, not a select: the options are few, comparing them
-                   matters, and a disabled option must stay visible so the buyer can see
-                   that Large exists but not in Orange. -->
-              <div class="flex flex-col gap-4" data-testid="item-attributes">
-                @for (group of attributeGroups(); track group.attribute) {
-                  <fieldset data-testid="item-attribute">
-                    <legend class="text-sm font-medium text-slate-900" data-testid="item-attribute-name">
-                      {{ group.attribute }}
-                    </legend>
-
-                    <div class="mt-2 flex flex-wrap gap-2">
-                      @for (option of group.options; track option.value) {
-                        <!-- Disabled, never hidden: a combination that does not exist is
-                             information the buyer needs. Availability comes only from the
-                             backend's variants[] - no combination is generated here. -->
-                        <button
-                          type="button"
-                          role="radio"
-                          [attr.aria-checked]="option.selected"
-                          [disabled]="option.disabled"
-                          [class]="attributeOptionClass(option)"
-                          (click)="selectAttribute(group.attribute, option.value)"
-                          data-testid="item-attribute-value"
-                          [attr.data-attribute]="group.attribute"
-                          [attr.data-value]="option.value"
-                          [attr.data-state]="option.disabled ? 'disabled' : option.selected ? 'selected' : 'available'"
-                        >
-                          {{ option.value }}
-                        </button>
-                      }
-                    </div>
-                  </fieldset>
-                }
-              </div>
-
-              @if (isResolving()) {
-                <p class="text-sm text-slate-600" data-testid="item-variant-resolving">
-                  <ng-container i18n="@@item.variant.resolving"
-                    >Checking availability&hellip;</ng-container
-                  >
-                </p>
-              }
-
-              @if (resolveErrorMessage(); as message) {
-                <div data-testid="item-variant-error">
-                  <app-alert tone="error">{{ message }}</app-alert>
-                </div>
-              }
-
-              @if (!purchasable() && !isResolving() && resolveErrorMessage() === null) {
-                <!-- No price, no quantity box and no Add button until the backend has
-                     named a variant: a price here would be invented, and a quantity would
-                     be counted in a unit nobody has established yet. -->
-                <p class="text-sm text-slate-600" data-testid="item-variant-prompt">
-                  {{ selectPrompt() }}
-                </p>
-              }
-            } @else {
-              <!-- A family the storefront cannot offer - a Manufacturer-based one, or a
-                   template with nothing salable under it. The safe existing pattern, and
-                   deliberately no bespoke UI. -->
-              <div data-testid="item-family-unavailable">
-                <app-alert tone="info">
-                  <span i18n="@@item.family.unavailable"
-                    >This product cannot be configured online. Please contact us to
-                    order it.</span
-                  >
-                </app-alert>
-              </div>
-            }
-          }
-
-          <!-- Everything from here down needs a real, priced item: the resolved variant,
-               or the simple item this page was loaded for. A family on its own has no
-               rate, no UOM and no stock, so none of it is rendered speculatively. -->
-          @if (purchasable(); as detail) {
-          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span class="text-3xl font-semibold text-slate-900" data-testid="item-rate">
-              {{ detail.rate | currency: currency }}
-            </span>
-
-            @if (hasDiscount()) {
-              <s class="text-base text-slate-400" data-testid="item-base-price">
-                {{ detail.base_price | currency: currency }}
-              </s>
-              <app-badge tone="success" data-testid="item-discount" i18n="@@item.discount">
-                {{ detail.discount_percentage }}% off
-              </app-badge>
-            }
+        @if (item.isLoading() && payload() === undefined) {
+          <div class="mt-8 flex justify-center" data-testid="item-loading">
+            <app-spinner label="Loading item" i18n-label="@@item.loading" />
           </div>
-
-          <div class="-mt-3 flex flex-col gap-1">
-            <!-- The **selling** UOM: the unit the price above is for, and the unit the
-                 quantity below is counted in. ERPNext resolves it; the buyer never
-                 picks it, and there is no selector here for them to pick it with. -->
-            <p class="text-sm text-slate-600" data-testid="item-uom">
-              <ng-container i18n="@@item.pricedPer">Priced per</ng-container>
-              {{ detail.uom }}
-            </p>
-
-            <!-- Counted in the STOCK unit, which is a different unit from the one
-                 above whenever ERPNext sells in one and stocks in another: "Priced per
-                 Box" over "Available: 25 Nos" is a correct pair, not a mismatch.
-                 Nothing here restates it in the selling unit - that would be a
-                 conversion, and the backend owns those. -->
-            @if (availability(); as available) {
-              <p class="text-sm text-slate-600" data-testid="item-availability">
-                <ng-container i18n="@@item.available">Available</ng-container>:
-                {{ available.qty }} <span data-testid="item-availability-uom">{{ available.uom }}</span>
+        } @else if (notFound()) {
+          <div class="mt-6" data-testid="item-not-found">
+            <app-empty-state>
+              <h1 emptyTitle i18n="@@item.notFound.title">Item not found</h1>
+              <p emptyBody i18n="@@item.notFound.body">
+                This item may have been renamed or is no longer available to your account.
               </p>
-            }
-
-            @if (detail.pricing_rule_label; as label) {
-              <p class="text-sm text-slate-700" data-testid="item-pricing-rule">{{ label }}</p>
-            }
-          </div>
-
-          <!-- Only worth showing when tax actually applies; with no tax the breakdown
-               would just repeat the price on three lines. -->
-          @if (showsTaxBreakdown()) {
-            <dl
-              class="flex flex-col gap-1 rounded-md border border-slate-200 p-3 text-sm"
-              data-testid="item-tax-breakdown"
-            >
-              <div class="flex justify-between gap-4">
-                <dt i18n="@@item.netAmount">Net amount</dt>
-                <dd>{{ detail.net_amount | currency: currency }}</dd>
-              </div>
-              <div class="flex justify-between gap-4">
-                <dt data-testid="item-tax-label">
-                  {{ detail.tax_label ?? defaultTaxLabel }}
-                </dt>
-                <dd data-testid="item-tax-amount">
-                  {{ detail.tax_amount | currency: currency }}
-                </dd>
-              </div>
-              <div class="flex justify-between gap-4 font-medium">
-                <dt i18n="@@item.totalAmount">Total</dt>
-                <dd data-testid="item-total-amount">
-                  {{ detail.total_amount | currency: currency }}
-                </dd>
-              </div>
-            </dl>
-          }
-
-          <!-- The one thing this page exists for, so it is grouped and separated from
-               the description rather than being another paragraph in the stack. Still a
-               plain bordered block: an oversized hero treatment on a functional buy box
-               would be decoration competing with the price above it. -->
-          <form
-            class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-4"
-            (submit)="addToCart($event, detail.name)"
-          >
-            <!-- The label carries the selling UOM, so the accessible name is
-                 "Quantity to add (Box)" and a screen-reader user is told what they are
-                 counting before they type. The unit beside the box repeats it visually
-                 and is aria-hidden for exactly that reason. -->
-            <app-field
-              [label]="quantityLabel(detail.uom)"
-              hint="Added to whatever is already in your cart."
-              i18n-hint="@@item.quantity.hint"
-              [error]="quantityError()"
-            >
-              <div class="flex items-baseline gap-2">
-                <input
-                  type="number"
-                  step="any"
-                  inputmode="decimal"
-                  [value]="quantity()"
-                  (input)="onQuantityInput($event)"
-                  (change)="onQuantityCommitted($event)"
-                  data-testid="item-quantity"
-                  class="w-32 rounded-md border border-slate-300 px-3 py-2 text-base sm:text-sm"
-                />
-                <span
-                  aria-hidden="true"
-                  class="text-sm font-medium text-slate-700"
-                  data-testid="item-quantity-uom"
-                  >{{ detail.uom }}</span
-                >
-              </div>
-            </app-field>
-
-            <div>
-              <button
-                yob-button
-                type="submit"
-                class="w-full sm:w-auto sm:min-w-48"
-                [loading]="cart.isAdding()"
-                [disabled]="!isQuantityValid()"
-                data-testid="add-to-cart"
-                i18n="@@item.addToCart"
+              <a
+                emptyAction
+                routerLink="/catalog"
+                class="underline underline-offset-4"
+                i18n="@@item.notFound.action"
+                >Browse the catalog</a
               >
-                Add to cart
-              </button>
+            </app-empty-state>
+          </div>
+        } @else if (familyUnsupported()) {
+          <!-- A Manufacturer-based family. API 3.3.0 refuses it at get_item with
+               variant_family_unsupported, so there is no matrix to render - and "please try
+               again" would be false advice, because trying again cannot help. -->
+          <div class="mt-6" data-testid="item-family-unavailable">
+            <app-alert tone="info">
+              <span i18n="@@item.family.unavailable"
+                >This product cannot be configured online. Please contact us to order it.</span
+              >
+            </app-alert>
+          </div>
+        } @else if (item.error()) {
+          <div class="mt-6" data-testid="item-error">
+            <app-alert tone="error">
+              <span i18n="@@item.error">We could not load this item. Please try again.</span>
+            </app-alert>
+          </div>
+        } @else if (payload(); as payload) {
+          <article class="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2 md:items-start lg:gap-12">
+            <!-- Sticky on desktop so the product stays in view while the buy box and the
+                 specifications below it are read. -->
+            <div class="md:sticky md:top-24">
+              <!-- The buying surface's main image: larger than a card, the whole product
+                   visible, and capped in height so a tall portrait cannot push the price and
+                   Add to cart below the fold on a laptop. Named here rather than left with an
+                   empty alt - unlike a card, this image is the subject of the page. It is
+                   the only image in the storefront loaded with priority. -->
+              <!-- The resolved variant's own photograph once there is one, and the family's
+                   until then. A resolved variant with no image of its own keeps showing the
+                   template's - the backend said nothing about that variant's appearance, and
+                   blanking the page would be inventing an answer. -->
+              <app-media
+                class="overflow-hidden rounded-lg border border-slate-200"
+                [src]="displayImage()"
+                [alt]="displayName()"
+                ratio="hero"
+                [priority]="true"
+                sizes="(min-width: 768px) 50vw, 100vw"
+                testId="item-image"
+              />
             </div>
 
-            @if (addedMessage()) {
-              <div data-testid="add-to-cart-success">
-                <app-alert tone="success">
-                  <span i18n="@@item.added">Added to your cart.</span>
-                  <a routerLink="/cart" class="underline underline-offset-4" i18n="@@item.viewCart"
-                    >View cart</a
-                  >
-                </app-alert>
-              </div>
-            }
+            <div class="flex flex-col gap-5">
+              <header>
+                <h1
+                  class="text-2xl font-semibold tracking-tight break-words sm:text-3xl"
+                  data-testid="item-title"
+                >
+                  {{ displayName() }}
+                </h1>
+                <!-- The identity of what is actually being bought: the resolved variant's own
+                     SKU once one exists, the template's code while the buyer is still
+                     choosing. The template code is a label here and nowhere else - it is
+                     never sent as a purchase. -->
+                <p class="mt-1 text-sm break-words text-slate-500">
+                  <span class="sr-only" i18n="@@item.code">Item code</span>
+                  {{ displayCode() }}
+                </p>
+              </header>
 
-            @if (uomChangedMessage(); as message) {
-              <!-- The backend refused because the cart still holds this item in the unit
-                   it used to sell in. Nothing is retried, nothing is converted, and no
-                   unit is submitted - the buyer removes the old line and adds the
-                   product again, which is the only way to adopt the new selling UOM. -->
-              <div data-testid="add-to-cart-uom-changed">
-                <app-alert tone="error">
-                  <span>{{ message }}</span>
-                  <a routerLink="/cart" class="underline underline-offset-4" i18n="@@item.viewCart"
-                    >View cart</a
-                  >
-                </app-alert>
-              </div>
-            }
+              @if (family(); as family) {
+                @if (isConfigurable()) {
+                  <!-- One control group per attribute, in the backend's order. A group of
+                       radio-style choices, not a select: the options are few, comparing them
+                       matters, and a disabled option must stay visible so the buyer can see
+                       that Large exists but not in Orange. -->
+                  <div class="flex flex-col gap-4" data-testid="item-attributes">
+                    @for (group of attributeGroups(); track group.attribute) {
+                      <fieldset data-testid="item-attribute">
+                        <legend class="text-sm font-medium text-slate-900" data-testid="item-attribute-name">
+                          {{ group.attribute }}
+                        </legend>
 
-            @if (addErrorMessage(); as message) {
-              <div data-testid="add-to-cart-error">
-                <app-alert tone="error">{{ message }}</app-alert>
-              </div>
-            }
+                        <div class="mt-2 flex flex-wrap gap-2">
+                          @for (option of group.options; track option.value) {
+                            <!-- Disabled, never hidden: a combination that does not exist is
+                                 information the buyer needs. Availability comes only from the
+                                 backend's variants[] - no combination is generated here. -->
+                            <button
+                              type="button"
+                              role="radio"
+                              [attr.aria-checked]="option.selected"
+                              [disabled]="option.disabled"
+                              [class]="attributeOptionClass(option)"
+                              (click)="selectAttribute(group.attribute, option.value)"
+                              data-testid="item-attribute-value"
+                              [attr.data-attribute]="group.attribute"
+                              [attr.data-value]="option.value"
+                              [attr.data-state]="option.disabled ? 'disabled' : option.selected ? 'selected' : 'available'"
+                            >
+                              {{ option.value }}
+                            </button>
+                          }
+                        </div>
+                      </fieldset>
+                    }
+                  </div>
 
-            @if (addUnconfirmedMessage(); as message) {
-              <!-- Not an error and not a success. Adding is non-idempotent, so
-                   claiming either way would be a guess with a real cost. -->
-              <div data-testid="add-to-cart-unconfirmed">
-                <app-alert tone="info">{{ message }}</app-alert>
-              </div>
-            }
-          </form>
+                  @if (isResolving()) {
+                    <p class="text-sm text-slate-600" data-testid="item-variant-resolving">
+                      <ng-container i18n="@@item.variant.resolving"
+                        >Checking availability&hellip;</ng-container
+                      >
+                    </p>
+                  }
 
-          @if (detail.available_rules.length > 0) {
-            <section data-testid="item-offers">
-              <h2 class="text-sm font-semibold" i18n="@@item.offers.heading">Available offers</h2>
-              <ul class="mt-1 list-disc pl-5 text-sm text-slate-700">
-                @for (offer of detail.available_rules; track offer) {
-                  <li>{{ offer }}</li>
+                  @if (resolveErrorMessage(); as message) {
+                    <div data-testid="item-variant-error">
+                      <app-alert tone="error">{{ message }}</app-alert>
+                    </div>
+                  }
+
+                  @if (!purchasable() && !isResolving() && resolveErrorMessage() === null) {
+                    <!-- No price, no quantity box and no Add button until the backend has
+                         named a variant: a price here would be invented, and a quantity would
+                         be counted in a unit nobody has established yet. -->
+                    <p class="text-sm text-slate-600" data-testid="item-variant-prompt">
+                      {{ selectPrompt() }}
+                    </p>
+                  }
+                } @else {
+                  <!-- A family the storefront cannot offer - a Manufacturer-based one, or a
+                       template with nothing salable under it. The safe existing pattern, and
+                       deliberately no bespoke UI. -->
+                  <div data-testid="item-family-unavailable">
+                    <app-alert tone="info">
+                      <span i18n="@@item.family.unavailable"
+                        >This product cannot be configured online. Please contact us to
+                        order it.</span
+                      >
+                    </app-alert>
+                  </div>
                 }
-              </ul>
-            </section>
-          }
-          }
-        </div>
-      </article>
-    }
+              }
 
+              <!-- Everything from here down needs a real, priced item: the resolved variant,
+                   or the simple item this page was loaded for. A family on its own has no
+                   rate, no UOM and no stock, so none of it is rendered speculatively. -->
+              @if (purchasable(); as detail) {
+              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span class="text-3xl font-semibold text-slate-900" data-testid="item-rate">
+                  {{ detail.rate | currency: currency }}
+                </span>
+
+                @if (hasDiscount()) {
+                  <s class="text-base text-slate-400" data-testid="item-base-price">
+                    {{ detail.base_price | currency: currency }}
+                  </s>
+                  <app-badge tone="success" data-testid="item-discount" i18n="@@item.discount">
+                    {{ detail.discount_percentage }}% off
+                  </app-badge>
+                }
+              </div>
+
+              <div class="-mt-3 flex flex-col gap-1">
+                <!-- The **selling** UOM: the unit the price above is for, and the unit the
+                     quantity below is counted in. ERPNext resolves it; the buyer never
+                     picks it, and there is no selector here for them to pick it with. -->
+                <p class="text-sm text-slate-600" data-testid="item-uom">
+                  <ng-container i18n="@@item.pricedPer">Priced per</ng-container>
+                  {{ detail.uom }}
+                </p>
+
+                <!-- Counted in the STOCK unit, which is a different unit from the one
+                     above whenever ERPNext sells in one and stocks in another: "Priced per
+                     Box" over "Available: 25 Nos" is a correct pair, not a mismatch.
+                     Nothing here restates it in the selling unit - that would be a
+                     conversion, and the backend owns those. -->
+                @if (availability(); as available) {
+                  <p class="text-sm text-slate-600" data-testid="item-availability">
+                    <ng-container i18n="@@item.available">Available</ng-container>:
+                    {{ available.qty }} <span data-testid="item-availability-uom">{{ available.uom }}</span>
+                  </p>
+                }
+
+                @if (detail.pricing_rule_label; as label) {
+                  <p class="text-sm text-slate-700" data-testid="item-pricing-rule">{{ label }}</p>
+                }
+              </div>
+
+              <!-- Only worth showing when tax actually applies; with no tax the breakdown
+                   would just repeat the price on three lines. -->
+              @if (showsTaxBreakdown()) {
+                <dl
+                  class="flex flex-col gap-1 rounded-md border border-slate-200 p-3 text-sm"
+                  data-testid="item-tax-breakdown"
+                >
+                  <div class="flex justify-between gap-4">
+                    <dt i18n="@@item.netAmount">Net amount</dt>
+                    <dd>{{ detail.net_amount | currency: currency }}</dd>
+                  </div>
+                  <div class="flex justify-between gap-4">
+                    <dt data-testid="item-tax-label">
+                      {{ detail.tax_label ?? defaultTaxLabel }}
+                    </dt>
+                    <dd data-testid="item-tax-amount">
+                      {{ detail.tax_amount | currency: currency }}
+                    </dd>
+                  </div>
+                  <div class="flex justify-between gap-4 font-medium">
+                    <dt i18n="@@item.totalAmount">Total</dt>
+                    <dd data-testid="item-total-amount">
+                      {{ detail.total_amount | currency: currency }}
+                    </dd>
+                  </div>
+                </dl>
+              }
+
+              <!-- The one thing this page exists for, so it is grouped and separated from
+                   the description rather than being another paragraph in the stack. Still a
+                   plain bordered block: an oversized hero treatment on a functional buy box
+                   would be decoration competing with the price above it. -->
+              <form
+                class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-4"
+                (submit)="addToCart($event, detail.name)"
+              >
+                <!-- The label carries the selling UOM, so the accessible name is
+                     "Quantity to add (Box)" and a screen-reader user is told what they are
+                     counting before they type. The unit beside the box repeats it visually
+                     and is aria-hidden for exactly that reason. -->
+                <app-field
+                  [label]="quantityLabel(detail.uom)"
+                  hint="Added to whatever is already in your cart."
+                  i18n-hint="@@item.quantity.hint"
+                  [error]="quantityError()"
+                >
+                  <div class="flex items-baseline gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      inputmode="decimal"
+                      [value]="quantity()"
+                      (input)="onQuantityInput($event)"
+                      (change)="onQuantityCommitted($event)"
+                      data-testid="item-quantity"
+                      class="w-32 rounded-md border border-slate-300 px-3 py-2 text-base sm:text-sm"
+                    />
+                    <span
+                      aria-hidden="true"
+                      class="text-sm font-medium text-slate-700"
+                      data-testid="item-quantity-uom"
+                      >{{ detail.uom }}</span
+                    >
+                  </div>
+                </app-field>
+
+                <div>
+                  <button
+                    yob-button
+                    type="submit"
+                    class="w-full sm:w-auto sm:min-w-48"
+                    [loading]="cart.isAdding()"
+                    [disabled]="!isQuantityValid()"
+                    data-testid="add-to-cart"
+                    i18n="@@item.addToCart"
+                  >
+                    Add to cart
+                  </button>
+                </div>
+
+                @if (addedMessage()) {
+                  <div data-testid="add-to-cart-success">
+                    <app-alert tone="success">
+                      <span i18n="@@item.added">Added to your cart.</span>
+                      <a routerLink="/cart" class="underline underline-offset-4" i18n="@@item.viewCart"
+                        >View cart</a
+                      >
+                    </app-alert>
+                  </div>
+                }
+
+                @if (uomChangedMessage(); as message) {
+                  <!-- The backend refused because the cart still holds this item in the unit
+                       it used to sell in. Nothing is retried, nothing is converted, and no
+                       unit is submitted - the buyer removes the old line and adds the
+                       product again, which is the only way to adopt the new selling UOM. -->
+                  <div data-testid="add-to-cart-uom-changed">
+                    <app-alert tone="error">
+                      <span>{{ message }}</span>
+                      <a routerLink="/cart" class="underline underline-offset-4" i18n="@@item.viewCart"
+                        >View cart</a
+                      >
+                    </app-alert>
+                  </div>
+                }
+
+                @if (addErrorMessage(); as message) {
+                  <div data-testid="add-to-cart-error">
+                    <app-alert tone="error">{{ message }}</app-alert>
+                  </div>
+                }
+
+                @if (addUnconfirmedMessage(); as message) {
+                  <!-- Not an error and not a success. Adding is non-idempotent, so
+                       claiming either way would be a guess with a real cost. -->
+                  <div data-testid="add-to-cart-unconfirmed">
+                    <app-alert tone="info">{{ message }}</app-alert>
+                  </div>
+                }
+              </form>
+
+              @if (detail.available_rules.length > 0) {
+                <section data-testid="item-offers">
+                  <h2 class="text-sm font-semibold" i18n="@@item.offers.heading">Available offers</h2>
+                  <ul class="mt-1 list-disc pl-5 text-sm text-slate-700">
+                    @for (offer of detail.available_rules; track offer) {
+                      <li>{{ offer }}</li>
+                    }
+                  </ul>
+                </section>
+              }
+              }
+            </div>
+          </article>
+        }
+
+      </div>
+    </section>
     <yob-content-slot routeKey="product" slotKey="below_product" />
   `,
 })

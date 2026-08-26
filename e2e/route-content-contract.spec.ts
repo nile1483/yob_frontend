@@ -69,9 +69,24 @@ function sourceFiles(dir: string): string[] {
 
 const APP_FILES = sourceFiles(resolve(process.cwd(), 'src/app'));
 
-test.describe('system route content contract (API 3.5.0)', () => {
+/**
+ * A file's code, with its prose removed.
+ *
+ * These scans look for what the application *does*, and this repository documents its
+ * decisions at length - `content-section.ts` explains at some length why it does not use
+ * `100vw`, which a naive grep reads as an offence. Comments are stripped so a scan
+ * cannot be tripped by a file describing the very rule it is obeying.
+ */
+function code(file: string): string {
+  return readFileSync(file, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^\s*\/\/.*$/gm, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+}
+
+test.describe('system route content contract (API 3.6.0)', () => {
   test('the mirrored contract is present, versioned and identical in both locations', () => {
-    expect(REFERENCE.info.version).toBe('3.5.0');
+    expect(REFERENCE.info.version).toBe('3.6.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(publishedSlots(HANDOFF)).toEqual(publishedSlots(REFERENCE));
   });
@@ -186,6 +201,75 @@ test.describe('every declared slot usage is a real position', () => {
     const offenders = declaredUsages().filter((usage) =>
       excludedAreas.some((area) => usage.file.includes(area)),
     );
+
+    expect(offenders).toEqual([]);
+  });
+});
+
+test.describe('the width architecture is source-controlled (Phase 25J)', () => {
+  test('no section background is built from viewport units', () => {
+    // `100vw` includes the scrollbar gutter, so a full-bleed band built from it is a few
+    // pixels wider than the page on every desktop with a classic scrollbar - which is
+    // precisely the horizontal overflow the layout suite fails on. `width: 100%` of a
+    // full-width `main` is the correct primitive and the one this phase uses.
+    // Scoped to how an element is SIZED. `100vw` inside an <img sizes> attribute is the
+    // correct use of the unit - it tells the browser how wide the image will render -
+    // and has nothing to do with a section background.
+    const offenders = APP_FILES.filter((file) =>
+      /\b(w-screen|min-w-screen)\b|w-\[100vw\]|width:\s*100vw/.test(code(file)),
+    ).map((file) => file.replace(`${process.cwd()}/`, ''));
+
+    expect(offenders).toEqual([]);
+  });
+
+  test('no section class is constructed from a backend value', () => {
+    // Tailwind compiles the classes it can see. An interpolated `yob-section-${style}`
+    // would name a class that exists in the DOM and nowhere in the stylesheet, and would
+    // also hand a backend value straight into the class attribute.
+    // Specs excluded, as elsewhere: `content-section.spec.ts` asserts this exact string
+    // is absent from the DOM, so it necessarily contains it.
+    const offenders = APP_FILES.filter(
+      (file) => !file.endsWith('.spec.ts') && /yob-section-\$\{|section-\$\{/.test(code(file)),
+    ).map((file) => file.replace(`${process.cwd()}/`, ''));
+
+    expect(offenders).toEqual([]);
+  });
+
+  test('the five published styles are the five the SPA maps', () => {
+    const published = REFERENCE.components.schemas['SectionStyle'] as unknown as {
+      enum?: readonly string[];
+    };
+    expect(published.enum).toEqual(['default', 'muted', 'brand_soft', 'accent', 'dark']);
+
+    // Every non-default style needs a surface in the stylesheet, or a merchant could
+    // select a band that renders as nothing.
+    const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+    for (const style of published.enum!.filter((s) => s !== 'default')) {
+      expect(styles, `no surface defined for ${style}`).toContain(
+        `.yob-section-${style.replace('_', '-')}`,
+      );
+    }
+  });
+
+  test('the content column is defined exactly once', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+    const definitions = styles.match(/^\s*\.yob-content-container\s*\{/gm) ?? [];
+
+    // One definition, so the header, the footer, a page column and a block's column
+    // cannot drift into three slightly different widths.
+    expect(definitions).toHaveLength(1);
+    expect(styles).toContain('max-w-6xl');
+  });
+
+  test('only the content domain decides a band style', () => {
+    // An application page may open a band, but the surface on it must never come from a
+    // merchant. Nothing outside the content domain should mention a section style at all.
+    const offenders = APP_FILES.filter((file) => {
+      if (file.includes('/domains/content/') || file.endsWith('.spec.ts')) {
+        return false;
+      }
+      return /yob-section-|section_style|SectionStyle/.test(code(file));
+    }).map((file) => file.replace(`${process.cwd()}/`, ''));
 
     expect(offenders).toEqual([]);
   });

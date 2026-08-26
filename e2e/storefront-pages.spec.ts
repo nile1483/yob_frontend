@@ -154,7 +154,9 @@ test.describe('storefront page', () => {
     await block(page, 'promo_grid').getByTestId('destination-link').first().click();
 
     await expect(page).toHaveURL('/pages/support');
-    await expect(page.getByTestId('page-block')).toHaveCount(1);
+    // Support copy, plus the Block it shares with Home under a different band - the
+    // Phase 25I guarantee that a style belongs to the placement, not to the Block.
+    await expect(page.getByTestId('page-block')).toHaveCount(2);
     await expect(page.locator('body')).not.toContainText('Who we are');
     await expect(page.getByTestId('storefront-page')).toHaveAttribute('data-slug', 'support');
   });

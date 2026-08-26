@@ -60,6 +60,22 @@ const RICH_TEXT_HTML =
   '<script>window.__yobXss = true;</script>' +
   '<img src="x" onerror="window.__yobXss = true">';
 
+/**
+ * One Block, reused at two placements.
+ *
+ * The backend's Phase 25I guarantee: `section_style` is set per **placement**, never on
+ * the reusable Block, so the same row comes back `muted` on a page and `dark` on a
+ * route. Spread here rather than duplicated, so the two placements cannot drift into
+ * being different blocks that merely look related.
+ */
+const SHARED_WELCOME = {
+  type: 'rich_text',
+  block_name: 'Shared welcome',
+  title: 'Trade counter open six days',
+  html: '<p>Collect from the counter or have it delivered.</p>',
+  text_alignment: 'left',
+} as const;
+
 const ABOUT_PAGE: StorefrontPageDto = {
   slug: 'about-us',
   title: 'About Us',
@@ -69,6 +85,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
     {
       type: 'image_banner',
       block_name: 'Hero banner',
+      section_style: 'dark',
       desktop_image: PAGE_MEDIA_DESKTOP,
       mobile_image: PAGE_MEDIA_MOBILE,
       alt_text: 'Our warehouse',
@@ -85,6 +102,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
     {
       type: 'rich_text',
       block_name: 'Intro copy',
+      section_style: 'muted',
       title: 'Who we are',
       html: RICH_TEXT_HTML,
       text_alignment: 'center',
@@ -92,6 +110,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
     {
       type: 'banner_carousel',
       block_name: 'Seasonal carousel',
+      section_style: 'brand_soft',
       auto_play: true,
       interval_ms: 3000,
       desktop_height_px: 320,
@@ -136,6 +155,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
     {
       type: 'product_grid',
       block_name: 'Featured safety',
+      section_style: 'accent',
       card_type: 'square',
       item_limit: 12,
       category: 'safety-equipment',
@@ -145,6 +165,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
     {
       type: 'promo_grid',
       block_name: 'Promotions',
+      section_style: 'default',
       cards_per_row: 3,
       desktop_height_px: 240,
       mobile_height_px: 180,
@@ -198,10 +219,13 @@ const SUPPORT_PAGE: StorefrontPageDto = {
     {
       type: 'rich_text',
       block_name: 'Support copy',
+      section_style: 'muted',
       title: 'Contact us',
       html: '<p>Call the trade desk on 0800 000 000.</p>',
       text_alignment: 'left',
     },
+    // The same Block that Home places as `dark`.
+    { ...SHARED_WELCOME, section_style: 'brand_soft' },
   ],
 };
 
@@ -217,13 +241,96 @@ const FUTURE_PAGE: StorefrontPageDto = {
   meta_title: null,
   meta_description: null,
   blocks: [
-    { type: 'video_hero', block_name: 'Video hero' } as unknown as StorefrontPageDto['blocks'][number],
+    {
+      type: 'video_hero',
+      block_name: 'Video hero',
+      section_style: 'default',
+    } as unknown as StorefrontPageDto['blocks'][number],
     {
       type: 'rich_text',
       block_name: 'Still rendered',
+      section_style: 'default',
       title: 'Still here',
       html: '<p>This block renders even though the one above it is unknown.</p>',
       text_alignment: 'left',
+    },
+  ],
+};
+
+/**
+ * Every block type, all of them on a `dark` band.
+ *
+ * A fixture rather than a scenario because the question it answers is permanent: a dark
+ * section sets a light foreground, and some of the things inside it - a badge, an image
+ * frame - carry a light surface of their own. Those must keep their own foreground, or a
+ * card's own text goes light-on-light. `e2e/dark-section.spec.ts` measures the computed
+ * colours here.
+ */
+const DARK_BAND_PAGE: StorefrontPageDto = {
+  slug: 'dark-band',
+  title: 'Dark band',
+  meta_title: null,
+  meta_description: null,
+  blocks: [
+    {
+      type: 'rich_text',
+      block_name: 'Dark prose',
+      section_style: 'dark',
+      title: 'Ordinary prose on a dark band',
+      html: '<p>This paragraph has no surface of its own.</p>',
+      text_alignment: 'left',
+    },
+    {
+      type: 'product_grid',
+      block_name: 'Dark grid',
+      section_style: 'dark',
+      card_type: 'square',
+      item_limit: 12,
+      // Fasteners carry a discount, so a card renders its own surfaced Badge.
+      category: 'fasteners',
+      items: MOCK_ITEMS_BY_CATEGORY['fasteners'] ?? [],
+    },
+    {
+      type: 'promo_grid',
+      block_name: 'Dark promos',
+      section_style: 'dark',
+      cards_per_row: 2,
+      desktop_height_px: 200,
+      mobile_height_px: 160,
+      cards: [
+        {
+          desktop_image: IMAGE_LANDSCAPE,
+          mobile_image: null,
+          title: 'Promo on a dark band',
+          alt_text: 'Promo',
+          destination: null,
+        },
+      ],
+    },
+    {
+      type: 'banner_carousel',
+      block_name: 'Dark carousel',
+      section_style: 'dark',
+      auto_play: false,
+      interval_ms: null,
+      desktop_height_px: 260,
+      mobile_height_px: 180,
+      slides: [
+        {
+          desktop_image: IMAGE_LANDSCAPE,
+          mobile_image: null,
+          title: 'Slide one',
+          alt_text: 'Slide one',
+          destination: null,
+        },
+        {
+          desktop_image: IMAGE_SQUARE,
+          mobile_image: null,
+          title: 'Slide two',
+          alt_text: 'Slide two',
+          destination: null,
+        },
+      ],
     },
   ],
 };
@@ -232,6 +339,7 @@ export const MOCK_PAGES_BY_SLUG: Readonly<Record<string, StorefrontPageDto>> = {
   'about-us': ABOUT_PAGE,
   support: SUPPORT_PAGE,
   future: FUTURE_PAGE,
+  'dark-band': DARK_BAND_PAGE,
 };
 
 
@@ -274,6 +382,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'image_banner',
             block_name: 'Home hero',
+            section_style: 'dark',
             desktop_image: ROUTE_MEDIA,
             mobile_image: IMAGE_SQUARE,
             alt_text: 'Everything for the trade',
@@ -296,6 +405,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'rich_text',
             block_name: 'Home welcome',
+            section_style: 'default',
             title: 'Welcome back',
             html: '<p>Your trade prices, ready to order.</p>',
             text_alignment: 'left',
@@ -303,6 +413,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'product_grid',
             block_name: 'Home featured',
+            section_style: 'muted',
             card_type: 'square',
             item_limit: 12,
             category: 'safety-equipment',
@@ -315,9 +426,12 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
       {
         key: 'bottom',
         blocks: [
+          // The same Block `support` places as `brand_soft`, in a different band.
+          { ...SHARED_WELCOME, section_style: 'dark' },
           {
             type: 'promo_grid',
             block_name: 'Home promos',
+            section_style: 'default',
             cards_per_row: 2,
             desktop_height_px: 220,
             mobile_height_px: 160,
@@ -358,6 +472,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'rich_text',
             block_name: 'Delivery notice',
+            section_style: 'accent',
             title: null,
             html: '<p>Free delivery on orders over 5000.</p>',
             text_alignment: 'center',
@@ -370,6 +485,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'image_banner',
             block_name: 'Cart footer banner',
+            section_style: 'default',
             desktop_image: ROUTE_MEDIA,
             mobile_image: null,
             alt_text: 'Bulk order desk',
@@ -391,6 +507,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'rich_text',
             block_name: 'Category notice',
+            section_style: 'muted',
             title: null,
             html: '<p>Bulk pricing applies from 100 units.</p>',
             text_alignment: 'left',
@@ -411,6 +528,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'rich_text',
             block_name: 'Product footer',
+            section_style: 'muted',
             title: 'Need a different size?',
             html: '<p>Call the trade desk on 0800 000 000.</p>',
             text_alignment: 'left',
@@ -429,6 +547,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'rich_text',
             block_name: 'Orders notice',
+            section_style: 'brand_soft',
             title: null,
             html: '<p>Orders placed before 3pm ship the same day.</p>',
             text_alignment: 'left',
@@ -449,6 +568,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
           {
             type: 'rich_text',
             block_name: 'Order footer',
+            section_style: 'default',
             title: null,
             html: '<p>Questions about this order? Quote its number.</p>',
             text_alignment: 'left',

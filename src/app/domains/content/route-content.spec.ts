@@ -213,9 +213,15 @@ describe('system route content', () => {
       // component `/pages/:slug` renders. A slot that had its own dispatch would be a
       // second place for a block type to be added.
       const types = view.all('page-block').map((block) => block.getAttribute('data-block-type'));
-      expect(types).toEqual(['image_banner', 'rich_text', 'product_grid', 'promo_grid']);
+      expect(types).toEqual([
+        'image_banner',
+        'rich_text',
+        'product_grid',
+        'rich_text',
+        'promo_grid',
+      ]);
       expect(view.all('block-image-banner')).toHaveLength(1);
-      expect(view.all('block-rich-text')).toHaveLength(1);
+      expect(view.all('block-rich-text')).toHaveLength(2);
       expect(view.all('block-product-grid')).toHaveLength(1);
       expect(view.all('block-promo-grid')).toHaveLength(1);
     });

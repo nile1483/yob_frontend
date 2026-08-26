@@ -96,238 +96,254 @@ const CONTACT_KEYS = ['first_name', 'last_name', 'email', 'phone'] as const;
   selector: 'app-account-page',
   imports: [AddressForm, Alert, Button, ConfirmDelete, ContactForm, EmptyState, PageHeader, Spinner, ContentSlot],
   template: `
-    <app-page-header
-      heading="Your account"
-      i18n-heading="@@account.heading"
-      lead="Manage the addresses and contacts used when you place an order."
-      i18n-lead="@@account.intro"
-    />
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section account-section">
+      <div class="yob-content-container">
+        <app-page-header
+          heading="Your account"
+          i18n-heading="@@account.heading"
+          lead="Manage the addresses and contacts used when you place an order."
+          i18n-lead="@@account.intro"
+        />
+
+      </div>
+    </section>
 
     <!-- Merchant content for this route. The position is ours; what appears
          in it is the merchant's, and an empty slot renders nothing. -->
     <yob-content-slot routeKey="account" slotKey="above_content" />
 
-    @if (notice(); as message) {
-      <div class="mt-6" aria-live="polite" data-testid="account-notice">
-        <app-alert [tone]="noticeTone()">{{ message }}</app-alert>
-      </div>
-    }
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section account-section">
+      <div class="yob-content-container">
 
-    <!-- ================================================================ addresses -->
-    <section class="mt-8" aria-labelledby="account-addresses-heading">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="account-addresses-heading" class="text-base font-semibold text-slate-900"
-            i18n="@@account.addresses.heading">Addresses</h2>
-
-        @if (!creatingAddress()) {
-          <button yob-button variant="secondary" size="sm" type="button"
-                  (click)="openCreateAddress()"
-                  data-testid="account-add-address" i18n="@@account.addresses.add">
-            Add address
-          </button>
+        @if (notice(); as message) {
+          <div class="mt-6" aria-live="polite" data-testid="account-notice">
+            <app-alert [tone]="noticeTone()">{{ message }}</app-alert>
+          </div>
         }
-      </div>
 
-      @if (creatingAddress()) {
-        <app-address-form
-          [config]="newAddressConfig"
-          [pending]="saving()"
-          [error]="formError()"
-          [fieldErrors]="fieldErrors()"
-          (submitted)="onCreateAddress($event)"
-          (cancelled)="closeEditors()"
-        />
-      }
+        <!-- ================================================================ addresses -->
+        <section class="mt-8" aria-labelledby="account-addresses-heading">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="account-addresses-heading" class="text-base font-semibold text-slate-900"
+                i18n="@@account.addresses.heading">Addresses</h2>
 
-      @if (addresses.isLoading()) {
-        <div class="mt-6 flex justify-center" data-testid="addresses-loading">
-          <app-spinner label="Loading addresses" i18n-label="@@account.addresses.loading" />
-        </div>
-      } @else if (addresses.error()) {
-        <div class="mt-6" data-testid="addresses-error">
-          <app-alert tone="error">
-            <span i18n="@@account.addresses.error">
-              We could not load your addresses. Please try again.
-            </span>
-          </app-alert>
-        </div>
-      } @else if ((addresses.value() ?? []).length === 0) {
-        <div class="mt-6" data-testid="addresses-empty">
-          <app-empty-state>
-            <h3 emptyTitle i18n="@@account.addresses.empty.title">No saved addresses</h3>
-            <p emptyBody i18n="@@account.addresses.empty.body">
-              Addresses you add will be available at checkout.
-            </p>
-          </app-empty-state>
-        </div>
-      } @else {
-        <!-- Divided rows, not a card each: these are the same kind of record repeated,
-             and a box around every one made the page read as an admin CRUD table. -->
-        <ul
-          class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200"
-          data-testid="address-list"
-        >
-          @for (address of addresses.value(); track address.name) {
-            <li class="p-4" data-testid="address-item">
-              @if (editingAddressValues(address.name); as initial) {
-                <app-address-form
-                  [config]="editAddressConfig"
-                  [initial]="initial"
-                  [pending]="saving()"
-                  [error]="formError()"
-                  [fieldErrors]="fieldErrors()"
-                  (submitted)="onUpdateAddress(address, $event)"
-                  (cancelled)="closeEditors()"
-                />
-              } @else {
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                  <div class="min-w-0">
-                    <p class="font-medium break-words" data-testid="address-item-title">
-                      {{ addressLabel(address) }}
-                    </p>
-                    @for (line of addressLines(address); track line) {
-                      <p class="text-sm break-words text-slate-600">{{ line }}</p>
-                    }
-                  </div>
+            @if (!creatingAddress()) {
+              <button yob-button variant="secondary" size="sm" type="button"
+                      (click)="openCreateAddress()"
+                      data-testid="account-add-address" i18n="@@account.addresses.add">
+                Add address
+              </button>
+            }
+          </div>
 
-                  @if (isConfirming('address', address.name)) {
-                    <app-confirm-delete
-                      [label]="addressLabel(address)"
-                      [pending]="deleting() === address.name"
-                      testId="address-confirm"
-                      (confirmed)="onDeleteAddress(address)"
-                      (cancelled)="cancelConfirm(address.name)"
+          @if (creatingAddress()) {
+            <app-address-form
+              [config]="newAddressConfig"
+              [pending]="saving()"
+              [error]="formError()"
+              [fieldErrors]="fieldErrors()"
+              (submitted)="onCreateAddress($event)"
+              (cancelled)="closeEditors()"
+            />
+          }
+
+          @if (addresses.isLoading()) {
+            <div class="mt-6 flex justify-center" data-testid="addresses-loading">
+              <app-spinner label="Loading addresses" i18n-label="@@account.addresses.loading" />
+            </div>
+          } @else if (addresses.error()) {
+            <div class="mt-6" data-testid="addresses-error">
+              <app-alert tone="error">
+                <span i18n="@@account.addresses.error">
+                  We could not load your addresses. Please try again.
+                </span>
+              </app-alert>
+            </div>
+          } @else if ((addresses.value() ?? []).length === 0) {
+            <div class="mt-6" data-testid="addresses-empty">
+              <app-empty-state>
+                <h3 emptyTitle i18n="@@account.addresses.empty.title">No saved addresses</h3>
+                <p emptyBody i18n="@@account.addresses.empty.body">
+                  Addresses you add will be available at checkout.
+                </p>
+              </app-empty-state>
+            </div>
+          } @else {
+            <!-- Divided rows, not a card each: these are the same kind of record repeated,
+                 and a box around every one made the page read as an admin CRUD table. -->
+            <ul
+              class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200"
+              data-testid="address-list"
+            >
+              @for (address of addresses.value(); track address.name) {
+                <li class="p-4" data-testid="address-item">
+                  @if (editingAddressValues(address.name); as initial) {
+                    <app-address-form
+                      [config]="editAddressConfig"
+                      [initial]="initial"
+                      [pending]="saving()"
+                      [error]="formError()"
+                      [fieldErrors]="fieldErrors()"
+                      (submitted)="onUpdateAddress(address, $event)"
+                      (cancelled)="closeEditors()"
                     />
                   } @else {
-                    <div class="flex shrink-0 flex-wrap gap-2">
-                      <button yob-button variant="secondary" size="sm" type="button"
-                              (click)="openEditAddress(address)"
-                              data-testid="address-edit" i18n="@@account.edit">Edit</button>
-                      <!-- Quiet until asked for. Deleting a saved address is a normal
-                           thing to want occasionally, and an outlined red control on
-                           every row made the page look like a list of hazards. The
-                           destructive weight appears on the confirmation, where the
-                           decision is actually made. -->
-                      <button yob-button variant="quiet-destructive" size="sm" type="button"
-                              (click)="openConfirm('address', address.name)"
-                              [attr.data-delete-for]="address.name"
-                              data-testid="address-delete" i18n="@@account.delete">Delete</button>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                      <div class="min-w-0">
+                        <p class="font-medium break-words" data-testid="address-item-title">
+                          {{ addressLabel(address) }}
+                        </p>
+                        @for (line of addressLines(address); track line) {
+                          <p class="text-sm break-words text-slate-600">{{ line }}</p>
+                        }
+                      </div>
+
+                      @if (isConfirming('address', address.name)) {
+                        <app-confirm-delete
+                          [label]="addressLabel(address)"
+                          [pending]="deleting() === address.name"
+                          testId="address-confirm"
+                          (confirmed)="onDeleteAddress(address)"
+                          (cancelled)="cancelConfirm(address.name)"
+                        />
+                      } @else {
+                        <div class="flex shrink-0 flex-wrap gap-2">
+                          <button yob-button variant="secondary" size="sm" type="button"
+                                  (click)="openEditAddress(address)"
+                                  data-testid="address-edit" i18n="@@account.edit">Edit</button>
+                          <!-- Quiet until asked for. Deleting a saved address is a normal
+                               thing to want occasionally, and an outlined red control on
+                               every row made the page look like a list of hazards. The
+                               destructive weight appears on the confirmation, where the
+                               decision is actually made. -->
+                          <button yob-button variant="quiet-destructive" size="sm" type="button"
+                                  (click)="openConfirm('address', address.name)"
+                                  [attr.data-delete-for]="address.name"
+                                  data-testid="address-delete" i18n="@@account.delete">Delete</button>
+                        </div>
+                      }
                     </div>
                   }
-                </div>
+                </li>
               }
-            </li>
+            </ul>
           }
-        </ul>
-      }
-    </section>
+        </section>
 
-    <!-- ================================================================= contacts -->
-    <section class="mt-10" aria-labelledby="account-contacts-heading">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="account-contacts-heading" class="text-base font-semibold text-slate-900"
-            i18n="@@account.contacts.heading">Contacts</h2>
+        <!-- ================================================================= contacts -->
+        <section class="mt-10" aria-labelledby="account-contacts-heading">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="account-contacts-heading" class="text-base font-semibold text-slate-900"
+                i18n="@@account.contacts.heading">Contacts</h2>
 
-        @if (!creatingContact()) {
-          <button yob-button variant="secondary" size="sm" type="button"
-                  (click)="openCreateContact()"
-                  data-testid="account-add-contact" i18n="@@account.contacts.add">
-            Add contact
-          </button>
-        }
-      </div>
+            @if (!creatingContact()) {
+              <button yob-button variant="secondary" size="sm" type="button"
+                      (click)="openCreateContact()"
+                      data-testid="account-add-contact" i18n="@@account.contacts.add">
+                Add contact
+              </button>
+            }
+          </div>
 
-      @if (creatingContact()) {
-        <app-contact-form
-          heading="New contact"
-          i18n-heading="@@account.contacts.newHeading"
-          [pending]="saving()"
-          [error]="formError()"
-          [fieldErrors]="fieldErrors()"
-          (submitted)="onCreateContact($event)"
-          (cancelled)="closeEditors()"
-        />
-      }
+          @if (creatingContact()) {
+            <app-contact-form
+              heading="New contact"
+              i18n-heading="@@account.contacts.newHeading"
+              [pending]="saving()"
+              [error]="formError()"
+              [fieldErrors]="fieldErrors()"
+              (submitted)="onCreateContact($event)"
+              (cancelled)="closeEditors()"
+            />
+          }
 
-      @if (contacts.isLoading()) {
-        <div class="mt-6 flex justify-center" data-testid="contacts-loading">
-          <app-spinner label="Loading contacts" i18n-label="@@account.contacts.loading" />
-        </div>
-      } @else if (contacts.error()) {
-        <div class="mt-6" data-testid="contacts-error">
-          <app-alert tone="error">
-            <span i18n="@@account.contacts.error">
-              We could not load your contacts. Please try again.
-            </span>
-          </app-alert>
-        </div>
-      } @else if ((contacts.value() ?? []).length === 0) {
-        <div class="mt-6" data-testid="contacts-empty">
-          <app-empty-state>
-            <h3 emptyTitle i18n="@@account.contacts.empty.title">No saved contacts</h3>
-            <p emptyBody i18n="@@account.contacts.empty.body">
-              Contacts you add will be available at checkout.
-            </p>
-          </app-empty-state>
-        </div>
-      } @else {
-        <ul
-          class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200"
-          data-testid="contact-list"
-        >
-          @for (contact of contacts.value(); track contact.name) {
-            <li class="p-4" data-testid="contact-item">
-              @if (editingContactValues(contact.name); as initial) {
-                <app-contact-form
-                  heading="Edit contact"
-                  i18n-heading="@@account.contacts.editHeading"
-                  submitLabel="Save changes"
-                  i18n-submitLabel="@@account.save"
-                  [initial]="initial"
-                  [pending]="saving()"
-                  [error]="formError()"
-                  [fieldErrors]="fieldErrors()"
-                  (submitted)="onUpdateContact(contact, $event)"
-                  (cancelled)="closeEditors()"
-                />
-              } @else {
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                  <div class="min-w-0">
-                    <p class="font-medium break-words" data-testid="contact-item-name">
-                      {{ contactLabel(contact) }}
-                    </p>
-                    @for (line of contactLines(contact); track line) {
-                      <p class="text-sm break-words text-slate-600">{{ line }}</p>
-                    }
-                  </div>
-
-                  @if (isConfirming('contact', contact.name)) {
-                    <app-confirm-delete
-                      [label]="contactLabel(contact)"
-                      [pending]="deleting() === contact.name"
-                      testId="contact-confirm"
-                      (confirmed)="onDeleteContact(contact)"
-                      (cancelled)="cancelConfirm(contact.name)"
+          @if (contacts.isLoading()) {
+            <div class="mt-6 flex justify-center" data-testid="contacts-loading">
+              <app-spinner label="Loading contacts" i18n-label="@@account.contacts.loading" />
+            </div>
+          } @else if (contacts.error()) {
+            <div class="mt-6" data-testid="contacts-error">
+              <app-alert tone="error">
+                <span i18n="@@account.contacts.error">
+                  We could not load your contacts. Please try again.
+                </span>
+              </app-alert>
+            </div>
+          } @else if ((contacts.value() ?? []).length === 0) {
+            <div class="mt-6" data-testid="contacts-empty">
+              <app-empty-state>
+                <h3 emptyTitle i18n="@@account.contacts.empty.title">No saved contacts</h3>
+                <p emptyBody i18n="@@account.contacts.empty.body">
+                  Contacts you add will be available at checkout.
+                </p>
+              </app-empty-state>
+            </div>
+          } @else {
+            <ul
+              class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200"
+              data-testid="contact-list"
+            >
+              @for (contact of contacts.value(); track contact.name) {
+                <li class="p-4" data-testid="contact-item">
+                  @if (editingContactValues(contact.name); as initial) {
+                    <app-contact-form
+                      heading="Edit contact"
+                      i18n-heading="@@account.contacts.editHeading"
+                      submitLabel="Save changes"
+                      i18n-submitLabel="@@account.save"
+                      [initial]="initial"
+                      [pending]="saving()"
+                      [error]="formError()"
+                      [fieldErrors]="fieldErrors()"
+                      (submitted)="onUpdateContact(contact, $event)"
+                      (cancelled)="closeEditors()"
                     />
                   } @else {
-                    <div class="flex shrink-0 flex-wrap gap-2">
-                      <button yob-button variant="secondary" size="sm" type="button"
-                              (click)="openEditContact(contact)"
-                              data-testid="contact-edit" i18n="@@account.edit">Edit</button>
-                      <button yob-button variant="quiet-destructive" size="sm" type="button"
-                              (click)="openConfirm('contact', contact.name)"
-                              [attr.data-delete-for]="contact.name"
-                              data-testid="contact-delete" i18n="@@account.delete">Delete</button>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                      <div class="min-w-0">
+                        <p class="font-medium break-words" data-testid="contact-item-name">
+                          {{ contactLabel(contact) }}
+                        </p>
+                        @for (line of contactLines(contact); track line) {
+                          <p class="text-sm break-words text-slate-600">{{ line }}</p>
+                        }
+                      </div>
+
+                      @if (isConfirming('contact', contact.name)) {
+                        <app-confirm-delete
+                          [label]="contactLabel(contact)"
+                          [pending]="deleting() === contact.name"
+                          testId="contact-confirm"
+                          (confirmed)="onDeleteContact(contact)"
+                          (cancelled)="cancelConfirm(contact.name)"
+                        />
+                      } @else {
+                        <div class="flex shrink-0 flex-wrap gap-2">
+                          <button yob-button variant="secondary" size="sm" type="button"
+                                  (click)="openEditContact(contact)"
+                                  data-testid="contact-edit" i18n="@@account.edit">Edit</button>
+                          <button yob-button variant="quiet-destructive" size="sm" type="button"
+                                  (click)="openConfirm('contact', contact.name)"
+                                  [attr.data-delete-for]="contact.name"
+                                  data-testid="contact-delete" i18n="@@account.delete">Delete</button>
+                        </div>
+                      }
                     </div>
                   }
-                </div>
+                </li>
               }
-            </li>
+            </ul>
           }
-        </ul>
-      }
-    </section>
+        </section>
 
+      </div>
+    </section>
     <yob-content-slot routeKey="account" slotKey="below_content" />
   `,
 })

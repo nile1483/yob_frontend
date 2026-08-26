@@ -106,6 +106,7 @@ describe('content blocks', () => {
       return {
         type: 'image_banner',
         block_name: 'Hero',
+        section_style: 'default',
         desktop_image: '/files/desktop.png',
         mobile_image: '/files/mobile.png',
         alt_text: 'Our warehouse',
@@ -204,6 +205,7 @@ describe('content blocks', () => {
       return {
         type: 'rich_text',
         block_name: 'Intro',
+        section_style: 'default',
         title: 'Who we are',
         html: '<p>Trusted since <strong>1998</strong>.</p>',
         text_alignment: 'center',
@@ -314,6 +316,7 @@ describe('content blocks', () => {
       return {
         type: 'banner_carousel',
         block_name: 'Seasonal',
+        section_style: 'default',
         auto_play: false,
         interval_ms: 3000,
         desktop_height_px: 320,
@@ -477,6 +480,7 @@ describe('content blocks', () => {
       return {
         type: 'product_grid',
         block_name: 'Featured',
+        section_style: 'default',
         card_type: 'square',
         item_limit: 12,
         category: 'fasteners',
@@ -608,6 +612,7 @@ describe('content blocks', () => {
       return {
         type: 'promo_grid',
         block_name: 'Promotions',
+        section_style: 'default',
         cards_per_row: 3,
         desktop_height_px: 240,
         mobile_height_px: 180,

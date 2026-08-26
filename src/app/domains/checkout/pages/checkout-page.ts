@@ -91,280 +91,286 @@ const CHECKOUT_STATE_ERROR_CODES: ReadonlySet<string> = new Set([
     Spinner,
   ],
   template: `
-    <app-page-header heading="Checkout" i18n-heading="@@checkout.heading" />
+    <!-- Application band. Checkout carries no content slot by decision, but it
+         still needs the column now that the shell main no longer supplies one. -->
+    <section class="yob-page-section checkout-section">
+      <div class="yob-content-container">
+        <app-page-header heading="Checkout" i18n-heading="@@checkout.heading" />
 
-    <!-- Outside every state branch: a selection failure must survive the cart being
-         reloaded underneath it, exactly as the cart page's reconciliation notice does. -->
-    @if (selectionErrorMessage(); as message) {
-      <div class="mt-6" data-testid="checkout-selection-error">
-        <app-alert tone="error">{{ message }}</app-alert>
-      </div>
-    }
+        <!-- Outside every state branch: a selection failure must survive the cart being
+             reloaded underneath it, exactly as the cart page's reconciliation notice does. -->
+        @if (selectionErrorMessage(); as message) {
+          <div class="mt-6" data-testid="checkout-selection-error">
+            <app-alert tone="error">{{ message }}</app-alert>
+          </div>
+        }
 
-    <!-- Also outside the branches, and for a sharper reason: a failed Proceed re-reads
-         the cart, and if the failure was an empty cart the page switches to the empty
-         state - taking any message rendered inside the populated branch with it. The
-         buyer would have pressed a button and seen nothing explain itself. -->
-    @if (proceedErrorMessage(); as message) {
-      <div class="mt-6" data-testid="checkout-proceed-error">
-        <app-alert tone="error">{{ message }}</app-alert>
-      </div>
-    }
+        <!-- Also outside the branches, and for a sharper reason: a failed Proceed re-reads
+             the cart, and if the failure was an empty cart the page switches to the empty
+             state - taking any message rendered inside the populated branch with it. The
+             buyer would have pressed a button and seen nothing explain itself. -->
+        @if (proceedErrorMessage(); as message) {
+          <div class="mt-6" data-testid="checkout-proceed-error">
+            <app-alert tone="error">{{ message }}</app-alert>
+          </div>
+        }
 
-    @if (showsCartLoading()) {
-      <div class="mt-8 flex justify-center" data-testid="checkout-loading">
-        <app-spinner label="Loading checkout" i18n-label="@@checkout.loading" />
-      </div>
-    } @else if (store.error()) {
-      <div class="mt-6" data-testid="checkout-cart-error">
-        <app-alert tone="error">
-          <span i18n="@@checkout.cart.error">We could not load your cart. Please try again.</span>
-        </app-alert>
-      </div>
-    } @else if (store.isEmpty()) {
-      <!-- No selections are offered and no setter is called: there is nothing to buy. -->
-      <div class="mt-8" data-testid="checkout-empty">
-        <app-empty-state>
-          <h2 emptyTitle i18n="@@checkout.empty.title">Your cart is empty</h2>
-          <p emptyBody i18n="@@checkout.empty.body">
-            Add something to your cart before checking out.
-          </p>
-          <a
-            emptyAction
-            routerLink="/catalog"
-            class="underline underline-offset-4"
-            i18n="@@checkout.empty.action"
-            >Browse the catalog</a
-          >
-        </app-empty-state>
-      </div>
-    } @else if (store.cart(); as cart) {
-      <!-- Three regions rather than two columns, because the *reading order* differs
-           from the visual arrangement. Stacked, a buyer must see what they are paying
-           for before the button that commits them: selections, then the summary, then
-           the action. Side by side, the summary belongs beside the selections and the
-           action below them. Explicit row/column placement gives both from one DOM
-           order, with no duplicated markup and nothing hidden per breakpoint. -->
-      <div class="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div class="flex flex-col gap-8 lg:col-start-1 lg:row-start-1">
-          <!-- ------------------------------------------------------ contact -->
-          <section data-testid="checkout-contact-section">
-            @if (contacts.isLoading()) {
-              <div class="flex justify-center py-4" data-testid="contacts-loading">
-                <app-spinner label="Loading contacts" i18n-label="@@checkout.contacts.loading" />
-              </div>
-            } @else if (contacts.error()) {
-              <app-alert tone="error" data-testid="contacts-error">
-                <span i18n="@@checkout.contacts.error">
-                  We could not load your contacts. Please try again.
-                </span>
-              </app-alert>
-            } @else {
-              <app-choice-list
-                legend="Contact person"
-                i18n-legend="@@checkout.contact.legend"
-                groupName="checkout-contact"
-                testId="checkout-contact"
-                emptyText="You have no saved contacts yet."
-                i18n-emptyText="@@checkout.contact.empty"
-                [options]="contactOptions()"
-                [selected]="store.contactName()"
-                [busy]="store.selecting() === 'contact'"
-                (choose)="onChooseContact($event)"
-              />
-
-              @if (contactFormOpen()) {
-                <app-contact-form
-                  [pending]="creatingContact()"
-                  [error]="createContactError()"
-                  [fieldErrors]="createContactFieldErrors()"
-                  (submitted)="onCreateContact($event)"
-                  (cancelled)="closeContactForm()"
-                />
-              } @else {
-                <button
-                  yob-button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  class="mt-3"
-                  (click)="openContactForm()"
-                  data-testid="checkout-add-contact"
-                  i18n="@@checkout.contact.add"
-                >
-                  Add new contact
-                </button>
-              }
-            }
-          </section>
-
-          <!-- ------------------------------------------------------ billing -->
-          <section data-testid="checkout-billing-section">
-            @if (addresses.isLoading()) {
-              <div class="flex justify-center py-4" data-testid="addresses-loading">
-                <app-spinner label="Loading addresses" i18n-label="@@checkout.addresses.loading" />
-              </div>
-            } @else if (addresses.error()) {
-              <app-alert tone="error" data-testid="addresses-error">
-                <span i18n="@@checkout.addresses.error">
-                  We could not load your addresses. Please try again.
-                </span>
-              </app-alert>
-            } @else {
-              <app-choice-list
-                legend="Billing address"
-                i18n-legend="@@checkout.billing.legend"
-                groupName="checkout-billing"
-                testId="checkout-billing"
-                emptyText="You have no saved addresses yet."
-                i18n-emptyText="@@checkout.address.empty"
-                [options]="addressOptions()"
-                [selected]="store.billingAddressName()"
-                [busy]="store.selecting() === 'billing'"
-                (choose)="onChooseBilling($event)"
-              />
-
-              @if (addressContext() === 'billing') {
-                <app-address-form
-                  [pending]="creatingAddress()"
-                  [error]="createAddressError()"
-                  [fieldErrors]="createAddressFieldErrors()"
-                  (submitted)="onCreateAddress($event)"
-                  (cancelled)="closeAddressForm()"
-                />
-              } @else {
-                <button
-                  yob-button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  class="mt-3"
-                  (click)="openAddressForm('billing')"
-                  data-testid="checkout-add-billing-address"
-                  i18n="@@checkout.billing.add"
-                >
-                  Add new address
-                </button>
-              }
-            }
-          </section>
-
-          <!-- ----------------------------------------------------- shipping -->
-          <!-- Rendered purely from the cart's is_shippable, re-read on every response. -->
-          @if (store.isShippable()) {
-            <section data-testid="checkout-shipping-section">
-              @if (addresses.isLoading()) {
-                <div class="flex justify-center py-4">
-                  <app-spinner
-                    label="Loading addresses"
-                    i18n-label="@@checkout.addresses.loading"
+        @if (showsCartLoading()) {
+          <div class="mt-8 flex justify-center" data-testid="checkout-loading">
+            <app-spinner label="Loading checkout" i18n-label="@@checkout.loading" />
+          </div>
+        } @else if (store.error()) {
+          <div class="mt-6" data-testid="checkout-cart-error">
+            <app-alert tone="error">
+              <span i18n="@@checkout.cart.error">We could not load your cart. Please try again.</span>
+            </app-alert>
+          </div>
+        } @else if (store.isEmpty()) {
+          <!-- No selections are offered and no setter is called: there is nothing to buy. -->
+          <div class="mt-8" data-testid="checkout-empty">
+            <app-empty-state>
+              <h2 emptyTitle i18n="@@checkout.empty.title">Your cart is empty</h2>
+              <p emptyBody i18n="@@checkout.empty.body">
+                Add something to your cart before checking out.
+              </p>
+              <a
+                emptyAction
+                routerLink="/catalog"
+                class="underline underline-offset-4"
+                i18n="@@checkout.empty.action"
+                >Browse the catalog</a
+              >
+            </app-empty-state>
+          </div>
+        } @else if (store.cart(); as cart) {
+          <!-- Three regions rather than two columns, because the *reading order* differs
+               from the visual arrangement. Stacked, a buyer must see what they are paying
+               for before the button that commits them: selections, then the summary, then
+               the action. Side by side, the summary belongs beside the selections and the
+               action below them. Explicit row/column placement gives both from one DOM
+               order, with no duplicated markup and nothing hidden per breakpoint. -->
+          <div class="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div class="flex flex-col gap-8 lg:col-start-1 lg:row-start-1">
+              <!-- ------------------------------------------------------ contact -->
+              <section data-testid="checkout-contact-section">
+                @if (contacts.isLoading()) {
+                  <div class="flex justify-center py-4" data-testid="contacts-loading">
+                    <app-spinner label="Loading contacts" i18n-label="@@checkout.contacts.loading" />
+                  </div>
+                } @else if (contacts.error()) {
+                  <app-alert tone="error" data-testid="contacts-error">
+                    <span i18n="@@checkout.contacts.error">
+                      We could not load your contacts. Please try again.
+                    </span>
+                  </app-alert>
+                } @else {
+                  <app-choice-list
+                    legend="Contact person"
+                    i18n-legend="@@checkout.contact.legend"
+                    groupName="checkout-contact"
+                    testId="checkout-contact"
+                    emptyText="You have no saved contacts yet."
+                    i18n-emptyText="@@checkout.contact.empty"
+                    [options]="contactOptions()"
+                    [selected]="store.contactName()"
+                    [busy]="store.selecting() === 'contact'"
+                    (choose)="onChooseContact($event)"
                   />
-                </div>
-              } @else if (addresses.error()) {
-                <app-alert tone="error">
-                  <span i18n="@@checkout.addresses.error">
-                    We could not load your addresses. Please try again.
-                  </span>
-                </app-alert>
-              } @else {
-                <app-choice-list
-                  legend="Shipping address"
-                  i18n-legend="@@checkout.shipping.legend"
-                  groupName="checkout-shipping"
-                  testId="checkout-shipping"
-                  emptyText="You have no saved addresses yet."
-                  i18n-emptyText="@@checkout.address.empty"
-                  [options]="addressOptions()"
-                  [selected]="store.shippingAddressName()"
-                  [busy]="store.selecting() === 'shipping'"
-                  (choose)="onChooseShipping($event)"
-                />
 
-                @if (shipsToBillingAddress()) {
-                  <!-- Derived by comparing the two identifiers the cart returned. There
-                       is no "same as billing" flag in the contract and none is invented. -->
-                  <p
-                    class="mt-2 text-sm text-slate-600"
-                    data-testid="checkout-same-as-billing"
-                    i18n="@@checkout.shipping.sameAsBilling"
-                  >
-                    Same as your billing address.
+                  @if (contactFormOpen()) {
+                    <app-contact-form
+                      [pending]="creatingContact()"
+                      [error]="createContactError()"
+                      [fieldErrors]="createContactFieldErrors()"
+                      (submitted)="onCreateContact($event)"
+                      (cancelled)="closeContactForm()"
+                    />
+                  } @else {
+                    <button
+                      yob-button
+                      variant="secondary"
+                      size="sm"
+                      type="button"
+                      class="mt-3"
+                      (click)="openContactForm()"
+                      data-testid="checkout-add-contact"
+                      i18n="@@checkout.contact.add"
+                    >
+                      Add new contact
+                    </button>
+                  }
+                }
+              </section>
+
+              <!-- ------------------------------------------------------ billing -->
+              <section data-testid="checkout-billing-section">
+                @if (addresses.isLoading()) {
+                  <div class="flex justify-center py-4" data-testid="addresses-loading">
+                    <app-spinner label="Loading addresses" i18n-label="@@checkout.addresses.loading" />
+                  </div>
+                } @else if (addresses.error()) {
+                  <app-alert tone="error" data-testid="addresses-error">
+                    <span i18n="@@checkout.addresses.error">
+                      We could not load your addresses. Please try again.
+                    </span>
+                  </app-alert>
+                } @else {
+                  <app-choice-list
+                    legend="Billing address"
+                    i18n-legend="@@checkout.billing.legend"
+                    groupName="checkout-billing"
+                    testId="checkout-billing"
+                    emptyText="You have no saved addresses yet."
+                    i18n-emptyText="@@checkout.address.empty"
+                    [options]="addressOptions()"
+                    [selected]="store.billingAddressName()"
+                    [busy]="store.selecting() === 'billing'"
+                    (choose)="onChooseBilling($event)"
+                  />
+
+                  @if (addressContext() === 'billing') {
+                    <app-address-form
+                      [pending]="creatingAddress()"
+                      [error]="createAddressError()"
+                      [fieldErrors]="createAddressFieldErrors()"
+                      (submitted)="onCreateAddress($event)"
+                      (cancelled)="closeAddressForm()"
+                    />
+                  } @else {
+                    <button
+                      yob-button
+                      variant="secondary"
+                      size="sm"
+                      type="button"
+                      class="mt-3"
+                      (click)="openAddressForm('billing')"
+                      data-testid="checkout-add-billing-address"
+                      i18n="@@checkout.billing.add"
+                    >
+                      Add new address
+                    </button>
+                  }
+                }
+              </section>
+
+              <!-- ----------------------------------------------------- shipping -->
+              <!-- Rendered purely from the cart's is_shippable, re-read on every response. -->
+              @if (store.isShippable()) {
+                <section data-testid="checkout-shipping-section">
+                  @if (addresses.isLoading()) {
+                    <div class="flex justify-center py-4">
+                      <app-spinner
+                        label="Loading addresses"
+                        i18n-label="@@checkout.addresses.loading"
+                      />
+                    </div>
+                  } @else if (addresses.error()) {
+                    <app-alert tone="error">
+                      <span i18n="@@checkout.addresses.error">
+                        We could not load your addresses. Please try again.
+                      </span>
+                    </app-alert>
+                  } @else {
+                    <app-choice-list
+                      legend="Shipping address"
+                      i18n-legend="@@checkout.shipping.legend"
+                      groupName="checkout-shipping"
+                      testId="checkout-shipping"
+                      emptyText="You have no saved addresses yet."
+                      i18n-emptyText="@@checkout.address.empty"
+                      [options]="addressOptions()"
+                      [selected]="store.shippingAddressName()"
+                      [busy]="store.selecting() === 'shipping'"
+                      (choose)="onChooseShipping($event)"
+                    />
+
+                    @if (shipsToBillingAddress()) {
+                      <!-- Derived by comparing the two identifiers the cart returned. There
+                           is no "same as billing" flag in the contract and none is invented. -->
+                      <p
+                        class="mt-2 text-sm text-slate-600"
+                        data-testid="checkout-same-as-billing"
+                        i18n="@@checkout.shipping.sameAsBilling"
+                      >
+                        Same as your billing address.
+                      </p>
+                    }
+
+                    @if (addressContext() === 'shipping') {
+                      <app-address-form
+                        [pending]="creatingAddress()"
+                        [error]="createAddressError()"
+                        [fieldErrors]="createAddressFieldErrors()"
+                        (submitted)="onCreateAddress($event)"
+                        (cancelled)="closeAddressForm()"
+                      />
+                    } @else {
+                      <button
+                        yob-button
+                        variant="secondary"
+                        size="sm"
+                        type="button"
+                        class="mt-3"
+                        (click)="openAddressForm('shipping')"
+                        data-testid="checkout-add-shipping-address"
+                        i18n="@@checkout.shipping.add"
+                      >
+                        Add new address
+                      </button>
+                    }
+                  }
+                </section>
+              }
+
+            </div>
+
+            <!-- Sticky on desktop: the totals stay in view while a long address list is
+                 worked through, which is the whole reason for a second column. -->
+            <div class="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+              <div class="lg:sticky lg:top-24">
+                <app-checkout-summary [cart]="cart" />
+              </div>
+            </div>
+
+            <!-- ----------------------------------------- readiness and proceed -->
+            <div class="flex flex-col gap-6 lg:col-start-1 lg:row-start-2">
+              <section aria-live="polite" data-testid="checkout-readiness">
+                @if (isReady()) {
+                  <app-alert tone="success">
+                    <span i18n="@@checkout.ready">Ready to proceed.</span>
+                  </app-alert>
+                } @else {
+                  <p class="text-sm text-slate-600" data-testid="checkout-not-ready">
+                    {{ outstandingMessage() }}
                   </p>
                 }
+              </section>
 
-                @if (addressContext() === 'shipping') {
-                  <app-address-form
-                    [pending]="creatingAddress()"
-                    [error]="createAddressError()"
-                    [fieldErrors]="createAddressFieldErrors()"
-                    (submitted)="onCreateAddress($event)"
-                    (cancelled)="closeAddressForm()"
-                  />
-                } @else {
-                  <button
-                    yob-button
-                    variant="secondary"
-                    size="sm"
-                    type="button"
-                    class="mt-3"
-                    (click)="openAddressForm('shipping')"
-                    data-testid="checkout-add-shipping-address"
-                    i18n="@@checkout.shipping.add"
-                  >
-                    Add new address
-                  </button>
-                }
-              }
-            </section>
-          }
-
-        </div>
-
-        <!-- Sticky on desktop: the totals stay in view while a long address list is
-             worked through, which is the whole reason for a second column. -->
-        <div class="lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          <div class="lg:sticky lg:top-24">
-            <app-checkout-summary [cart]="cart" />
+              <div>
+                <!-- Disabled rather than hidden: a button that vanishes leaves the buyer
+                     wondering where checkout continues. The readiness line above says what
+                     is missing. Backend validation remains authoritative either way. -->
+                <!-- The only primary action on the page. Full width on a phone so it is a
+                     thumb target, and never competing with the supporting "Add new"
+                     buttons above, which are secondary for exactly that reason. -->
+                <button
+                  yob-button
+                  type="button"
+                  class="w-full sm:w-auto sm:min-w-56"
+                  [disabled]="!isReady()"
+                  [loading]="proceeding()"
+                  (click)="onProceedToPayment()"
+                  data-testid="checkout-proceed"
+                  i18n="@@checkout.proceed"
+                >
+                  Proceed to payment
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <!-- ----------------------------------------- readiness and proceed -->
-        <div class="flex flex-col gap-6 lg:col-start-1 lg:row-start-2">
-          <section aria-live="polite" data-testid="checkout-readiness">
-            @if (isReady()) {
-              <app-alert tone="success">
-                <span i18n="@@checkout.ready">Ready to proceed.</span>
-              </app-alert>
-            } @else {
-              <p class="text-sm text-slate-600" data-testid="checkout-not-ready">
-                {{ outstandingMessage() }}
-              </p>
-            }
-          </section>
-
-          <div>
-            <!-- Disabled rather than hidden: a button that vanishes leaves the buyer
-                 wondering where checkout continues. The readiness line above says what
-                 is missing. Backend validation remains authoritative either way. -->
-            <!-- The only primary action on the page. Full width on a phone so it is a
-                 thumb target, and never competing with the supporting "Add new"
-                 buttons above, which are secondary for exactly that reason. -->
-            <button
-              yob-button
-              type="button"
-              class="w-full sm:w-auto sm:min-w-56"
-              [disabled]="!isReady()"
-              [loading]="proceeding()"
-              (click)="onProceedToPayment()"
-              data-testid="checkout-proceed"
-              i18n="@@checkout.proceed"
-            >
-              Proceed to payment
-            </button>
-          </div>
-        </div>
+        }
       </div>
-    }
+    </section>
   `,
 })
 export class CheckoutPage {

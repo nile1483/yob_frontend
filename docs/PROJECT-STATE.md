@@ -128,6 +128,140 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Full-width content sections and a fixed inner column (Phase 25J, 2026-08-22)
+
+Frontend for backend Phase 25I, against API **3.6.0**. A layout refactor: **no business
+behaviour changed**. Pricing, variants, UOM, stock, cart, filters, navigation,
+route-content loading and Product Grid hydration are all untouched, and a request-log
+assertion re-proves the last of those.
+
+### What actually changed
+
+One thing. The shell's `main` used to carry the content column, so **every** routed page
+- and therefore every content block inside one - was capped at the content width and no
+block could paint a background past it.
+
+| | Before | After |
+| --- | --- | --- |
+| `main` | `mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 flex-1 py-8 sm:py-10` | `w-full flex-1 py-8 sm:py-10` |
+| the column | once, on `main` | once per band, inside it |
+| a block's background | capped at the column | spans the full width of `main` |
+
+The vertical padding stayed on `main`: it is the gap under the header, it is the same on
+every route, and pushing it into eight pages would be eight chances to disagree.
+
+### Two primitives, defined once
+
+`styles.css` owns both, because every page and every block uses them:
+
+- **`.yob-content-container`** - `mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8`. These
+  are the exact classes `main` carried before, **moved rather than re-chosen**, so the
+  width, the responsive padding and the alignment are unchanged. `SHELL_CONTAINER`
+  resolves to this same class, so the header, the footer and every column are one
+  definition and cannot drift.
+- **`.yob-page-section`** - `width: 100%`. Never `100vw`, which includes the scrollbar
+  gutter and is the usual source of horizontal overflow; a source scan enforces it.
+
+### `ContentSection`, and why it is one component
+
+Every block type needs the identical band and none of them should know it. So the wrapper
+is a single component that `ContentBlocks` stamps around each block - **not** logic added
+to the image banner, the rich text, the carousel, the product grid and the promo grid.
+A sixth block type gets banding for free, and no host page mentions a section style.
+
+Because `ContentBlocks` is the one renderer both `StorefrontPage` and `ContentSlot`
+already used, `/pages/:slug`, `/home` and all seven system route placements got this
+behaviour without a line of per-page code.
+
+**Each block is its own band**, so three consecutive blocks are three sections and a
+merchant can put a dark hero directly above a muted grid. Block-to-block spacing moved
+from `gap-10` on the list into padding on each section - a gap between two surfaces would
+show a stripe of page background between them. `default` uses `py-5`, which reproduces
+the previous 40px between consecutive blocks exactly.
+
+### The style mapping
+
+`section_style` is five approved words and nothing else - never a class, a colour or any
+CSS. They map through a **fixed table** written out in full, because Tailwind compiles
+the classes it can see and an interpolated `yob-section-${style}` would name a class that
+exists in the markup and nowhere in the stylesheet.
+
+| `section_style` | Surface | Token reused |
+| --- | --- | --- |
+| `default` | none - the ordinary page background | - |
+| `muted` | `bg-slate-50` | the neutral alert surface |
+| `brand_soft` | `bg-blue-50` | the badge info hue |
+| `accent` | `bg-amber-50` | the badge warning hue |
+| `dark` | `bg-slate-900 text-slate-100` | the primary button |
+
+No new colours. An unrecognised value falls back to `default` rather than reaching the
+DOM.
+
+**`dark` also remaps the foreground**, in one place. The blocks inside it hard-code the
+light-theme slate ramp - `text-slate-900` on a title, `border-slate-200` on a product
+card - and a utility class beats an inherited colour, so a band that only set `color`
+would render dark text on a dark ground. The ramp is remapped within that band using the
+same tokens, rather than teaching five components about dark mode or touching a single
+line of stored merchant HTML.
+
+Two things about those rules were got wrong first and are worth recording, because both
+failed silently and neither is obvious from reading the CSS.
+
+**Cascade layers beat specificity.** The overrides were written in `@layer components`,
+where plain `.text-slate-900` from the later `utilities` layer won *however specific* they
+were - so a dark band rendered slate-900 text on a slate-900 ground and no test noticed.
+They now live in `@layer utilities`, competing with the utilities they override, where
+ordinary specificity decides. A `:is()`-versus-`:where()` argument is beside the point
+across layers.
+
+**A component that paints its own light surface keeps its own foreground.** A badge is
+`bg-slate-100 text-slate-700` and a secondary button is `bg-white text-slate-900`;
+flipping their text would be light type on a light card. The obvious spelling - one flip
+rule with `:not(:is(.bg-white, …) *)` - is wrong, because `:not()` is not scoped to the
+band and the secure shell's own root carries `bg-white`, so every element in the
+application counted as surfaced and nothing was flipped at all. So it is **flip, then
+restore**: the flip claims the band, and a second, more specific set of rules - each
+anchored to `.yob-section-dark`, so it matches only surfaces *inside* it - hands back the
+components that brought a surface with them. The restore list is written out
+per-shade rather than compressed; the compressed version is what silently broke.
+
+`e2e/dark-section.spec.ts` measures **computed colour** through a canvas pixel readback -
+Tailwind v4 computes to `oklch()`, so parsing the colour string measures the wrong
+numbers - against a `dark-band` fixture carrying all four block types, and probes an
+injected `bg-white`/`text-slate-900` pairing to prove the exemption holds for components
+no block renders yet.
+
+### Application sections are source-owned
+
+Every application page now opens its own band with a semantic hook -
+`catalog-section`, `cart-section`, `order-detail-section` and so on - and the storefront
+column inside it. These are styling hooks for later; they carry **no** merchant surface,
+and a test asserts no application band ever does.
+
+That separation is the point of having two mechanisms: a Content Placement styles its own
+band, and nothing a merchant configures can reach the cart, the product page or the order
+list.
+
+`checkout-section` was added although Phase 25J did not list it. Checkout sits in the same
+`main` and would otherwise have gone edge-to-edge - a regression, not a feature.
+
+### The invariant that was at risk
+
+Phase 25H established that every page's heading starts at the same position, and
+`design.visual.spec.ts` enforces it. Removing the global column put that at risk, so each
+page's heading sits in its own band's column and the geometry is unchanged. A browser test
+now measures the brand, a page heading and a block's column and asserts all three share
+one x-position.
+
+### Contract discrepancies found
+
+None. API 3.6.0 is additive: one required field on `ContentBlock`, published as the
+reusable `SectionStyle` schema, always present.
+
+### Live smoke - PENDING
+
+No credentials in this environment.
+
 ## CONFIRMED - System route content slots and Home (Phase 25H, 2026-08-22)
 
 Frontend for backend Phase 25G, against API **3.5.0**. The same Content Blocks that
@@ -2285,6 +2419,7 @@ until the backend ships it.
 | Frontend Phase 25D - storefront navigation & category filters (API 3.4.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25E - storefront pages & content blocks (API 3.4.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25H - system route content slots & Home (API 3.5.0) | **PASS (live smoke pending)** |
+| Frontend Phase 25J - full-width content sections & fixed inner column (API 3.6.0) | **PASS (live smoke pending)** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

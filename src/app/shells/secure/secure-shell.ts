@@ -105,7 +105,21 @@ export class SecureShell {
   private readonly router = inject(Router);
 
   protected readonly container = SHELL_CONTAINER;
-  protected readonly mainClass = `${SHELL_CONTAINER} flex-1 py-8 sm:py-10`;
+
+  /**
+   * **Full width, and that is the change Phase 25J is about.**
+   *
+   * `main` used to carry the content container, so every routed page - and therefore
+   * every content block inside one - was confined to the column and no block could
+   * paint a background past it. The column moved down: each page and each content
+   * section now opens its own `.yob-content-container`, so a band can span the whole
+   * width while its content still lines up with the brand above it.
+   *
+   * The vertical padding stays here. It is the gap between the header and whatever the
+   * route draws first, it is the same on every route, and pushing it into eight pages
+   * would be eight chances for one of them to disagree.
+   */
+  protected readonly mainClass = 'w-full flex-1 py-8 sm:py-10';
   protected readonly footerClass = `${SHELL_CONTAINER} py-6 text-sm text-slate-600`;
   protected readonly signingOut = signal(false);
 

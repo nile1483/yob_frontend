@@ -123,7 +123,15 @@ describe('home', () => {
       const view = await open('/home');
 
       const byType = view.all('page-block').map((block) => block.getAttribute('data-block-type'));
-      expect(byType).toEqual(['image_banner', 'rich_text', 'product_grid', 'promo_grid']);
+      // The second rich text is the Block `support` also places - same Block, different
+      // band. See the section-style suite.
+      expect(byType).toEqual([
+        'image_banner',
+        'rich_text',
+        'product_grid',
+        'rich_text',
+        'promo_grid',
+      ]);
     });
 
     it('costs one request for all three', async () => {

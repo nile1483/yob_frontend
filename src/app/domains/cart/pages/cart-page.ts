@@ -23,113 +23,129 @@ import { ContentSlot } from '../../content/parts/content-slot';
   selector: 'app-cart-page',
   imports: [PageHeader, Alert, CartLine, CartSummary, CouponCode, EmptyState, RouterLink, Spinner, ContentSlot],
   template: `
-    <app-page-header heading="Your cart" i18n-heading="@@cart.heading" />
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section cart-section">
+      <div class="yob-content-container">
+        <app-page-header heading="Your cart" i18n-heading="@@cart.heading" />
+
+      </div>
+    </section>
 
     <!-- Merchant content for this route. The position is ours; what appears
          in it is the merchant's, and an empty slot renders nothing. -->
     <yob-content-slot routeKey="cart" slotKey="above_cart" />
 
-    <!-- Outside the state branches on purpose: when the server withdraws every line
-         the cart becomes empty, and "your cart is empty" with no explanation is
-         exactly the silent reconciliation this must avoid. -->
-    @if (reconciliationMessage(); as message) {
-      <div class="mt-6" data-testid="cart-reconciliation">
-        <app-alert tone="info">{{ message }}</app-alert>
-      </div>
-    }
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section cart-section">
+      <div class="yob-content-container">
 
-    <!-- Its own notice rather than another clause in the reconciliation sentence: this
-         one asks the buyer to do something, where the others only report what already
-         happened. -->
-    @if (uomChangedMessage(); as message) {
-      <div class="mt-6" data-testid="cart-uom-changed">
-        <app-alert tone="info">{{ message }}</app-alert>
-      </div>
-    }
+        <!-- Outside the state branches on purpose: when the server withdraws every line
+             the cart becomes empty, and "your cart is empty" with no explanation is
+             exactly the silent reconciliation this must avoid. -->
+        @if (reconciliationMessage(); as message) {
+          <div class="mt-6" data-testid="cart-reconciliation">
+            <app-alert tone="info">{{ message }}</app-alert>
+          </div>
+        }
 
-    @if (store.justRemoved()) {
-      <div class="mt-6" data-testid="cart-removed">
-        <app-alert tone="success">
-          <span i18n="@@cart.removed">Item removed from your cart.</span>
-        </app-alert>
-      </div>
-    }
+        <!-- Its own notice rather than another clause in the reconciliation sentence: this
+             one asks the buyer to do something, where the others only report what already
+             happened. -->
+        @if (uomChangedMessage(); as message) {
+          <div class="mt-6" data-testid="cart-uom-changed">
+            <app-alert tone="info">{{ message }}</app-alert>
+          </div>
+        }
 
-    @if (removeErrorMessage(); as message) {
-      <div class="mt-6" data-testid="cart-remove-error">
-        <app-alert tone="error">{{ message }}</app-alert>
-      </div>
-    }
+        @if (store.justRemoved()) {
+          <div class="mt-6" data-testid="cart-removed">
+            <app-alert tone="success">
+              <span i18n="@@cart.removed">Item removed from your cart.</span>
+            </app-alert>
+          </div>
+        }
 
-    @if (showsLoading()) {
-      <div class="mt-8 flex justify-center" data-testid="cart-loading">
-        <app-spinner label="Loading your cart" i18n-label="@@cart.loading" />
-      </div>
-    } @else if (store.error()) {
-      <div class="mt-6" data-testid="cart-error">
-        <app-alert tone="error">
-          <span i18n="@@cart.error">We could not load your cart. Please try again.</span>
-        </app-alert>
-      </div>
-    } @else if (store.isEmpty()) {
-      <div class="mt-8" data-testid="cart-empty">
-        <app-empty-state>
-          <h2 emptyTitle i18n="@@cart.empty.title">Your cart is empty</h2>
-          <p emptyBody i18n="@@cart.empty.body">Items you add will appear here.</p>
-          <a
-            emptyAction
-            routerLink="/catalog"
-            class="underline underline-offset-4"
-            i18n="@@cart.empty.action"
-            >Browse the catalog</a
-          >
-        </app-empty-state>
-      </div>
-    } @else if (store.cart(); as cart) {
-      <div class="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <!-- A list, not a table: a price table is unreadable on a 390px phone, and
-             nothing here is genuinely tabular data a user needs to scan in columns. -->
-        <!-- Priced rows, not intent rows: pricing_rows is what ERPNext actually
-             charged, including promotion rows the buyer never asked for. Tracked by
-             row_id because one SKU legitimately appears twice - once Paid, once
-             Promotion - and tracking by item code would make one replace the other. -->
-        <ul data-testid="cart-lines">
-          @for (view of rowViews(); track view.row.row_id) {
-            <li>
-              <app-cart-line
-                [view]="view"
-                [currency]="cart.currency"
-                [removing]="store.removingItemCode() === view.row.item_code"
-                (remove)="onRemove($event)"
-              />
-            </li>
-          }
-        </ul>
+        @if (removeErrorMessage(); as message) {
+          <div class="mt-6" data-testid="cart-remove-error">
+            <app-alert tone="error">{{ message }}</app-alert>
+          </div>
+        }
 
-        <div class="flex flex-col gap-4">
-          <app-cart-summary [cart]="cart" />
+        @if (showsLoading()) {
+          <div class="mt-8 flex justify-center" data-testid="cart-loading">
+            <app-spinner label="Loading your cart" i18n-label="@@cart.loading" />
+          </div>
+        } @else if (store.error()) {
+          <div class="mt-6" data-testid="cart-error">
+            <app-alert tone="error">
+              <span i18n="@@cart.error">We could not load your cart. Please try again.</span>
+            </app-alert>
+          </div>
+        } @else if (store.isEmpty()) {
+          <div class="mt-8" data-testid="cart-empty">
+            <app-empty-state>
+              <h2 emptyTitle i18n="@@cart.empty.title">Your cart is empty</h2>
+              <p emptyBody i18n="@@cart.empty.body">Items you add will appear here.</p>
+              <a
+                emptyAction
+                routerLink="/catalog"
+                class="underline underline-offset-4"
+                i18n="@@cart.empty.action"
+                >Browse the catalog</a
+              >
+            </app-empty-state>
+          </div>
+        } @else if (store.cart(); as cart) {
+          <div class="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <!-- A list, not a table: a price table is unreadable on a 390px phone, and
+                 nothing here is genuinely tabular data a user needs to scan in columns. -->
+            <!-- Priced rows, not intent rows: pricing_rows is what ERPNext actually
+                 charged, including promotion rows the buyer never asked for. Tracked by
+                 row_id because one SKU legitimately appears twice - once Paid, once
+                 Promotion - and tracking by item code would make one replace the other. -->
+            <ul data-testid="cart-lines">
+              @for (view of rowViews(); track view.row.row_id) {
+                <li>
+                  <app-cart-line
+                    [view]="view"
+                    [currency]="cart.currency"
+                    [removing]="store.removingItemCode() === view.row.item_code"
+                    (remove)="onRemove($event)"
+                  />
+                </li>
+              }
+            </ul>
 
-          <!-- Directly above checkout, and inside this branch on purpose: the branch
-               only renders with lines, so an empty cart never shows a coupon form.
-               A coupon on nothing to buy is an invitation to an error - and the
-               backend has a known defect where it reports success for exactly that. -->
-          <app-coupon-code />
+            <div class="flex flex-col gap-4">
+              <app-cart-summary [cart]="cart" />
 
-          <!-- Only reachable with something to buy: checkout renders an empty state
-               otherwise, and offering it here would be an invitation to a dead end. -->
-          <a
-            routerLink="/checkout"
-            class="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2
-                   text-sm font-medium text-white transition-colors hover:bg-slate-700"
-            data-testid="cart-checkout-link"
-            i18n="@@cart.checkout"
-          >
-            Proceed to checkout
-          </a>
-        </div>
+              <!-- Directly above checkout, and inside this branch on purpose: the branch
+                   only renders with lines, so an empty cart never shows a coupon form.
+                   A coupon on nothing to buy is an invitation to an error - and the
+                   backend has a known defect where it reports success for exactly that. -->
+              <app-coupon-code />
+
+              <!-- Only reachable with something to buy: checkout renders an empty state
+                   otherwise, and offering it here would be an invitation to a dead end. -->
+              <a
+                routerLink="/checkout"
+                class="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2
+                       text-sm font-medium text-white transition-colors hover:bg-slate-700"
+                data-testid="cart-checkout-link"
+                i18n="@@cart.checkout"
+              >
+                Proceed to checkout
+              </a>
+            </div>
+          </div>
+        }
+
       </div>
-    }
-
+    </section>
     <yob-content-slot routeKey="cart" slotKey="below_cart" />
   `,
 })

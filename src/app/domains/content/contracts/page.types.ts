@@ -37,10 +37,29 @@ export interface ContentMediaRowDto {
   readonly destination: MenuDestinationDto | null;
 }
 
+/**
+ * The semantic band a block sits in (API 3.6.0 `SectionStyle`).
+ *
+ * **Semantic, never a class name.** The backend publishes one of five approved words
+ * and defines none of what they look like - no colour, no padding, no text colour, no
+ * breakpoint and no width. Angular owns that mapping entirely, in
+ * `styles.css`.
+ *
+ * It belongs to the **placement**, not to the Block: the same reusable Block can come
+ * back `muted` on a page and `dark` on a route, so nothing may key styling off
+ * `block_name` or cache a style against one.
+ */
+export type SectionStyle = 'default' | 'muted' | 'brand_soft' | 'accent' | 'dark';
+
 /** Fields every block carries, whatever its type. */
 interface ContentBlockBase {
   /** The merchant's own name for this block. Diagnostic, never rendered as content. */
   readonly block_name: string;
+  /**
+   * Always present - rows written before the field existed project as `default` - so
+   * this is read without a null check.
+   */
+  readonly section_style: SectionStyle;
 }
 
 /** A single image, optionally linking somewhere. */

@@ -63,254 +63,270 @@ import { ContentSlot } from '../../content/parts/content-slot';
   imports: [
     CategoryFilters,Alert, Button, CategoryCard, EmptyState, Field, ItemCard, RouterLink, Spinner, ContentSlot],
   template: `
-    <nav aria-label="Breadcrumb" i18n-aria-label="@@catalog.breadcrumb.label">
-      <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
-        ><ng-container i18n="@@catalog.breadcrumb.back">Back to catalog</ng-container></a
-      >
-    </nav>
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section category-section">
+      <div class="yob-content-container">
+        <nav aria-label="Breadcrumb" i18n-aria-label="@@catalog.breadcrumb.label">
+          <a routerLink="/catalog" class="text-sm text-slate-600 underline underline-offset-4"
+            ><ng-container i18n="@@catalog.breadcrumb.back">Back to catalog</ng-container></a
+          >
+        </nav>
+
+      </div>
+    </section>
 
     <!-- Merchant content for this route. The position is ours; what appears
          in it is the merchant's, and an empty slot renders nothing. -->
     <yob-content-slot routeKey="category" slotKey="above_listing" />
 
-    @if (category.isLoading()) {
-      <div class="mt-8 flex justify-center" data-testid="category-loading">
-        <app-spinner label="Loading category" i18n-label="@@catalog.category.loading" />
-      </div>
-    } @else if (notFound()) {
-      <div class="mt-6" data-testid="category-not-found">
-        <app-empty-state>
-          <h1 emptyTitle i18n="@@catalog.category.notFound.title">Category not found</h1>
-          <p emptyBody i18n="@@catalog.category.notFound.body">
-            This category may have been renamed or is no longer available.
-          </p>
-          <a
-            emptyAction
-            routerLink="/catalog"
-            class="underline underline-offset-4"
-            i18n="@@catalog.category.notFound.action"
-            >Browse the catalog</a
-          >
-        </app-empty-state>
-      </div>
-    } @else if (category.error()) {
-      <div class="mt-6" data-testid="category-error">
-        <app-alert tone="error">
-          <span i18n="@@catalog.category.error"
-            >We could not load this category. Please try again.</span
-          >
-        </app-alert>
-      </div>
-    } @else if (payload(); as data) {
-      <header class="mt-4">
-        <h1 class="text-2xl font-semibold tracking-tight break-words" data-testid="category-title">
-          {{ data.category.category_name }}
-        </h1>
-        @if (data.category.description; as description) {
-          <p class="mt-2 max-w-prose text-slate-600" data-testid="category-description">
-            {{ description }}
-          </p>
-        }
-      </header>
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section category-section">
+      <div class="yob-content-container">
 
-      @if (subcategories().length > 0) {
-        <section class="mt-8">
-          <h2 class="text-lg font-semibold" i18n="@@catalog.subcategories.heading">
-            Subcategories
-          </h2>
-          <ul
-            class="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
-            data-testid="subcategory-grid"
-          >
-            @for (link of subcategories(); track link.slug) {
-              <li>
-                <app-category-card [category]="link" />
-              </li>
-            }
-          </ul>
-        </section>
-      }
-
-      <!-- Items come from get_items, never from get_category().items: the embedded
-           array is unbounded and carries no cursor, sort or page size. A group category
-           has no listing of its own - get_items answers category_not_listable for
-           one - so the request is only made for a leaf. -->
-      @if (isLeaf()) {
-        <section class="mt-10" data-testid="item-listing">
-          <div class="flex flex-wrap items-end justify-between gap-4">
-            <h2 class="text-lg font-semibold" i18n="@@catalog.items.heading">Items</h2>
-
-            @if (!listing.isEmpty()) {
-              <div class="w-full sm:w-56">
-                <app-field label="Sort by" i18n-label="@@catalog.sort.label">
-                  <select
-                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base
-                           sm:text-sm"
-                    [value]="sort()"
-                    (change)="onSortChange($event)"
-                    data-testid="item-sort"
-                  >
-                    @for (option of sortOptions; track option.value) {
-                      <option [value]="option.value">{{ option.label }}</option>
-                    }
-                  </select>
-                </app-field>
-              </div>
-            }
+        @if (category.isLoading()) {
+          <div class="mt-8 flex justify-center" data-testid="category-loading">
+            <app-spinner label="Loading category" i18n-label="@@catalog.category.loading" />
           </div>
-
-          @if (showsFilters()) {
-            <!-- Small screens get a disclosure so the products stay near the top of the
-                 page; from sm up the same panel is simply always open beside them.
-                 One component, one selection, one set of rules - the difference between
-                 the two is where it sits, which is presentation. -->
-            <div class="mt-6 sm:hidden">
-              <button
-                yob-button
-                variant="secondary"
-                size="sm"
-                type="button"
-                [attr.aria-expanded]="filtersOpen()"
-                aria-controls="category-filter-panel"
-                (click)="toggleFiltersPanel()"
-                data-testid="filters-toggle"
-                i18n="@@catalog.filters.toggle"
+        } @else if (notFound()) {
+          <div class="mt-6" data-testid="category-not-found">
+            <app-empty-state>
+              <h1 emptyTitle i18n="@@catalog.category.notFound.title">Category not found</h1>
+              <p emptyBody i18n="@@catalog.category.notFound.body">
+                This category may have been renamed or is no longer available.
+              </p>
+              <a
+                emptyAction
+                routerLink="/catalog"
+                class="underline underline-offset-4"
+                i18n="@@catalog.category.notFound.action"
+                >Browse the catalog</a
               >
-                Filters
-              </button>
-            </div>
+            </app-empty-state>
+          </div>
+        } @else if (category.error()) {
+          <div class="mt-6" data-testid="category-error">
+            <app-alert tone="error">
+              <span i18n="@@catalog.category.error"
+                >We could not load this category. Please try again.</span
+              >
+            </app-alert>
+          </div>
+        } @else if (payload(); as data) {
+          <header class="mt-4">
+            <h1 class="text-2xl font-semibold tracking-tight break-words" data-testid="category-title">
+              {{ data.category.category_name }}
+            </h1>
+            @if (data.category.description; as description) {
+              <p class="mt-2 max-w-prose text-slate-600" data-testid="category-description">
+                {{ description }}
+              </p>
+            }
+          </header>
 
-            <div
-              id="category-filter-panel"
-              class="mt-4 rounded-lg border border-slate-200 p-4 sm:mt-6"
-              [class.hidden]="!filtersOpen()"
-              [class.sm:block]="true"
-              data-testid="filter-panel"
-            >
-              <app-category-filters
-                [filters]="filters()"
-                [selection]="selection()"
-                (toggle)="onToggleValue($event)"
-                (clearFilter)="onClearFilter($event)"
-                (clearAll)="onClearAll()"
-              />
-            </div>
+          @if (subcategories().length > 0) {
+            <section class="mt-8">
+              <h2 class="text-lg font-semibold" i18n="@@catalog.subcategories.heading">
+                Subcategories
+              </h2>
+              <ul
+                class="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
+                data-testid="subcategory-grid"
+              >
+                @for (link of subcategories(); track link.slug) {
+                  <li>
+                    <app-category-card [category]="link" />
+                  </li>
+                }
+              </ul>
+            </section>
           }
 
-          @if (listing.initialLoading()) {
-            <div class="mt-8 flex justify-center" data-testid="items-loading">
-              <app-spinner label="Loading items" i18n-label="@@catalog.items.loading" />
-            </div>
-          } @else if (filterError()) {
-            <!-- The backend refused the selection itself, so repeating it would be
-                 refused again. The way out is a different request - without the filters -
-                 which is what this button issues. Never a retry of the same one. -->
-            <div class="mt-6" data-testid="items-filter-error">
-              <app-alert tone="error">
-                <span i18n="@@catalog.items.filterError">
-                  Those filters are no longer available for this category.
-                </span>
-              </app-alert>
-              <button
-                yob-button
-                variant="secondary"
-                size="sm"
-                type="button"
-                class="mt-4"
-                (click)="onClearAll()"
-                data-testid="items-clear-filters"
-                i18n="@@catalog.items.clearFilters"
-              >
-                Clear filters
-              </button>
-            </div>
-          } @else if (listing.initialError()) {
-            <div class="mt-6" data-testid="items-error">
-              <app-alert tone="error">
-                <span i18n="@@catalog.items.error">
-                  We could not load these items. Please try again.
-                </span>
-              </app-alert>
-              <button
-                yob-button
-                variant="secondary"
-                size="sm"
-                type="button"
-                class="mt-4"
-                (click)="reload()"
-                data-testid="items-retry"
-                i18n="@@catalog.items.retry"
-              >
-                Try again
-              </button>
-            </div>
-          } @else if (listing.isEmpty()) {
+          <!-- Items come from get_items, never from get_category().items: the embedded
+               array is unbounded and carries no cursor, sort or page size. A group category
+               has no listing of its own - get_items answers category_not_listable for
+               one - so the request is only made for a leaf. -->
+          @if (isLeaf()) {
+            <section class="mt-10" data-testid="item-listing">
+              <div class="flex flex-wrap items-end justify-between gap-4">
+                <h2 class="text-lg font-semibold" i18n="@@catalog.items.heading">Items</h2>
+
+                @if (!listing.isEmpty()) {
+                  <div class="w-full sm:w-56">
+                    <app-field label="Sort by" i18n-label="@@catalog.sort.label">
+                      <select
+                        class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-base
+                               sm:text-sm"
+                        [value]="sort()"
+                        (change)="onSortChange($event)"
+                        data-testid="item-sort"
+                      >
+                        @for (option of sortOptions; track option.value) {
+                          <option [value]="option.value">{{ option.label }}</option>
+                        }
+                      </select>
+                    </app-field>
+                  </div>
+                }
+              </div>
+
+              @if (showsFilters()) {
+                <!-- Small screens get a disclosure so the products stay near the top of the
+                     page; from sm up the same panel is simply always open beside them.
+                     One component, one selection, one set of rules - the difference between
+                     the two is where it sits, which is presentation. -->
+                <div class="mt-6 sm:hidden">
+                  <button
+                    yob-button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    [attr.aria-expanded]="filtersOpen()"
+                    aria-controls="category-filter-panel"
+                    (click)="toggleFiltersPanel()"
+                    data-testid="filters-toggle"
+                    i18n="@@catalog.filters.toggle"
+                  >
+                    Filters
+                  </button>
+                </div>
+
+                <div
+                  id="category-filter-panel"
+                  class="mt-4 rounded-lg border border-slate-200 p-4 sm:mt-6"
+                  [class.hidden]="!filtersOpen()"
+                  [class.sm:block]="true"
+                  data-testid="filter-panel"
+                >
+                  <app-category-filters
+                    [filters]="filters()"
+                    [selection]="selection()"
+                    (toggle)="onToggleValue($event)"
+                    (clearFilter)="onClearFilter($event)"
+                    (clearAll)="onClearAll()"
+                  />
+                </div>
+              }
+
+              @if (listing.initialLoading()) {
+                <div class="mt-8 flex justify-center" data-testid="items-loading">
+                  <app-spinner label="Loading items" i18n-label="@@catalog.items.loading" />
+                </div>
+              } @else if (filterError()) {
+                <!-- The backend refused the selection itself, so repeating it would be
+                     refused again. The way out is a different request - without the filters -
+                     which is what this button issues. Never a retry of the same one. -->
+                <div class="mt-6" data-testid="items-filter-error">
+                  <app-alert tone="error">
+                    <span i18n="@@catalog.items.filterError">
+                      Those filters are no longer available for this category.
+                    </span>
+                  </app-alert>
+                  <button
+                    yob-button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    class="mt-4"
+                    (click)="onClearAll()"
+                    data-testid="items-clear-filters"
+                    i18n="@@catalog.items.clearFilters"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              } @else if (listing.initialError()) {
+                <div class="mt-6" data-testid="items-error">
+                  <app-alert tone="error">
+                    <span i18n="@@catalog.items.error">
+                      We could not load these items. Please try again.
+                    </span>
+                  </app-alert>
+                  <button
+                    yob-button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    class="mt-4"
+                    (click)="reload()"
+                    data-testid="items-retry"
+                    i18n="@@catalog.items.retry"
+                  >
+                    Try again
+                  </button>
+                </div>
+              } @else if (listing.isEmpty()) {
+                <div class="mt-8" data-testid="category-no-items">
+                  <app-empty-state>
+                    <h3 emptyTitle i18n="@@catalog.items.empty.title">No items in this category</h3>
+                    <p emptyBody i18n="@@catalog.items.empty.body">
+                      Items will appear here once they are available to your account.
+                    </p>
+                  </app-empty-state>
+                </div>
+              } @else {
+                <ul
+                  class="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
+                  data-testid="item-grid"
+                >
+                  <!-- Tracked by the stable item identity, so appending a page leaves every
+                       card already on screen untouched. -->
+                  @for (item of listing.items(); track item.name) {
+                    <li>
+                      <app-item-card [item]="item" />
+                    </li>
+                  }
+                </ul>
+
+                <!-- Driven by the backend's has_more alone. An empty page with
+                     has_more: true is a continuation, so Load More stays available. -->
+                @if (listing.hasMore()) {
+                  <div class="mt-8 flex flex-col items-center gap-3" data-testid="load-more-area">
+                    @if (listing.loadMoreError()) {
+                      <!-- Scoped to the control. The products already loaded stay on screen:
+                           replacing them with a page-level error because page three failed
+                           would be worse than the failure. -->
+                      <p class="text-sm text-slate-700" data-testid="load-more-error" i18n="@@catalog.items.loadMore.error">
+                        We could not load more items.
+                      </p>
+                    }
+
+                    <button
+                      yob-button
+                      variant="secondary"
+                      type="button"
+                      [loading]="listing.loadingMore()"
+                      [disabled]="listing.loadingMore()"
+                      (click)="listing.loadMore()"
+                      data-testid="load-more"
+                    >
+                      @if (listing.loadMoreError()) {
+                        <ng-container i18n="@@catalog.items.loadMore.retry">Try again</ng-container>
+                      } @else {
+                        <ng-container i18n="@@catalog.items.loadMore">Load more</ng-container>
+                      }
+                    </button>
+                  </div>
+                }
+              }
+            </section>
+          } @else if (subcategories().length === 0) {
             <div class="mt-8" data-testid="category-no-items">
               <app-empty-state>
-                <h3 emptyTitle i18n="@@catalog.items.empty.title">No items in this category</h3>
+                <h2 emptyTitle i18n="@@catalog.items.empty.title">No items in this category</h2>
                 <p emptyBody i18n="@@catalog.items.empty.body">
                   Items will appear here once they are available to your account.
                 </p>
               </app-empty-state>
             </div>
-          } @else {
-            <ul
-              class="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
-              data-testid="item-grid"
-            >
-              <!-- Tracked by the stable item identity, so appending a page leaves every
-                   card already on screen untouched. -->
-              @for (item of listing.items(); track item.name) {
-                <li>
-                  <app-item-card [item]="item" />
-                </li>
-              }
-            </ul>
-
-            <!-- Driven by the backend's has_more alone. An empty page with
-                 has_more: true is a continuation, so Load More stays available. -->
-            @if (listing.hasMore()) {
-              <div class="mt-8 flex flex-col items-center gap-3" data-testid="load-more-area">
-                @if (listing.loadMoreError()) {
-                  <!-- Scoped to the control. The products already loaded stay on screen:
-                       replacing them with a page-level error because page three failed
-                       would be worse than the failure. -->
-                  <p class="text-sm text-slate-700" data-testid="load-more-error" i18n="@@catalog.items.loadMore.error">
-                    We could not load more items.
-                  </p>
-                }
-
-                <button
-                  yob-button
-                  variant="secondary"
-                  type="button"
-                  [loading]="listing.loadingMore()"
-                  [disabled]="listing.loadingMore()"
-                  (click)="listing.loadMore()"
-                  data-testid="load-more"
-                >
-                  @if (listing.loadMoreError()) {
-                    <ng-container i18n="@@catalog.items.loadMore.retry">Try again</ng-container>
-                  } @else {
-                    <ng-container i18n="@@catalog.items.loadMore">Load more</ng-container>
-                  }
-                </button>
-              </div>
-            }
           }
-        </section>
-      } @else if (subcategories().length === 0) {
-        <div class="mt-8" data-testid="category-no-items">
-          <app-empty-state>
-            <h2 emptyTitle i18n="@@catalog.items.empty.title">No items in this category</h2>
-            <p emptyBody i18n="@@catalog.items.empty.body">
-              Items will appear here once they are available to your account.
-            </p>
-          </app-empty-state>
-        </div>
-      }
-    }
+        }
 
+      </div>
+    </section>
     <yob-content-slot routeKey="category" slotKey="below_listing" />
   `,
 })

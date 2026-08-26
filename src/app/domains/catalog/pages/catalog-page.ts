@@ -29,49 +29,65 @@ import { ContentSlot } from '../../content/parts/content-slot';
   selector: 'app-catalog-page',
   imports: [PageHeader, Alert, CategoryCard, EmptyState, Spinner, ContentSlot],
   template: `
-    <app-page-header
-      heading="Catalog"
-      i18n-heading="@@catalog.heading"
-      lead="Browse everything available to your account."
-      i18n-lead="@@catalog.lead"
-    />
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section catalog-section">
+      <div class="yob-content-container">
+        <app-page-header
+          heading="Catalog"
+          i18n-heading="@@catalog.heading"
+          lead="Browse everything available to your account."
+          i18n-lead="@@catalog.lead"
+        />
+
+      </div>
+    </section>
 
     <!-- Merchant content for this route. The position is ours; what appears
          in it is the merchant's, and an empty slot renders nothing. -->
     <yob-content-slot routeKey="catalog" slotKey="above_listing" />
 
-    @if (categories.isLoading()) {
-      <div class="mt-8 flex justify-center" data-testid="catalog-loading">
-        <app-spinner label="Loading categories" i18n-label="@@catalog.loading" />
-      </div>
-    } @else if (categories.error()) {
-      <div class="mt-6" data-testid="catalog-error">
-        <app-alert tone="error">
-          <span i18n="@@catalog.error">We could not load the catalog. Please try again.</span>
-        </app-alert>
-      </div>
-    } @else if (links().length === 0) {
-      <div class="mt-8" data-testid="catalog-empty">
-        <app-empty-state>
-          <h2 emptyTitle i18n="@@catalog.empty.title">No categories yet</h2>
-          <p emptyBody i18n="@@catalog.empty.body">
-            Categories will appear here once they are published to your account.
-          </p>
-        </app-empty-state>
-      </div>
-    } @else {
-      <ul
-        class="mt-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
-        data-testid="category-grid"
-      >
-        @for (link of links(); track link.slug) {
-          <li>
-            <app-category-card [category]="link" />
-          </li>
-        }
-      </ul>
-    }
+    <!-- Application band: full width outside, the storefront's one column inside.
+         The hook is source-owned - a Content Placement can style its own band,
+         but nothing a merchant configures reaches this page's own functionality. -->
+    <section class="yob-page-section catalog-section">
+      <div class="yob-content-container">
 
+        @if (categories.isLoading()) {
+          <div class="mt-8 flex justify-center" data-testid="catalog-loading">
+            <app-spinner label="Loading categories" i18n-label="@@catalog.loading" />
+          </div>
+        } @else if (categories.error()) {
+          <div class="mt-6" data-testid="catalog-error">
+            <app-alert tone="error">
+              <span i18n="@@catalog.error">We could not load the catalog. Please try again.</span>
+            </app-alert>
+          </div>
+        } @else if (links().length === 0) {
+          <div class="mt-8" data-testid="catalog-empty">
+            <app-empty-state>
+              <h2 emptyTitle i18n="@@catalog.empty.title">No categories yet</h2>
+              <p emptyBody i18n="@@catalog.empty.body">
+                Categories will appear here once they are published to your account.
+              </p>
+            </app-empty-state>
+          </div>
+        } @else {
+          <ul
+            class="mt-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
+            data-testid="category-grid"
+          >
+            @for (link of links(); track link.slug) {
+              <li>
+                <app-category-card [category]="link" />
+              </li>
+            }
+          </ul>
+        }
+
+      </div>
+    </section>
     <yob-content-slot routeKey="catalog" slotKey="below_listing" />
   `,
 })

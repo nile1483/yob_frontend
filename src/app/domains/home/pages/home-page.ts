@@ -43,18 +43,21 @@ import { RouteContentStore } from '../../content/state/route-content.store';
   template: `
     <div data-testid="home-page">
       @if (isLoading()) {
-        <div class="mt-8 flex justify-center" data-testid="home-loading">
+        <div class="yob-content-container mt-8 flex justify-center" data-testid="home-loading">
           <app-spinner label="Loading" i18n-label="@@home.loading" />
         </div>
       }
 
       <!-- Three fixed regions. The merchant orders blocks inside one; nothing can
-           reorder the regions themselves. -->
-      <div class="flex flex-col gap-10">
-        <yob-content-slot routeKey="home" slotKey="hero" />
-        <yob-content-slot routeKey="home" slotKey="main" />
-        <yob-content-slot routeKey="home" slotKey="bottom" />
-      </div>
+           reorder the regions themselves.
+
+           No column and no gap here: every block inside a region opens its own
+           full-width band, and a wrapper would cap all of them at the content width.
+           Spacing between bands belongs to the bands, or two adjacent surfaces would
+           show a stripe of page background between them. -->
+      <yob-content-slot routeKey="home" slotKey="hero" />
+      <yob-content-slot routeKey="home" slotKey="main" />
+      <yob-content-slot routeKey="home" slotKey="bottom" />
     </div>
   `,
 })

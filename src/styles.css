@@ -14,3 +14,175 @@
     outline-offset: 2px;
   }
 }
+
+/* ------------------------------------------------------------------ layout (25J)
+
+   Two structural primitives, defined once because every page and every content block
+   uses them. Everything else visual still belongs in the template it affects.
+
+   The application separates a FULL-WIDTH BAND from the FIXED-WIDTH COLUMN inside it:
+
+     <section class="yob-page-section yob-section-muted">   <- spans main, carries the surface
+       <div class="yob-content-container">                  <- the storefront's one column
+         ...content...
+
+   Before this, one container on `main` constrained every route, so a content block
+   could never paint past the column. Now `main` is full width and each section paints
+   its own band while the column keeps the width and alignment it always had. */
+@layer components {
+  /* The storefront's single content column.
+
+     These are exactly the classes `main` carried before Phase 25J, moved rather than
+     re-chosen: same max width, same responsive padding, same centring. `SHELL_CONTAINER`
+     resolves to this class too, so the header, the footer and every page column are one
+     definition and cannot drift apart. `width: 100%` - never `100vw`, which ignores the
+     scrollbar and is the usual source of horizontal overflow. */
+  .yob-content-container {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* A full-width band. Owns no surface of its own: the style class beside it does, or
+     nothing does. Application sections add a semantic hook (`catalog-section`) that this
+     project can style later without touching a business component. */
+  .yob-page-section {
+    @apply w-full;
+  }
+}
+
+/* --------------------------------------------------- content section styles (25J)
+
+   The five bands `SectionStyle` publishes, mapped to surfaces this repository already
+   uses. The backend sends one of five approved words and never a class, a colour or any
+   CSS; this block is the whole of what those words mean.
+
+   Surfaces are the existing slate/blue/amber ramps the design system already draws on -
+   `bg-slate-50` is the neutral alert surface, `bg-slate-900` is the primary button, and
+   blue and amber are the badge info and warning hues. Nothing here is a new colour.
+
+   `default` deliberately has no rule: it is the ordinary page background, which is what
+   every block written before this field existed projects as. */
+@layer components {
+  .yob-section-muted {
+    @apply bg-slate-50;
+  }
+
+  .yob-section-brand-soft {
+    @apply bg-blue-50;
+  }
+
+  .yob-section-accent {
+    @apply bg-amber-50;
+  }
+
+  .yob-section-dark {
+    @apply bg-slate-900 text-slate-100;
+  }
+}
+
+/* The one style that changes foreground as well as background.
+
+   A band cannot just set `color` and hope: the blocks inside it hard-code the
+   light-theme slate ramp (`text-slate-900` on a title, `text-slate-700` on prose), and a
+   utility class beats an inherited colour. So the ramp is remapped **within this band
+   only** - rather than teaching five block components about dark mode or touching a line
+   of stored merchant HTML.
+
+   ## Why these are in `utilities`, not `components`
+
+   Cascade layers beat specificity outright. In `@layer components` these lost to plain
+   `.text-slate-900` in the later `utilities` layer however specific they were, and a dark
+   band rendered slate-900 text on a slate-900 ground. In the same layer as the utilities
+   they override, ordinary specificity decides and `:is()` wins.
+
+   ## Flip, then restore - and why not one `:not()`
+
+   A component that paints its **own** light surface must keep its own foreground, or a
+   badge or a secondary button becomes light type on a light card. The obvious spelling -
+   one flip rule with `:not(:is(.bg-white, ...) *)` - is wrong: `:not()` is not scoped to
+   the band, and the secure shell's own root carries `bg-white`, so *every* element in the
+   application counted as "inside a light surface" and nothing was ever flipped.
+
+   So it is two steps. The flip claims everything in the band; the restore hands back the
+   components that brought a surface **with them**, matched only inside the band. Higher
+   specificity, so the restore wins. */
+@layer utilities {
+  .yob-section-dark :is(.text-slate-900, .text-slate-800, .text-slate-700) {
+    @apply text-slate-100;
+  }
+
+  .yob-section-dark :is(.text-slate-600, .text-slate-500, .text-slate-400) {
+    @apply text-slate-300;
+  }
+
+  .yob-section-dark :is(.border-slate-200, .border-slate-300) {
+    @apply border-slate-700;
+  }
+
+  /* A hover that lightens is wrong on a dark ground. */
+  .yob-section-dark :is(.hover\:bg-slate-50):hover {
+    @apply bg-slate-800;
+  }
+
+  /* ---- restore: a surface the component brought with it keeps its own foreground ---- */
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100) :is(.text-slate-900),
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.text-slate-900) {
+    @apply text-slate-900;
+  }
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100) :is(.text-slate-800),
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.text-slate-800) {
+    @apply text-slate-800;
+  }
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100) :is(.text-slate-700),
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.text-slate-700) {
+    @apply text-slate-700;
+  }
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100) :is(.text-slate-600),
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.text-slate-600) {
+    @apply text-slate-600;
+  }
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100) :is(.text-slate-500),
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.text-slate-500) {
+    @apply text-slate-500;
+  }
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100) :is(.text-slate-400),
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.text-slate-400) {
+    @apply text-slate-400;
+  }
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100) :is(.border-slate-200),
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.border-slate-200) {
+    @apply border-slate-200;
+  }
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100) :is(.border-slate-300),
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.border-slate-300) {
+    @apply border-slate-300;
+  }
+
+  .yob-section-dark :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50, .bg-blue-100, .bg-green-50,
+        .bg-green-100, .bg-amber-50, .bg-amber-100, .bg-red-50, .bg-red-100):is(.hover\:bg-slate-50):hover {
+    @apply bg-slate-50;
+  }
+}

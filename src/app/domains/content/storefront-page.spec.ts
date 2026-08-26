@@ -109,7 +109,8 @@ describe('storefront page', () => {
       expect(view.testId('storefront-page')?.getAttribute('data-slug')).toBe('support');
       expect(view.text()).toContain('Contact us');
       expect(view.text()).not.toContain('Who we are');
-      expect(view.all('page-block')).toHaveLength(1);
+      // Support copy, plus the Block it shares with Home under a different band.
+      expect(view.all('page-block')).toHaveLength(2);
     });
 
     it('shows a safe not-found state for an unpublished or unknown page', async () => {

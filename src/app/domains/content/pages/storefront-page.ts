@@ -42,11 +42,11 @@ import { ContentBlocks } from '../parts/content-blocks';
   imports: [Alert, ContentBlocks, EmptyState, RouterLink, Spinner],
   template: `
     @if (page.isLoading() && payload() === undefined) {
-      <div class="mt-8 flex justify-center" data-testid="page-loading">
+      <div class="yob-content-container mt-8 flex justify-center" data-testid="page-loading">
         <app-spinner label="Loading page" i18n-label="@@content.page.loading" />
       </div>
     } @else if (notFound()) {
-      <div class="mt-6" data-testid="page-not-found">
+      <div class="yob-content-container mt-6" data-testid="page-not-found">
         <app-empty-state>
           <h1 emptyTitle i18n="@@content.page.notFound.title">Page not found</h1>
           <p emptyBody i18n="@@content.page.notFound.body">
@@ -58,19 +58,29 @@ import { ContentBlocks } from '../parts/content-blocks';
         </app-empty-state>
       </div>
     } @else if (page.error()) {
-      <div class="mt-6" data-testid="page-error">
+      <div class="yob-content-container mt-6" data-testid="page-error">
         <app-alert tone="error">
           <span i18n="@@content.page.error">We could not load this page. Please try again.</span>
         </app-alert>
       </div>
     } @else if (payload(); as page) {
       <article data-testid="storefront-page" [attr.data-slug]="page.slug">
-        <h1 class="text-2xl font-semibold tracking-tight break-words sm:text-3xl" data-testid="page-title">
-          {{ page.title }}
-        </h1>
+        <!-- The page's own heading is application chrome, so it sits in the column like
+             every other page title and lines up with the brand above it. -->
+        <section class="yob-page-section storefront-page-section">
+          <div class="yob-content-container">
+            <h1
+              class="text-2xl font-semibold tracking-tight break-words sm:text-3xl"
+              data-testid="page-title"
+            >
+              {{ page.title }}
+            </h1>
+          </div>
+        </section>
 
-        <!-- The same renderer a system route slot uses. This page owns the heading,
-             the metadata and the not-found state; it does not own block types. -->
+        <!-- Deliberately **not** inside a container. Each block opens its own band and
+             its own column, so a merchant can put a dark section across the full width
+             of one page and a plain one under it. A wrapper here would cap all of them. -->
         <app-content-blocks class="mt-6" [blocks]="page.blocks" />
       </article>
     }
