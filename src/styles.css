@@ -3,6 +3,16 @@
 
 @import 'tailwindcss';
 
+/* Tests are not markup.
+
+   Tailwind scans source files for class-like strings and cannot tell prose or an
+   assertion from a template, so a spec asserting that a class is *absent* was enough to
+   make Tailwind emit a real rule for it into the production bundle. Excluding the test
+   suites keeps the generated stylesheet a function of the application alone. */
+@source not "../e2e";
+@source not "../docs";
+@source not "**/*.spec.ts";
+
 @layer base {
   /* One consistent, always-visible keyboard focus indicator.
      Global because it is an accessibility floor for the whole application, not a
