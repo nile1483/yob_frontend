@@ -50,7 +50,10 @@ import { RichTextBlock } from './rich-text-block';
       <!-- Each block is its own band. Consecutive blocks are therefore separate
            full-width sections rather than one wrapper around the list, which is what
            lets a merchant put a dark hero directly above a muted grid. -->
-      <yob-content-section [sectionStyle]="block.section_style">
+      <yob-content-section
+        [sectionStyle]="block.section_style"
+        [contentWidth]="block.content_width"
+      >
         <div data-testid="page-block" [attr.data-block-type]="block.type">
           @switch (block.type) {
             @case ('image_banner') {

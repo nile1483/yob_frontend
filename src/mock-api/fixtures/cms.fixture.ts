@@ -86,6 +86,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
       type: 'image_banner',
       block_name: 'Hero banner',
       section_style: 'dark',
+      content_width: 'full_width',
       desktop_image: PAGE_MEDIA_DESKTOP,
       mobile_image: PAGE_MEDIA_MOBILE,
       alt_text: 'Our warehouse',
@@ -103,6 +104,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
       type: 'rich_text',
       block_name: 'Intro copy',
       section_style: 'muted',
+      content_width: 'contained',
       title: 'Who we are',
       html: RICH_TEXT_HTML,
       text_alignment: 'center',
@@ -111,6 +113,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
       type: 'banner_carousel',
       block_name: 'Seasonal carousel',
       section_style: 'brand_soft',
+      content_width: 'contained',
       auto_play: true,
       interval_ms: 3000,
       desktop_height_px: 320,
@@ -156,6 +159,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
       type: 'product_grid',
       block_name: 'Featured safety',
       section_style: 'accent',
+      content_width: 'contained',
       card_type: 'square',
       item_limit: 12,
       category: 'safety-equipment',
@@ -166,6 +170,7 @@ const ABOUT_PAGE: StorefrontPageDto = {
       type: 'promo_grid',
       block_name: 'Promotions',
       section_style: 'default',
+      content_width: 'full_width',
       cards_per_row: 3,
       desktop_height_px: 240,
       mobile_height_px: 180,
@@ -220,12 +225,13 @@ const SUPPORT_PAGE: StorefrontPageDto = {
       type: 'rich_text',
       block_name: 'Support copy',
       section_style: 'muted',
+      content_width: 'contained',
       title: 'Contact us',
       html: '<p>Call the trade desk on 0800 000 000.</p>',
       text_alignment: 'left',
     },
     // The same Block that Home places as `dark`.
-    { ...SHARED_WELCOME, section_style: 'brand_soft' },
+    { ...SHARED_WELCOME, section_style: 'brand_soft', content_width: 'contained' },
   ],
 };
 
@@ -245,11 +251,13 @@ const FUTURE_PAGE: StorefrontPageDto = {
       type: 'video_hero',
       block_name: 'Video hero',
       section_style: 'default',
+      content_width: 'contained',
     } as unknown as StorefrontPageDto['blocks'][number],
     {
       type: 'rich_text',
       block_name: 'Still rendered',
       section_style: 'default',
+      content_width: 'contained',
       title: 'Still here',
       html: '<p>This block renders even though the one above it is unknown.</p>',
       text_alignment: 'left',
@@ -276,6 +284,7 @@ const DARK_BAND_PAGE: StorefrontPageDto = {
       type: 'rich_text',
       block_name: 'Dark prose',
       section_style: 'dark',
+      content_width: 'full_width',
       title: 'Ordinary prose on a dark band',
       html: '<p>This paragraph has no surface of its own.</p>',
       text_alignment: 'left',
@@ -284,6 +293,7 @@ const DARK_BAND_PAGE: StorefrontPageDto = {
       type: 'product_grid',
       block_name: 'Dark grid',
       section_style: 'dark',
+      content_width: 'contained',
       card_type: 'square',
       item_limit: 12,
       // Fasteners carry a discount, so a card renders its own surfaced Badge.
@@ -294,6 +304,7 @@ const DARK_BAND_PAGE: StorefrontPageDto = {
       type: 'promo_grid',
       block_name: 'Dark promos',
       section_style: 'dark',
+      content_width: 'full_width',
       cards_per_row: 2,
       desktop_height_px: 200,
       mobile_height_px: 160,
@@ -311,6 +322,7 @@ const DARK_BAND_PAGE: StorefrontPageDto = {
       type: 'banner_carousel',
       block_name: 'Dark carousel',
       section_style: 'dark',
+      content_width: 'full_width',
       auto_play: false,
       interval_ms: null,
       desktop_height_px: 260,
@@ -335,11 +347,85 @@ const DARK_BAND_PAGE: StorefrontPageDto = {
   ],
 };
 
+/**
+ * One page mixing both containments, which is the case the feature exists for.
+ *
+ * A hero that runs the full width of `main`, prose and a product grid held in the
+ * storefront column beneath it, and a promo band edge to edge again. Every band is
+ * `default`, so nothing here depends on a surface: the only variable is containment.
+ * `e2e/content-width.spec.ts` measures the four geometries independently.
+ */
+const MIXED_WIDTH_PAGE: StorefrontPageDto = {
+  slug: 'mixed-width',
+  title: 'Mixed width',
+  meta_title: null,
+  meta_description: null,
+  blocks: [
+    {
+      type: 'banner_carousel',
+      block_name: 'Hero carousel',
+      section_style: 'default',
+      content_width: 'full_width',
+      auto_play: false,
+      interval_ms: null,
+      desktop_height_px: 320,
+      mobile_height_px: 200,
+      slides: [
+        {
+          desktop_image: IMAGE_LANDSCAPE,
+          mobile_image: null,
+          title: 'Hero slide',
+          alt_text: 'Hero slide',
+          destination: null,
+        },
+      ],
+    },
+    {
+      type: 'rich_text',
+      block_name: 'Contained prose',
+      section_style: 'default',
+      content_width: 'contained',
+      title: 'Held in the column',
+      html: '<p>This paragraph stays at the storefront width.</p>',
+      text_alignment: 'left',
+    },
+    {
+      type: 'product_grid',
+      block_name: 'Contained grid',
+      section_style: 'default',
+      content_width: 'contained',
+      card_type: 'square',
+      item_limit: 12,
+      category: 'fasteners',
+      items: MOCK_ITEMS_BY_CATEGORY['fasteners'] ?? [],
+    },
+    {
+      type: 'promo_grid',
+      block_name: 'Full-width promos',
+      section_style: 'default',
+      content_width: 'full_width',
+      cards_per_row: 3,
+      desktop_height_px: 200,
+      mobile_height_px: 160,
+      cards: [
+        {
+          desktop_image: IMAGE_LANDSCAPE,
+          mobile_image: null,
+          title: 'Edge to edge',
+          alt_text: 'Promo',
+          destination: null,
+        },
+      ],
+    },
+  ],
+};
+
 export const MOCK_PAGES_BY_SLUG: Readonly<Record<string, StorefrontPageDto>> = {
   'about-us': ABOUT_PAGE,
   support: SUPPORT_PAGE,
   future: FUTURE_PAGE,
   'dark-band': DARK_BAND_PAGE,
+  'mixed-width': MIXED_WIDTH_PAGE,
 };
 
 
@@ -383,6 +469,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'image_banner',
             block_name: 'Home hero',
             section_style: 'dark',
+            content_width: 'full_width',
             desktop_image: ROUTE_MEDIA,
             mobile_image: IMAGE_SQUARE,
             alt_text: 'Everything for the trade',
@@ -406,6 +493,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'rich_text',
             block_name: 'Home welcome',
             section_style: 'default',
+            content_width: 'contained',
             title: 'Welcome back',
             html: '<p>Your trade prices, ready to order.</p>',
             text_alignment: 'left',
@@ -414,6 +502,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'product_grid',
             block_name: 'Home featured',
             section_style: 'muted',
+            content_width: 'contained',
             card_type: 'square',
             item_limit: 12,
             category: 'safety-equipment',
@@ -427,11 +516,12 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
         key: 'bottom',
         blocks: [
           // The same Block `support` places as `brand_soft`, in a different band.
-          { ...SHARED_WELCOME, section_style: 'dark' },
+          { ...SHARED_WELCOME, section_style: 'dark', content_width: 'full_width' },
           {
             type: 'promo_grid',
             block_name: 'Home promos',
             section_style: 'default',
+            content_width: 'full_width',
             cards_per_row: 2,
             desktop_height_px: 220,
             mobile_height_px: 160,
@@ -473,6 +563,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'rich_text',
             block_name: 'Delivery notice',
             section_style: 'accent',
+            content_width: 'contained',
             title: null,
             html: '<p>Free delivery on orders over 5000.</p>',
             text_alignment: 'center',
@@ -486,6 +577,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'image_banner',
             block_name: 'Cart footer banner',
             section_style: 'default',
+            content_width: 'contained',
             desktop_image: ROUTE_MEDIA,
             mobile_image: null,
             alt_text: 'Bulk order desk',
@@ -508,6 +600,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'rich_text',
             block_name: 'Category notice',
             section_style: 'muted',
+            content_width: 'contained',
             title: null,
             html: '<p>Bulk pricing applies from 100 units.</p>',
             text_alignment: 'left',
@@ -529,6 +622,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'rich_text',
             block_name: 'Product footer',
             section_style: 'muted',
+            content_width: 'contained',
             title: 'Need a different size?',
             html: '<p>Call the trade desk on 0800 000 000.</p>',
             text_alignment: 'left',
@@ -548,6 +642,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'rich_text',
             block_name: 'Orders notice',
             section_style: 'brand_soft',
+            content_width: 'contained',
             title: null,
             html: '<p>Orders placed before 3pm ship the same day.</p>',
             text_alignment: 'left',
@@ -569,6 +664,7 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             type: 'rich_text',
             block_name: 'Order footer',
             section_style: 'default',
+            content_width: 'contained',
             title: null,
             html: '<p>Questions about this order? Quote its number.</p>',
             text_alignment: 'left',

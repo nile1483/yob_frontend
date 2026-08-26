@@ -11,9 +11,17 @@ import { expectNoHorizontalOverflow } from './support/layout';
  * still full width on a phone, and never wide enough to scroll the page sideways.
  */
 
-/** The band and its column, as the browser actually laid them out. */
+/**
+ * A **contained** band and its column, as the browser actually laid them out.
+ *
+ * Scoped to `contained` since Phase 25L: a placement may now declare `full_width`, which
+ * deliberately opens no column at all, and these assertions are about the column. The
+ * full-width geometry is measured in `content-width.spec.ts`.
+ */
 async function band(page: Page, index = 0) {
-  const section = page.locator('[data-testid="content-section"]').nth(index);
+  const section = page
+    .locator('[data-testid="content-section"][data-content-width="contained"]')
+    .nth(index);
   await expect(section).toBeVisible();
 
   const outer = await section.boundingBox();
@@ -59,7 +67,9 @@ test.describe('a content band', () => {
 
     const heading = await page.getByTestId('page-title').boundingBox();
     const column = await page
-      .locator('[data-testid="content-section"] [data-testid="page-block"]')
+      .locator(
+        '[data-testid="content-section"][data-content-width="contained"] [data-testid="page-block"]',
+      )
       .first()
       .boundingBox();
     const footer = await page.getByRole('contentinfo').locator('div').first().boundingBox();

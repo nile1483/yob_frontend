@@ -1,6 +1,7 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, input } from '@angular/core';
 
-import type { SectionStyle } from '../contracts/page.types';
+import type { ContentWidth, SectionStyle } from '../contracts/page.types';
 
 /**
  * One merchant block's band: full width outside, the storefront's column inside.
@@ -36,6 +37,28 @@ import type { SectionStyle } from '../contracts/page.types';
  * compiles the classes it can see - an interpolated `yob-section-${style}` would name a
  * class that exists in the markup and nowhere in the stylesheet.
  *
+ * ## Contained or full width, and only that
+ *
+ * `content_width` decides one thing: whether the block sits in the shared column or gets
+ * the section's whole width. The band, its surface and its spacing are identical either
+ * way, and the style is never derived from the width - all ten combinations are valid.
+ *
+ * Full width needs no trick. `main` has been full width since Phase 25J, so **not**
+ * opening the column is the entire implementation: no viewport-width unit, no
+ * viewport-width utility class, no negative-margin breakout, no viewport arithmetic.
+ *
+ * (Those two are described rather than spelled on purpose. Tailwind scans source files
+ * for class-like strings and does not know prose from markup, so naming the utility in
+ * this comment made it emit a real rule for it into the production bundle.)
+ *
+ * ## One `<ng-content>`, stamped twice
+ *
+ * Angular projects a given `<ng-content />` slot **once**. Writing it in both branches
+ * leaves whichever branch renders second empty - a banner inside a section with no
+ * banner in it. Phase 25E hit exactly this bug in `DestinationLink`, so the content is
+ * captured in a template here and stamped through `ngTemplateOutlet`, which is the
+ * supported way to reuse it.
+ *
  * ## Vertical rhythm
  *
  * Before this phase, `ContentBlocks` separated blocks with `gap-10`. Bands cannot use a
@@ -47,25 +70,56 @@ import type { SectionStyle } from '../contracts/page.types';
  */
 @Component({
   selector: 'yob-content-section',
+  imports: [NgTemplateOutlet],
   template: `
+    <!-- Declared once. See the note above: a second <ng-content /> in the other branch
+         would render empty. -->
+    <ng-template #block><ng-content /></ng-template>
+
     <section
       class="yob-page-section"
       [class]="styleClass()"
       data-testid="content-section"
       [attr.data-section-style]="sectionStyle()"
+      [attr.data-content-width]="contentWidth()"
     >
-      <div class="yob-content-container">
-        <ng-content />
-      </div>
+      @if (isContained()) {
+        <div class="yob-content-container">
+          <ng-container [ngTemplateOutlet]="block" />
+        </div>
+      } @else {
+        <ng-container [ngTemplateOutlet]="block" />
+      }
     </section>
   `,
 })
 export class ContentSection {
   readonly sectionStyle = input.required<SectionStyle>();
 
+  /**
+   * Defaulted rather than required, so a caller that has not been taught about width
+   * yet keeps the behaviour every placement had before this field existed.
+   */
+  readonly contentWidth = input<ContentWidth>('contained');
+
   protected readonly styleClass = computed(
     () => SECTION_STYLES[this.sectionStyle()] ?? SECTION_STYLES.default,
   );
+
+  /**
+   * Whether to open the shared column.
+   *
+   * Written as "is it full width?" inverted, deliberately: **anything** that is not the
+   * one published full-width word is contained. A value this release does not recognise
+   * must fall back to the safe, unchanged behaviour - never to letting merchant content
+   * escape the column.
+   */
+  protected readonly isContained = computed(() => !isFullWidth(this.contentWidth()));
+}
+
+/** The one place a width value is interpreted. Never a class name, never interpolated. */
+export function isFullWidth(width: ContentWidth | null | undefined): boolean {
+  return width === 'full_width';
 }
 
 /**

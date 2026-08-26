@@ -51,6 +51,22 @@ export interface ContentMediaRowDto {
  */
 export type SectionStyle = 'default' | 'muted' | 'brand_soft' | 'accent' | 'dark';
 
+/**
+ * Whether a block is held in the fixed content column or spans its section (API 3.7.0
+ * `ContentWidth`).
+ *
+ * **Horizontal containment only.** It does not decide the section's background - that is
+ * {@link SectionStyle} - nor vertical spacing, block or image height, which responsive
+ * asset is chosen, or any padding value. Those stay in source-controlled CSS.
+ *
+ * Independent of the style: all ten combinations are valid and neither is derived from
+ * the other. Valid for **all five block types**, not only banners.
+ *
+ * Like the style, it belongs to the **placement**: the same hero Banner can run full
+ * width on one route and contained on a page.
+ */
+export type ContentWidth = 'contained' | 'full_width';
+
 /** Fields every block carries, whatever its type. */
 interface ContentBlockBase {
   /** The merchant's own name for this block. Diagnostic, never rendered as content. */
@@ -60,6 +76,11 @@ interface ContentBlockBase {
    * this is read without a null check.
    */
   readonly section_style: SectionStyle;
+  /**
+   * Always present - rows predating the field project as `contained`, which is what
+   * every placement did before it existed.
+   */
+  readonly content_width: ContentWidth;
 }
 
 /** A single image, optionally linking somewhere. */

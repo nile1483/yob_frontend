@@ -128,6 +128,68 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Contained and full-width content blocks (Phase 25L, 2026-08-26)
+
+Frontend for backend Phase 25K, against API **3.7.0**. A small additive layout
+enhancement on top of Phase 25J: nothing else changed, and no business behaviour was
+touched.
+
+Every projected `ContentBlock` now carries `content_width` - `contained` or `full_width` -
+alongside `section_style`. Both belong to the **placement**, so the same hero Banner can
+run full width on one route and contained on a page.
+
+### The whole change
+
+`ContentSection` gained one input and one branch:
+
+| | `contained` | `full_width` |
+| --- | --- | --- |
+| band | `<section class="yob-page-section …">` | identical |
+| column | `<div class="yob-content-container">` | **absent** |
+| surface, spacing | identical | identical |
+
+Full width needed no trick at all. `main` has been full width since Phase 25J, so **not
+opening the column** is the entire implementation - no `100vw`, no `w-screen`, no
+negative-margin breakout, no viewport arithmetic. A guard scan enforces that.
+
+`contained` reuses `.yob-content-container` exactly, so every placement that predates the
+field - all of which migrated as `contained` - is byte-identical to Phase 25J.
+
+### One `<ng-content>`, stamped twice
+
+Two branches project the same content, and **Angular projects a given `<ng-content />`
+slot once**: a second slot in the other branch renders empty, which is a section with no
+block inside it. Phase 25E hit exactly this in `DestinationLink`. So the content is
+captured in an `<ng-template>` once and stamped through `ngTemplateOutlet`, and a test
+asserts both branches actually render their child.
+
+### Independence, and the safe fallback
+
+The two keys are never derived from one another; all ten combinations are asserted. The
+Phase 25J dark-band foreground rules key off the band rather than the column, so
+`dark` + `full_width` stays readable - measured, not assumed.
+
+`isFullWidth()` is the one place a width value is interpreted, and it is written
+inverted on purpose: **anything** that is not the published full-width word is contained.
+An unrecognised value falls back to the safe, unchanged behaviour rather than letting
+merchant content escape the column. No width value ever becomes a class.
+
+### What it does not reach
+
+`content_width` affects Content Blocks only. The application's own sections - cart,
+product, orders, account - keep their source-owned `.yob-content-container`, and a guard
+asserts nothing outside the content domain so much as mentions the field. A merchant
+cannot make the cart full width.
+
+### Contract discrepancies found
+
+None. 3.7.0 is additive: one required field on `ContentBlock`, published as the reusable
+`ContentWidth` schema, always present.
+
+### Live smoke - PENDING
+
+No credentials in this environment.
+
 ## CONFIRMED - Full-width content sections and a fixed inner column (Phase 25J, 2026-08-22)
 
 Frontend for backend Phase 25I, against API **3.6.0**. A layout refactor: **no business
@@ -2420,6 +2482,7 @@ until the backend ships it.
 | Frontend Phase 25E - storefront pages & content blocks (API 3.4.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25H - system route content slots & Home (API 3.5.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25J - full-width content sections & fixed inner column (API 3.6.0) | **PASS (live smoke pending)** |
+| Frontend Phase 25L - contained & full-width content blocks (API 3.7.0) | **PASS (live smoke pending)** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

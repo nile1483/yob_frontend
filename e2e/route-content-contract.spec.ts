@@ -34,7 +34,12 @@ interface OpenApiDocument {
   readonly components: {
     readonly schemas: Record<
       string,
-      { readonly 'x-route-slots'?: Readonly<Record<string, readonly string[]>> }
+      {
+        readonly 'x-route-slots'?: Readonly<Record<string, readonly string[]>>;
+        readonly enum?: readonly string[];
+        readonly required?: readonly string[];
+        readonly properties?: Readonly<Record<string, { readonly $ref?: string }>>;
+      }
     >;
   };
 }
@@ -84,9 +89,9 @@ function code(file: string): string {
     .replace(/<!--[\s\S]*?-->/g, ' ');
 }
 
-test.describe('system route content contract (API 3.6.0)', () => {
+test.describe('system route content contract (API 3.7.0)', () => {
   test('the mirrored contract is present, versioned and identical in both locations', () => {
-    expect(REFERENCE.info.version).toBe('3.6.0');
+    expect(REFERENCE.info.version).toBe('3.7.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(publishedSlots(HANDOFF)).toEqual(publishedSlots(REFERENCE));
   });
@@ -206,6 +211,62 @@ test.describe('every declared slot usage is a real position', () => {
   });
 });
 
+test.describe('placement style and width contract (Phase 25L)', () => {
+  test('ContentWidth is published with exactly the two approved words', () => {
+    const published = REFERENCE.components.schemas['ContentWidth'];
+    expect(published, 'ContentWidth is published').toBeDefined();
+    expect(published!.enum).toEqual(['contained', 'full_width']);
+    expect(HANDOFF.components.schemas['ContentWidth']!.enum).toEqual(published!.enum);
+  });
+
+  test('content_width is a common, required field on every ContentBlock', () => {
+    const block = REFERENCE.components.schemas['ContentBlock'];
+    expect(block!.required).toContain('content_width');
+    expect(block!.required).toContain('section_style');
+
+    // Referenced, not inlined - so the enum has exactly one definition to agree with.
+    expect(block!.properties?.['content_width']?.$ref).toBe('#/components/schemas/ContentWidth');
+  });
+
+  test('the Angular type spells the same two words, and no more', () => {
+    // The DTO is a hand-written union, so it is asserted against the published enum
+    // rather than trusted. A third value invented here would be a width no backend
+    // could ever send; a missing one would be a placement Angular silently contains.
+    const published = REFERENCE.components.schemas['ContentWidth']!.enum!;
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/content/contracts/page.types.ts'),
+      'utf8',
+    );
+    const declared = /export type ContentWidth =([^;]+);/.exec(source)?.[1] ?? '';
+    const words = [...declared.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+
+    expect(words.sort()).toEqual([...published].sort());
+  });
+
+  test('nothing builds a class or a request from the width', () => {
+    const offenders = APP_FILES.filter(
+      (file) =>
+        !file.endsWith('.spec.ts') &&
+        /(content-width-\$\{|width-\$\{|`full_width|w-\[100vw\]|w-screen)/.test(code(file)),
+    ).map((file) => file.replace(`${process.cwd()}/`, ''));
+
+    expect(offenders).toEqual([]);
+  });
+
+  test('only the content domain interprets a width', () => {
+    // A placement decides its own containment. It must never reach the cart, the product
+    // page or the order list, whose columns are source-owned.
+    const offenders = APP_FILES.filter((file) => {
+      if (file.includes('/domains/content/') || file.endsWith('.spec.ts')) {
+        return false;
+      }
+      return /content_width|ContentWidth|isFullWidth/.test(code(file));
+    }).map((file) => file.replace(`${process.cwd()}/`, ''));
+
+    expect(offenders).toEqual([]);
+  });
+});
+
 test.describe('the width architecture is source-controlled (Phase 25J)', () => {
   test('no section background is built from viewport units', () => {
     // `100vw` includes the scrollbar gutter, so a full-bleed band built from it is a few
@@ -215,8 +276,12 @@ test.describe('the width architecture is source-controlled (Phase 25J)', () => {
     // Scoped to how an element is SIZED. `100vw` inside an <img sizes> attribute is the
     // correct use of the unit - it tells the browser how wide the image will render -
     // and has nothing to do with a section background.
-    const offenders = APP_FILES.filter((file) =>
-      /\b(w-screen|min-w-screen)\b|w-\[100vw\]|width:\s*100vw/.test(code(file)),
+    // Specs excluded, as in the sibling scans: `content-section.spec.ts` asserts these
+    // very strings are absent from the DOM, so it necessarily contains them.
+    const offenders = APP_FILES.filter(
+      (file) =>
+        !file.endsWith('.spec.ts') &&
+        (/\b(w-screen|min-w-screen)\b|w-\[100vw\]|width:\s*100vw/.test(code(file))),
     ).map((file) => file.replace(`${process.cwd()}/`, ''));
 
     expect(offenders).toEqual([]);
