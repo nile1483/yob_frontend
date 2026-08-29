@@ -85,7 +85,7 @@ test.describe('published contract, as the browser uses it', () => {
     // Pinned on purpose, and bumped by hand. A backend release that changes the contract
     // should stop the gate until someone has reconciled Angular against it - which is
     // what Phase 25D did for 3.4.0, and what this line records.
-    expect(REFERENCE.info.version).toBe('3.8.0');
+    expect(REFERENCE.info.version).toBe('3.9.1');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(JSON.stringify(HANDOFF)).toBe(JSON.stringify(REFERENCE));
 

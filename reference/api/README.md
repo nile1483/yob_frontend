@@ -8,9 +8,62 @@ the full package (markdown + OpenAPI + Postman + examples) is mirrored at
 
 | File | Version | Contents |
 |---|---|---|
-| `openapi.json` | **3.4.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract |
-| `postman_collection.json` | 3.4.0 | runnable requests, including the family → resolve → add-to-cart flow |
+| `openapi.json` | **3.9.1** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract and the Phase 27B product-detail merchandising contract |
+| `postman_collection.json` | 3.9.1 | runnable requests, including the family → resolve → add-to-cart flow |
 | `live/` | 2.0.0 (**superseded**) | a 2026-08-13 response capture, kept for history only |
+
+The table above went stale between 3.4.0 and 3.8.0 while the JSON itself was
+synced correctly each time. **The version in `openapi.json` is the authority**,
+and `e2e/product-detail-contract.spec.ts` now fails if this row disagrees with
+it. Per-version detail for every release lives in
+[`docs/api-handoff/API-CHANGELOG.md`](../../docs/api-handoff/API-CHANGELOG.md),
+which is the backend's own changelog and is not summarised again here; only the
+newest release is described below.
+
+## What changed in 3.9.1 (Phase 27B, corrected)
+
+A contract correction with **no runtime change**: `get_item` and `resolve_variant`
+return exactly what they returned in 3.9.0.
+
+3.9.0 added `gallery`/`sections` directly to `ProductDetail` — which is also the
+schema `resolve_variant` answers with. One schema was doing two jobs, so the
+document promised merchandising back from a variant selection that deliberately
+never sends it. 3.9.1 splits the two apart:
+
+```text
+ProductDetail          resolved SKU detail          -- NO merchandising
+ProductMerchandising   { gallery, sections }        -- both required
+ProductPageDetail      allOf: ProductDetail + ProductMerchandising
+VariantFamily          allOf: family fields + ProductMerchandising
+
+get_item         -> oneOf [ ProductPageDetail, VariantFamily ]
+resolve_variant  -> ProductDetail
+```
+
+So a product page — simple or family — always carries both arrays, and a resolved
+variant carries neither. **Selecting a size changes the SKU, price, UOM and stock
+and must not reload or replace the gallery or the content**, because merchandising
+belongs to the public product entity: the simple Item, or the template for a whole
+family.
+
+## What 3.9.0 introduced (Phase 27B)
+
+* `catalog.get_item` — additive `gallery[]` and `sections[]` on **both** branches.
+  A product page's merchandising arrives with the product; there is no second
+  request.
+* `ProductGalleryImage` — `image`, `alt_text`, `caption`, `is_primary`. Array
+  order is authoritative, and `Item.image` is never synthesised into a row: an
+  empty gallery is `[]`, and the caller falls back to `image` itself.
+* `ProductContentSection` — `title` + ordered `blocks`. The section title is the
+  merchant's grouping and is independent of what the blocks inside it are.
+* `ProductContentBlock` — a **new** six-type union (`rich_text`, `key_value`,
+  `table`, `image`, `download`, `video`), discriminated on `type`. It is *not*
+  the Phase 25 CMS `ContentBlock`: `rich_text` and `image` exist in both unions
+  with different shapes, and the two must never be merged.
+* `catalog.get_product_suggestions` — unchanged, still its five lightweight
+  fields.
+
+These shapes are untouched by 3.9.1; only where they attach changed.
 
 ## What changed in 3.4.0 (Phase 25C)
 
