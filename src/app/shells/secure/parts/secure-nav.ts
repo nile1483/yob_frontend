@@ -1,7 +1,6 @@
-import { Component, ElementRef, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
-import { CartStore } from '../../../domains/cart/state/cart.store';
 import {
   destinationRoute,
   isExternalDestination,
@@ -18,6 +17,15 @@ let nextNavInstance = 0;
  * A separate piece so the secure shell can move it - beside the brand, under the
  * header, into a sidebar - by relocating one element instead of rewriting markup.
  * That is the whole of the "layout flexibility" story: composition, not configuration.
+ *
+ * ## Merchant navigation, and only merchant navigation
+ *
+ * Since Phase 26B this renders the published tree and nothing else. The cart, the orders
+ * list and the account page used to sit at the end of this row; they are application
+ * controls rather than merchandising, and each now has its own place in the header -
+ * `CartAction` and `UserMenu`. The argument below is unchanged, only acted on: what a
+ * merchant publishes and what the application owns are different things, and they no
+ * longer share a list.
  *
  * ## Two kinds of navigation, and only one is configurable
  *
@@ -166,36 +174,11 @@ let nextNavInstance = 0;
           </li>
         }
 
-        @for (link of links; track link.path) {
-          <li>
-            <a
-              [routerLink]="link.path"
-              routerLinkActive="border-slate-900 font-semibold text-slate-900"
-              ariaCurrentWhenActive="page"
-              class="flex min-h-11 items-center gap-2 border-b-2 border-transparent px-2 text-sm
-                     whitespace-nowrap text-slate-600 hover:text-slate-900"
-              >{{ link.label }}
-
-              @if (link.path === '/cart' && cartCount(); as count) {
-                <!-- aria-hidden: the count duplicates what the cart page states in full,
-                     and "Cart 3" read aloud on every page is noise rather than help. -->
-                <span
-                  aria-hidden="true"
-                  class="inline-flex min-w-5 items-center justify-center rounded-full bg-slate-900
-                         px-1.5 py-0.5 text-xs font-medium text-white"
-                  data-testid="nav-cart-count"
-                  >{{ count }}</span
-                >
-              }
-            </a>
-          </li>
-        }
       </ul>
     </nav>
   `,
 })
 export class SecureNav {
-  private readonly cart = inject(CartStore);
   private readonly menu = inject(MenuStore);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
@@ -257,23 +240,4 @@ export class SecureNav {
     return isExternalDestination(item.destination);
   }
 
-  /** Absent until something has loaded the cart, and absent when it is empty. */
-  protected readonly cartCount = computed(() => this.cart.cart()?.total_quantity ?? 0);
-
-  /**
-   * The application's own controls, in source and not configurable.
-   *
- * **Catalog is deliberately not here.** Browsing the store is storefront navigation, so
-   * it belongs to the merchant's menu - and listing it in both places put two "Catalog"
-   * links in one header. The brand link goes to `/home` regardless, so the storefront
-   * stays reachable even for a store with no menu configured.
-   *
-   * What remains is what the application needs whatever a merchant publishes: the cart
-   * they are filling, the orders they have placed, and their account.
-   */
-  protected readonly links = [
-    { path: '/cart', label: $localize`:@@nav.cart:Cart` },
-    { path: '/orders', label: $localize`:@@nav.orders:Orders` },
-    { path: '/account', label: $localize`:@@nav.account:Account` },
-  ];
 }

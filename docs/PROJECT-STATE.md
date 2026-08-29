@@ -128,6 +128,92 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Responsive storefront header and product typeahead (Phase 26B, 2026-08-27)
+
+Frontend for backend Phases 26A/26A-1, against API **3.8.0**. The authenticated header
+was redesigned and given a product typeahead. Nothing else moved: pricing, UOM, stock,
+variants, cart logic, content blocks, placements, filters, Product Grid, route content,
+the footer and the Phase 25J/25L page layout are all untouched.
+
+### The header is now its own component
+
+`SecureShell` went from 139 lines to 60: it owns the page frame, the full-width `main`
+and the footer, and nothing else. `SecureHeader` owns composition; `SecureNav`,
+`MobileNavDrawer`, `ProductSearch`, `CartAction` and `UserMenu` each own one thing.
+
+```text
+desktop  [ brand ] [ merchant nav ] [ ——— search ——— ] [ cart ] [ user ▾ ]
+mobile   [ ☰ ] [ brand ]                               [ cart ] [ user ]
+         [ ————————————— search ————————————— ]
+```
+
+**The breakpoint is `lg` (1024px), not `sm`.** Measured, not guessed: brand, navigation,
+a usable search box, the cart and a name do not fit at the 768px tablet width, and the
+casualty would have been the search box - squeezed to something unusable before the
+layout ever switched. So a tablet gets the two-row layout with the hamburger, which is
+the honest answer for a header this dense.
+
+### The merchant tree lost its lodgers
+
+`SecureNav` used to end with Cart, Orders and Account. Its own comment already argued
+those are application controls rather than merchandising; Phase 26B acted on it. The cart
+became `CartAction`, the account routes moved into `UserMenu`, and the merchant row now
+renders the published tree and nothing else. The rule that a merchant cannot switch those
+controls off by omission is unchanged - it is simply asserted against the header that now
+owns them.
+
+**The mobile drawer reads the same `MenuStore`.** One request, one dataset, two
+renderings: no mobile menu key, no static Catalog fallback, no second navigation config.
+Where the menu is empty or failed **no hamburger is rendered at all** - an empty panel
+tells a buyer the store is broken; a missing hamburger looks like a store with no
+published navigation, which is what it is.
+
+### The typeahead
+
+`catalog.get_product_suggestions`, and nothing else. Five fields, no money - the contract
+is explicit that a price in a dropdown is a second place for money to be wrong, so the
+DTO is deliberately **not** a small `ListingCard`, and a guard asserts the forbidden
+listing fields stay absent from the published schema.
+
+- **Three characters minimum.** One and two query nothing; the backend answers an empty
+  list for them anyway, so asking could only return nothing.
+- **250ms debounce**, so four keystrokes cost one request rather than four.
+- **`switchMap` is the stale-response protection.** A newer term unsubscribes the older
+  request, so a slow answer for `bol` can never paint over a fast one for `bolt`. That is
+  why this is an observable pipeline rather than promise state with a generation counter
+  to get wrong.
+- **Matching is the backend's**, shared with `get_items` - name **or** item code, AND
+  across words. Angular sends the string and matches nothing.
+- Discovery uses that endpoint alone: no `get_items`, no `get_item`, no `resolve_variant`.
+
+**Enter does nothing, deliberately.** There is no results page, no `/search` route and no
+open-the-first-result behaviour. The input is not inside a form and the default is
+prevented, so no host can later give Enter a meaning. It has its own regression test in
+both suites.
+
+### Recent products, per user
+
+Only products the buyer **clicked** - never a typed string, which is a guess rather than
+a decision. Five, newest first, a repeat moving back to the top rather than duplicating.
+
+Namespaced by the Frappe user id (`user.name`), never the display name: display names are
+neither unique nor stable, and two colleagues sharing one would share a history. Changing
+identity re-reads the list, so a sign-out drops the previous buyer's products from
+**memory** as well as from storage.
+
+Only the five published fields are persisted, copied field by field rather than spread -
+spreading would persist whatever a future backend adds, which is how a price ends up in
+`localStorage` without anyone deciding to put it there. Malformed JSON, a row of the wrong
+shape, a non-array and storage that throws on access all degrade to "no recent products".
+
+### Contract discrepancies found
+
+None. 3.8.0 is additive: one new read endpoint and two new schemas.
+
+### Live smoke - PENDING
+
+No credentials in this environment.
+
 ## CONFIRMED - Contained and full-width content blocks (Phase 25L, 2026-08-26)
 
 Frontend for backend Phase 25K, against API **3.7.0**. A small additive layout
@@ -2483,6 +2569,7 @@ until the backend ships it.
 | Frontend Phase 25H - system route content slots & Home (API 3.5.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25J - full-width content sections & fixed inner column (API 3.6.0) | **PASS (live smoke pending)** |
 | Frontend Phase 25L - contained & full-width content blocks (API 3.7.0) | **PASS (live smoke pending)** |
+| Frontend Phase 26B - responsive header & product typeahead (API 3.8.0) | **PASS (live smoke pending)** |
 | Frontend Phase 16 - Cart coupon | **PASS** |
 | Backend Payment Lifecycle Phase 2B | **PASS** |
 | API reference 1.0.0 | **superseded** |

@@ -387,16 +387,19 @@ describe('application routes', () => {
       const harness = await RouterTestingHarness.create();
       await harness.navigateByUrl('/catalog');
 
-      const accountLink = (
+      // The cart is the header's own always-present link. Account moved into the user
+      // menu in Phase 26B, and this test is about routing rather than about where a
+      // particular link sits - so it uses the one that needs no menu opened first.
+      const cartLink = (
         harness.fixture.nativeElement as HTMLElement
-      ).querySelector<HTMLAnchorElement>('app-secure-nav a[href="/account"]');
-      expect(accountLink).not.toBeNull();
+      ).querySelector<HTMLAnchorElement>('[data-testid="cart-action"]');
+      expect(cartLink).not.toBeNull();
 
-      accountLink?.click();
+      cartLink?.click();
       await harness.fixture.whenStable();
 
       // A plain href would have left the router where it was.
-      expect(router.url).toBe('/account');
+      expect(router.url).toBe('/cart');
     });
   });
 

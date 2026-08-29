@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow } from './support/layout';
+import { cartLink, goToMerchantDestination } from './support/header';
 
 /**
  * The cart coupon, in a real browser at every viewport.
@@ -24,19 +25,14 @@ const BOLT = '/catalog/item/hex-bolt-m10-50';
  * in this file is client-side for that reason.
  */
 async function goToCart(page: Page): Promise<void> {
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('link', { name: 'Cart' })
+  await cartLink(page)
     .click();
   await expect(page).toHaveURL('/cart');
 }
 
 /** Client-side route back to the bolt's detail page, via the catalog. */
 async function goToBolt(page: Page): Promise<void> {
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('link', { name: 'Catalog' })
-    .click();
+  await goToMerchantDestination(page, 'Catalog');
   await page
     .getByRole('link', { name: /Industrial Fasteners/ })
     .first()

@@ -207,8 +207,14 @@ describe('merchant navigation', () => {
 
       // A missing menu is indistinguishable from a store with none configured, so the
       // shell simply carries on. No banner, and above all no retry.
+      //
+      // Since Phase 26B the application's own controls are no longer in this row - the
+      // cart and the account actions have their own places in the header - so what this
+      // asserts is that the merchant row renders nothing rather than something broken.
+      // That the controls survive an absent menu is asserted against the header itself,
+      // in `secure-header.spec.ts`.
       expect(all('nav-link')).toHaveLength(0);
-      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Cart');
+      expect(all('nav-group')).toHaveLength(0);
       expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('never rendered');
       http.expectNone(() => true);
     });
@@ -354,25 +360,30 @@ describe('merchant navigation', () => {
   });
 
   describe('application controls', () => {
-    it('keeps Cart, Orders and Account whatever the merchant configured', async () => {
-      await render(menuPayload({ items: [] }));
+    // Where these live changed in Phase 26B - the cart became its own header action and
+    // the account actions moved into the user menu - so *that they survive an empty
+    // menu* is now asserted in `secure-header.spec.ts`, against the header that owns
+    // them. What belongs here is the other half of the same rule: this row renders the
+    // merchant's tree and nothing else.
 
-      // An empty menu must not empty the shell: these are how the application works,
-      // not merchandising, and a merchant cannot switch them off by omission.
-      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-      expect(text).toContain('Cart');
-      expect(text).toContain('Orders');
-      expect(text).toContain('Account');
-      expect(all('nav-link')).toHaveLength(0);
-    });
-
-    it('does not take them from the menu when one is configured', async () => {
+    it('renders no application control of its own', async () => {
       await render();
 
-      // Cart is a shell control, so it is not one of the merchant nav links even though
-      // the merchant's own tree is rendered right beside it.
+      // Not merely absent from the menu payload: absent from this component entirely.
+      // A merchant tree and the application's own controls are different things, and
+      // since Phase 26B they no longer share a list.
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).not.toContain('Cart');
+      expect(text).not.toContain('Orders');
+      expect(text).not.toContain('Account');
       expect(byLabel('nav-link', 'Cart')).toBeUndefined();
-      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Cart');
+    });
+
+    it('renders nothing at all for an empty menu', async () => {
+      await render(menuPayload({ items: [] }));
+
+      expect(all('nav-link')).toHaveLength(0);
+      expect(all('nav-group')).toHaveLength(0);
     });
   });
 

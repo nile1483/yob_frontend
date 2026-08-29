@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow } from './support/layout';
+import { cartLink, goToAccountRoute, goToCart, goToMerchantDestination, merchantLink, openMerchantNav, signOutFromHeader } from './support/header';
 
 /**
  * The storefront's visual system, asserted as behaviour rather than as styling.
@@ -16,10 +17,10 @@ import { expectNoHorizontalOverflow } from './support/layout';
  * Runs at all three configured viewports.
  */
 
-const nav = (page: Page, name: string) =>
-  // `exact`, because role-name matching is substring-based by default: a merchant menu
-  // entry called "Catalogue PDF" would otherwise also answer to "Catalog".
-  page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name, exact: true });
+// The merchant tree, wherever this viewport puts it: a row from 1024px up, the drawer
+// below. Matched on the label attribute rather than the accessible name, which is exact
+// by construction - a menu entry called "Catalogue PDF" cannot answer to "Catalog".
+const nav = (page: Page, name: string) => merchantLink(page, name);
 
 async function openLeafCategory(page: Page): Promise<boolean> {
   for (let depth = 0; depth < 4; depth++) {
@@ -38,28 +39,39 @@ test.describe('shell and navigation', () => {
   });
 
   test('every primary destination is reachable from the header', async ({ page }) => {
-    for (const [name, url] of [
-      ['Cart', '/cart'],
-      ['Orders', '/orders'],
-      ['Account', '/account'],
-      ['Catalog', '/catalog'],
-    ] as const) {
-      await nav(page, name).click();
-      await expect(page).toHaveURL(url);
-    }
+    // Since Phase 26B each destination has its own home: browsing is the merchant's own
+    // navigation, the cart is a header action, and the account routes live behind the
+    // user menu. What this asserts is unchanged - all of them are still one gesture from
+    // the header - only where each one is has moved.
+    await goToMerchantDestination(page, 'Catalog');
+    await expect(page).toHaveURL('/catalog');
+
+    await goToCart(page);
+    await expect(page).toHaveURL('/cart');
+
+    await goToAccountRoute(page, 'Orders');
+    await expect(page).toHaveURL('/orders');
+
+    await goToAccountRoute(page, 'Account');
+    await expect(page).toHaveURL('/account');
   });
 
   test('the header marks where you are', async ({ page }) => {
-    await nav(page, 'Orders').click();
+    await goToMerchantDestination(page, 'Catalog');
 
     // `aria-current` is what a screen reader announces; the visual treatment follows it.
-    // Asserting the styling instead would tie the test to a colour.
-    await expect(nav(page, 'Orders')).toHaveAttribute('aria-current', 'page');
-    await expect(nav(page, 'Catalog')).not.toHaveAttribute('aria-current', 'page');
+    // Asserting the styling instead would tie the test to a colour. Asserted on the
+    // merchant tree, which is the part of the header that marks position.
+    // Reopened first: below 1024px the tree is a drawer, which closes behind a chosen
+    // destination. Both renderings mark position the same way.
+    await openMerchantNav(page);
+    await expect(nav(page, 'Catalog')).toHaveAttribute('aria-current', 'page');
+    await expect(nav(page, 'About Us')).not.toHaveAttribute('aria-current', 'page');
   });
 
   test('a buyer can actually sign out', async ({ page }) => {
-    await page.getByTestId('sign-out').click();
+    // Sign out moved into the user menu, where the rest of the account actions are.
+    await signOutFromHeader(page);
 
     await expect(page).toHaveURL(/login/);
     // And the session is really gone, not just navigated away from.
@@ -68,12 +80,13 @@ test.describe('shell and navigation', () => {
   });
 
   test('the header stays usable at every width', async ({ page }) => {
-    await expect(page.getByTestId('sign-out')).toBeVisible();
-    await expect(nav(page, 'Catalog')).toBeVisible();
+    await expect(page.getByTestId('user-menu-trigger')).toBeVisible();
+    await expect(cartLink(page)).toBeVisible();
+    await expect(page.locator('[data-testid="product-search-input"]:visible').first()).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
     // Tap targets: 44px is the floor for a thumb.
-    const box = await nav(page, 'Cart').boundingBox();
+    const box = await cartLink(page).boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
   });
 
@@ -81,7 +94,7 @@ test.describe('shell and navigation', () => {
     // Nothing has loaded a cart yet, so there is deliberately no number to show.
     await expect(page.getByTestId('nav-cart-count')).toHaveCount(0);
 
-    await nav(page, 'Cart').click();
+    await goToCart(page);
     await expect(page.getByTestId('cart-empty')).toBeVisible();
 
     // Still nothing: an empty cart has no count worth rendering.
@@ -270,7 +283,7 @@ test.describe('action hierarchy', () => {
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
 
-    await nav(page, 'Cart').click();
+    await goToCart(page);
     await page.getByTestId('cart-checkout-link').click();
     await expect(page).toHaveURL('/checkout');
 
@@ -293,7 +306,7 @@ test.describe('action hierarchy', () => {
 
     await page.getByTestId('item-card').first().click();
     await page.getByTestId('add-to-cart').click();
-    await nav(page, 'Cart').click();
+    await goToCart(page);
 
     const remove = await page.getByTestId('cart-line-remove').boundingBox();
     const checkout = await page.getByTestId('cart-checkout-link').boundingBox();
@@ -307,7 +320,7 @@ test.describe('transactional reading order', () => {
     test.skip(!(await openLeafCategory(page)), 'no items in the mock catalog');
     await page.getByTestId('item-card').first().click();
     await page.getByTestId('add-to-cart').click();
-    await nav(page, 'Cart').click();
+    await goToCart(page);
     await page.getByTestId('cart-checkout-link').click();
     await expect(page).toHaveURL('/checkout');
 
@@ -369,7 +382,7 @@ test.describe('states look like one storefront', () => {
     await expect(page.getByTestId('orders-empty')).toBeVisible();
     await expect(page.getByTestId('orders-empty').getByRole('link')).toBeVisible();
 
-    await nav(page, 'Cart').click();
+    await goToCart(page);
     await expect(page.getByTestId('cart-empty')).toBeVisible();
     await expect(page.getByTestId('cart-empty').getByRole('link')).toBeVisible();
 
@@ -391,13 +404,21 @@ test.describe('page rhythm', () => {
     await signInAsMockBuyer(page, { goTo: '/catalog' });
 
     const tops: number[] = [];
-    for (const [name, url] of [
-      ['Catalog', '/catalog'],
-      ['Cart', '/cart'],
-      ['Orders', '/orders'],
-      ['Account', '/account'],
-    ] as const) {
-      await nav(page, name).click();
+    // Each destination is reached the way the header actually offers it since Phase 26B:
+    // browsing through the merchant tree, the cart as an action, the account routes
+    // through the user menu. The rhythm being measured is unchanged.
+    const visit = async (url: string) => {
+      if (url === '/catalog') {
+        await goToMerchantDestination(page, 'Catalog');
+      } else if (url === '/cart') {
+        await goToCart(page);
+      } else {
+        await goToAccountRoute(page, url === '/orders' ? 'Orders' : 'Account');
+      }
+    };
+
+    for (const url of ['/catalog', '/cart', '/orders', '/account'] as const) {
+      await visit(url);
       // Wait for the destination before measuring: mid-navigation the query can still
       // resolve to the outgoing page's heading, which reports a zeroed rect.
       await expect(page).toHaveURL(url);

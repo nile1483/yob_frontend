@@ -166,11 +166,23 @@ test.describe('the application keeps its own column', () => {
   test('the header and footer are untouched by the refactor', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: '/catalog' });
 
-    const brand = await page.getByRole('banner').getByRole('link').first().boundingBox();
-    const heading = await page.getByRole('heading', { level: 1 }).boundingBox();
+    const headerColumn = await page
+      .getByTestId('secure-header')
+      .locator('.yob-content-container')
+      .first()
+      .boundingBox();
+    const pageColumn = await page
+      .locator('section.catalog-section .yob-content-container')
+      .first()
+      .boundingBox();
 
-    // The brand still starts exactly where a page's content starts - the invariant the
-    // shared column exists to guarantee, measured at the text on both sides.
-    expect(Math.abs(brand!.x - heading!.x)).toBeLessThanOrEqual(1);
+    // The header's column and the page's column are the same column - the invariant the
+    // shared container exists to guarantee.
+    //
+    // Measured on the containers rather than on the brand text since Phase 26B: below
+    // 1024px a hamburger precedes the brand, so the brand is legitimately no longer the
+    // leftmost thing in the row. The columns still align, which is the actual promise.
+    expect(Math.abs(headerColumn!.x - pageColumn!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(headerColumn!.width - pageColumn!.width)).toBeLessThanOrEqual(1);
   });
 });

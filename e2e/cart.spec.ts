@@ -2,13 +2,14 @@ import { expect, test } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
+import { cartLink, goToMerchantDestination } from './support/header';
 
 test.describe('priced projection (Phase 23B-2)', () => {
   /** Client-side only: a full page load restarts the app and drops the mock session. */
   async function addBoltAndOpenCart(page: import('@playwright/test').Page): Promise<void> {
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
-    await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Cart' }).click();
+    await cartLink(page).click();
     await expect(page.getByTestId('cart-line').first()).toBeVisible();
   }
 
@@ -66,9 +67,7 @@ test.describe('row UOM and UOM conflict (Phase 23B-5U-FE)', () => {
   async function addBoltAndOpenCart(page: import('@playwright/test').Page): Promise<void> {
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page.getByTestId('cart-line').first()).toBeVisible();
   }
@@ -113,9 +112,7 @@ test.describe('row UOM and UOM conflict (Phase 23B-5U-FE)', () => {
     // Nothing was converted on the buyer's behalf.
     await expect(page.getByTestId('item-quantity')).toHaveValue('1');
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     await expect(page.getByTestId('cart-uom-changed')).toContainText('sold in a different unit');
@@ -129,9 +126,7 @@ test.describe('row-level tax (Phase 23B-4)', () => {
   async function addAndOpenCart(page: import('@playwright/test').Page): Promise<void> {
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page.getByTestId('cart-line').first()).toBeVisible();
   }
@@ -239,9 +234,7 @@ test.describe('local quantity (Phase 23B-2)', () => {
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     // The whole quantity arrived once, rather than one unit per keystroke.
@@ -285,9 +278,13 @@ test.describe('UOM and availability (Phase 23B-2, 23B-5U-FE)', () => {
   test('the buyer is offered no unit or warehouse to choose', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-bolt-m10-50' });
 
-    await expect(page.locator('select')).toHaveCount(0);
-    await expect(page.getByRole('combobox')).toHaveCount(0);
-    await expect(page.locator('body')).not.toContainText('Warehouse');
+    // Scoped to the routed page since Phase 26B: the header's product typeahead is a
+    // combobox by ARIA convention, and it is not a unit selector. What this asserts is
+    // that the *product* offers no unit or warehouse choice.
+    const content = page.getByTestId('page-main');
+    await expect(content.locator('select')).toHaveCount(0);
+    await expect(content.getByRole('combobox')).toHaveCount(0);
+    await expect(content).not.toContainText('Warehouse');
   });
 
   test('stock is counted in the stock UOM, beside a price in the selling UOM', async ({
@@ -355,10 +352,7 @@ test.describe('the full journey', () => {
 
     // The merchant's own navigation, not a fresh document load: `page.goto` restarts
     // the app and the mock server forgets the session.
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Catalog', exact: true })
-      .click();
+    await goToMerchantDestination(page, 'Catalog');
     await expect(page).toHaveURL('/catalog');
 
     await page
@@ -374,9 +368,7 @@ test.describe('the full journey', () => {
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     await expect(page).toHaveURL('/cart');
@@ -447,9 +439,7 @@ test.describe('add_to_cart is a delta', () => {
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     await expect(page.getByTestId('cart-line')).toHaveCount(1);
@@ -465,9 +455,7 @@ test.describe('add_to_cart is a delta', () => {
     await signInAsMockBuyer(page, { goTo: BOLT });
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     // Product decision: quantity is chosen on item detail and added. There is no
@@ -492,9 +480,7 @@ test.describe('add_to_cart is a delta', () => {
     });
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible({ timeout: 15000 });
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page.getByTestId('cart-line-quantity')).toContainText('3');
   });
@@ -520,9 +506,7 @@ test.describe('add to cart', () => {
     await setQuantity(page, '3');
     await page.getByTestId('add-to-cart').click();
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page).toHaveURL('/cart');
 
@@ -568,9 +552,7 @@ test.describe('cart page', () => {
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
 
     // Client-side only: a goto would reload and drop the mock server session.
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page).toHaveURL('/cart');
 
@@ -587,9 +569,7 @@ test.describe('cart page', () => {
       (window as unknown as Record<string, unknown>)['__spaMarker'] = true;
     });
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page).toHaveURL('/cart');
 
@@ -603,9 +583,7 @@ test.describe('cart page', () => {
     await signInAsMockBuyer(page, { goTo: ANCHOR });
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page).toHaveURL('/cart');
 
@@ -618,7 +596,8 @@ test.describe('cart page', () => {
   test('renders inside the secure shell', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: '/cart' });
     await expect(page.getByTestId('secure-shell')).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+    // the header is present; the merchant row itself is desktop-only since Phase 26B.
+    await expect(page.getByTestId('secure-header')).toBeVisible();
   });
 
   test('fails safely', async ({ page }) => {
@@ -640,9 +619,7 @@ test.describe('reconciliation', () => {
     await signInWithMockFlags(page, 'mockScenario=cart-repriced', { goTo: BOLT });
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     const notice = page.getByTestId('cart-reconciliation');
@@ -655,9 +632,7 @@ test.describe('reconciliation', () => {
     await signInWithMockFlags(page, 'mockScenario=cart-item-removed', { goTo: BOLT });
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     const notice = page.getByTestId('cart-reconciliation');
@@ -675,9 +650,7 @@ test.describe('removing from the cart', () => {
     await signInAsMockBuyer(page, { goTo: item });
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page).toHaveURL('/cart');
   }

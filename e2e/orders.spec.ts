@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
+import { goToAccountRoute } from './support/header';
 
 /**
  * Buyer orders in a real browser, at every configured viewport.
@@ -15,14 +16,11 @@ const UNPAID = 'SAL-ORD-MOCK-0002';
 const CANCELLED = 'SAL-ORD-MOCK-0003';
 const LEGACY = 'SAL-ORD-MOCK-0004';
 
-const ordersLink = (page: Page) =>
-  page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Orders' });
-
 test.describe('reaching orders', () => {
   test('login to orders to an order detail', async ({ page }) => {
     await signInAsMockBuyer(page);
 
-    await ordersLink(page).click();
+    await goToAccountRoute(page, 'Orders');
     await expect(page).toHaveURL('/orders');
     await expect(page.getByTestId('order-row')).toHaveCount(4);
 

@@ -12,6 +12,7 @@ import {
   mockChildCategories,
   mockFamilyByCode,
   mockResolveVariant,
+  mockProductSuggestions,
 } from '../fixtures/catalog.fixture';
 
 /**
@@ -284,6 +285,41 @@ const getCategoryFilters: MockHandler = (ctx) => {
 };
 
 /** All endpoints are login-protected; without a session Frappe refuses before YOB runs. */
+/**
+ * `get_product_suggestions` - a few products for the header typeahead.
+ *
+ * Answers `{items: []}` under three characters rather than an error, exactly as the
+ * contract specifies: a buyer mid-word has done nothing wrong. The floor is enforced
+ * here as well as in the client, so a client that stopped applying it would still be
+ * answered safely - and a test can prove the client is not calling at all.
+ */
+const getProductSuggestions: MockHandler = (ctx) => {
+  const guard = requireSession(ctx);
+  if (guard) {
+    return guard;
+  }
+
+  if (ctx.scenario === 'product-suggestions-unavailable') {
+    return mockYobError('internal_server_error', 'Something went wrong.', { status: 500 });
+  }
+
+  const search = (ctx.params.get('search') ?? '').trim();
+
+  // The same refusal `get_items` gives, so the client meets one shape of failure.
+  if (search.length > 100 || search.split(/\s+/).filter(Boolean).length > 6) {
+    return mockYobError('search_too_long', 'Search is too long.', {
+      field: 'search',
+      status: 422,
+    });
+  }
+
+  if (search.length < 3) {
+    return mockSuccess({ items: [] });
+  }
+
+  return mockSuccess({ items: mockProductSuggestions(search) });
+};
+
 function requireSession(ctx: MockContext): MockReply | null {
   return ctx.session.isAuthenticated() ? null : mockPermissionError(ctx.rpcMethod);
 }
@@ -584,4 +620,5 @@ export const CATALOG_HANDLERS: Readonly<Record<string, MockHandler>> = {
   'yob_storefront.api.catalog.get_item': getItem,
   'yob_storefront.api.catalog.resolve_variant': resolveVariant,
   'yob_storefront.api.catalog.get_category_filters': getCategoryFilters,
+  'yob_storefront.api.catalog.get_product_suggestions': getProductSuggestions,
 };

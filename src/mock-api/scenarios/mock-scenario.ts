@@ -156,7 +156,14 @@ export type MockScenario =
    * Nothing retries, and nothing tells the buyer - the alternative is an error message
    * about content they never asked to see.
    */
-  | 'route-content-unavailable';
+  | 'route-content-unavailable'
+  /**
+   * `catalog.get_product_suggestions` fails.
+   *
+   * Header typeahead is supplemental: a failed suggestion must leave the header, the
+   * cart, the user menu and the current page entirely usable, and must not retry.
+   */
+  | 'product-suggestions-unavailable';
 
 /**
  * Runtime knobs for the mock API.
@@ -228,7 +235,8 @@ export class MockApiScenario {
       scenario === 'menu-missing' ||
       scenario === 'storefront-filter-refused' ||
       scenario === 'category-filters-unavailable' ||
-      scenario === 'route-content-unavailable'
+      scenario === 'route-content-unavailable' ||
+      scenario === 'product-suggestions-unavailable'
     ) {
       this.scenario.set(scenario);
       this.sparesAuth.set(true);

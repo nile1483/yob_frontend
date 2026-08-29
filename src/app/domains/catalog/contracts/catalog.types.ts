@@ -623,3 +623,45 @@ export function toCategoryLink(dto: CategoryListItemDto | SubcategoryDto): Categ
     thumbnail: dto.thumbnail,
   };
 }
+
+/* ------------------------------------------------------- product suggestions */
+
+/**
+ * One product in the header typeahead (API 3.8.0 `ProductSuggestion`).
+ *
+ * **Navigation only, and deliberately not a small `ListingCard`.** There is no rate,
+ * discount, tax, UOM, conversion factor, stock, warehouse or pricing rule here, and the
+ * contract says there will not be: the product page is authoritative once the buyer
+ * clicks, and a price in a dropdown is a second place for money to be wrong.
+ *
+ * Every suggestion has a public `slug`, because a product without a public URL is never
+ * suggested. `is_template` marks a variant **family**, which opens an options page rather
+ * than a directly buyable product; generated variants never arrive on their own.
+ */
+export interface ProductSuggestionDto {
+  readonly item_code: string;
+  readonly item_name: string;
+  readonly slug: string;
+  /** Relative path as stored (`/files/...`), the same convention `ListingCard` uses. */
+  readonly image: string | null;
+  readonly is_template: boolean;
+}
+
+/**
+ * The `data` payload of `get_product_suggestions`.
+ *
+ * At most 8 rows, no pagination, no cursor, no facets and no category scope. Fewer than
+ * three characters answers an empty list rather than an error - a buyer mid-word has done
+ * nothing wrong.
+ */
+export interface ProductSuggestionsDto {
+  readonly items: readonly ProductSuggestionDto[];
+}
+
+/**
+ * The shortest search the backend will answer.
+ *
+ * The server enforces this rather than trusting the client; the client applies it too, so
+ * a buyer typing `bo` costs nothing. One constant, so the two cannot drift.
+ */
+export const PRODUCT_SUGGESTION_MIN_CHARS = 3;

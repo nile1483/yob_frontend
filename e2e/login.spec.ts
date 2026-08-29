@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { MOCK_CREDENTIALS } from '../src/mock-api/fixtures/session.fixture';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
+import { goToAccountRoute } from './support/header';
 
 /**
  * The first real end-to-end user journey: guest -> sign in -> secure shell.
@@ -236,7 +237,8 @@ test.describe('secure shell after sign-in', () => {
     await expect(page.getByTestId('secure-shell')).toBeVisible();
     await expect(page.getByTestId('public-shell')).toHaveCount(0);
 
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+    // the header is present; the merchant row itself is desktop-only since Phase 26B.
+    await expect(page.getByTestId('secure-header')).toBeVisible();
     // The routed content is now the storefront home page, which the merchant fills.
     await expect(page.getByTestId('home-page')).toBeVisible();
     await expect(page.getByRole('banner')).toContainText('Mock Buyer');
@@ -250,7 +252,9 @@ test.describe('secure shell after sign-in', () => {
   });
 
   test('its navigation stays inside the viewport', async ({ page }) => {
-    const nav = page.getByRole('navigation', { name: 'Primary' });
+    // Measured on the header itself: the merchant row is desktop-only since Phase 26B,
+    // and what this protects is that nothing in the header escapes the viewport.
+    const nav = page.getByTestId('secure-header');
     const box = await nav.boundingBox();
     const viewport = page.viewportSize();
 
@@ -267,10 +271,7 @@ test.describe('secure shell after sign-in', () => {
       (window as unknown as Record<string, unknown>)['__spaMarker'] = true;
     });
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Account' })
-      .click();
+    await goToAccountRoute(page, 'Account');
 
     await expect(page).toHaveURL('/account');
     await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();

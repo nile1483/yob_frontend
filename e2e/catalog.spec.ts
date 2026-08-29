@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
+import { goToMerchantDestination } from './support/header';
 
 /**
  * The catalog vertical slice in a real browser, at every configured viewport.
@@ -26,10 +27,7 @@ test.describe('login to catalog', () => {
     await expect(page.getByTestId('secure-shell')).toBeVisible();
 
     // On to the catalog the way a buyer gets there: the merchant's own navigation.
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Catalog', exact: true })
-      .click();
+    await goToMerchantDestination(page, 'Catalog');
     await expect(page).toHaveURL('/catalog');
     await expect(page.getByRole('heading', { name: 'Catalog', level: 1 })).toBeVisible();
     await expect(page.getByTestId('category-grid')).toBeVisible();

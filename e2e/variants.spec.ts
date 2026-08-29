@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow } from './support/layout';
+import { cartLink } from './support/header';
 
 const FAMILY = '/catalog/item/hi-vis-safety-vest';
 const UNSUPPORTED_FAMILY = '/catalog/item/contractor-tool-kit';
@@ -100,9 +101,13 @@ test.describe('variant family page', () => {
     await signInAsMockBuyer(page, { goTo: FAMILY });
     await chooseOrangeMedium(page);
 
-    await expect(page.locator('select')).toHaveCount(0);
-    await expect(page.getByRole('combobox')).toHaveCount(0);
-    await expect(page.locator('body')).not.toContainText('Warehouse');
+    // Scoped to the routed page since Phase 26B: the header's product typeahead is a
+    // combobox by ARIA convention, and it is not a unit selector. What this asserts is
+    // that the *product* offers no unit or warehouse choice.
+    const content = page.getByTestId('page-main');
+    await expect(content.locator('select')).toHaveCount(0);
+    await expect(content.getByRole('combobox')).toHaveCount(0);
+    await expect(content).not.toContainText('Warehouse');
   });
 
   test('shows the resolved variant, priced in its own units', async ({ page }) => {
@@ -171,9 +176,7 @@ test.describe('variant family page', () => {
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     // The cart holds the variant the backend named, in the unit it sells in. An exact

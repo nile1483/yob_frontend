@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { selectSearchOption } from './support/forms';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
+import { goToAccountRoute } from './support/header';
 
 /**
  * Account address and contact management in a real browser, at every viewport.
@@ -17,14 +18,11 @@ import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout'
  * does.
  */
 
-const accountLink = (page: Page) =>
-  page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Account' });
-
 test.describe('reaching the account page', () => {
   test('login to account', async ({ page }) => {
     await signInAsMockBuyer(page);
 
-    await accountLink(page).click();
+    await goToAccountRoute(page, 'Account');
 
     await expect(page).toHaveURL('/account');
     await expect(page.getByTestId('address-item')).toHaveCount(2);

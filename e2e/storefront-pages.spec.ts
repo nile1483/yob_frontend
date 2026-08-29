@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer } from './support/auth';
 import { expectNoHorizontalOverflow } from './support/layout';
+import { merchantLink, openMerchantNav } from './support/header';
 
 const ABOUT = '/pages/about-us';
 
@@ -20,13 +21,10 @@ test.describe('storefront page', () => {
     await signInAsMockBuyer(page, { goTo: '/catalog' });
 
     // Phase 25D builds `/pages/<target>` because the backend stores no route; this is the
-    // other half of that agreement. Scoped to the *visible* nav: the shell renders the
-    // component twice, and at a phone width the wide one is hidden.
-    const link = page
-      .getByRole('navigation', { name: 'Primary' })
-      .filter({ visible: true })
-      .first()
-      .locator('[data-testid="nav-link"][data-label="About Us"]');
+    // other half of that agreement. The tree is a row from 1024px up and the drawer below
+    // it, so the destination is reached whichever way this viewport offers it.
+    await openMerchantNav(page);
+    const link = merchantLink(page, 'About Us');
     await expect(link).toHaveAttribute('href', '/pages/about-us');
 
     await link.click();

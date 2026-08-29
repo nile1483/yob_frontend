@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
+import { cartLink } from './support/header';
 
 /** The merchant nav row for this breakpoint: the visible one of the shell's two. */
 function nav(page: Page) {
@@ -24,6 +25,17 @@ function navGroup(page: Page, label: string) {
  * on a desktop without two datasets or two test suites.
  */
 test.describe('configured navigation', () => {
+  // The desktop row exists only from 1024px up. Its mobile counterpart is a drawer with
+  // genuinely different mechanics - a dialog rather than a dropdown - and has its own
+  // coverage in `header.spec.ts` and `mobile-nav-drawer.spec.ts`. Asserting dropdown
+  // behaviour against a drawer would prove nothing about either.
+  test.beforeEach(({}, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium-desktop',
+      'the merchant navigation row is desktop-only; the drawer is covered separately',
+    );
+  });
+
   test('renders the merchant tree in the merchant order', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: '/catalog' });
 
@@ -107,17 +119,28 @@ test.describe('configured navigation', () => {
     await signInAsMockBuyer(page, { goTo: '/catalog' });
 
     // Cart, Orders and Account are code-owned: they are how the application works, and a
-    // merchant cannot remove them by leaving them out of a menu.
-    await expect(nav(page).getByRole('link', { name: 'Cart' })).toBeVisible();
-    await expect(nav(page).getByRole('link', { name: 'Orders' })).toBeVisible();
-    await expect(nav(page).getByRole('link', { name: 'Account' })).toBeVisible();
+    // merchant cannot remove them by leaving them out of a menu. Since Phase 26B they sit
+    // beside the merchant tree rather than inside it - the cart as its own action, the
+    // account routes behind the user menu - which is the separation, not a loss.
+    await expect(cartLink(page)).toBeVisible();
+
+    await page.getByTestId('user-menu-trigger').click();
+    await expect(
+      page.locator('[data-testid="user-menu-link"][data-label="Orders"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="user-menu-link"][data-label="Account"]'),
+    ).toBeVisible();
   });
 
   test('carries on with the shell controls when no menu is configured', async ({ page }) => {
     await signInWithMockFlags(page, 'mockScenario=menu-missing', { goTo: '/catalog' });
 
-    await expect(nav(page).getByTestId('nav-link')).toHaveCount(0);
-    await expect(nav(page).getByRole('link', { name: 'Cart' })).toBeVisible();
+    await expect(page.getByTestId('nav-link')).toHaveCount(0);
+    // The application's own controls survive an absent menu, which is the whole point.
+    await expect(cartLink(page)).toBeVisible();
+    await expect(page.getByTestId('user-menu-trigger')).toBeVisible();
+    await expect(page.locator('[data-testid="product-search-input"]:visible').first()).toBeVisible();
     // A missing menu is not an error the buyer can do anything about.
     await expect(page.locator('body')).not.toContainText('menu_not_found');
   });

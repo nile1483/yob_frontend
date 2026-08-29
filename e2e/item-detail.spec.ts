@@ -161,7 +161,8 @@ test.describe('item detail content', () => {
     await signInAsMockBuyer(page, { goTo: BOLT });
 
     await expect(page.getByTestId('secure-shell')).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+    // the header is present; the merchant row itself is desktop-only since Phase 26B.
+    await expect(page.getByTestId('secure-header')).toBeVisible();
     await expect(page.getByRole('banner')).toContainText('Mock Buyer');
   });
 });

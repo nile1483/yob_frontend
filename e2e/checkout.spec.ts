@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
+import { cartLink } from './support/header';
 
 /**
  * Checkout details in a real browser, at every configured viewport.
@@ -41,9 +42,7 @@ async function openCheckout(page: Page, flags?: string): Promise<void> {
   }
 
   await addBoltToCart(page);
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('link', { name: 'Cart' })
+  await cartLink(page)
     .click();
   await expect(page).toHaveURL('/cart');
   await page.getByTestId('cart-checkout-link').click();
@@ -59,9 +58,7 @@ test.describe('reaching checkout', () => {
     await signInAsMockBuyer(page, { goTo: BOLT });
     await addBoltToCart(page);
 
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
     await expect(page.getByTestId('cart-checkout-link')).toBeVisible();
 
@@ -72,9 +69,7 @@ test.describe('reaching checkout', () => {
   test('routes client-side, without a page load', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: BOLT });
     await addBoltToCart(page);
-    await page
-      .getByRole('navigation', { name: 'Primary' })
-      .getByRole('link', { name: 'Cart' })
+    await cartLink(page)
       .click();
 
     await page.evaluate(() => {
@@ -110,7 +105,8 @@ test.describe('reaching checkout', () => {
     await openCheckout(page);
 
     await expect(page.getByTestId('secure-shell')).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
+    // the header is present; the merchant row itself is desktop-only since Phase 26B.
+    await expect(page.getByTestId('secure-header')).toBeVisible();
     await expect(page.getByRole('banner')).toContainText('Mock Buyer');
   });
 });

@@ -6,6 +6,7 @@ import type {
   CategoryListItemDto,
   CategoryFiltersDto,
   CategoryMetaDto,
+  ProductSuggestionsDto,
   CategoryPayloadDto,
   ItemDetailDto,
   ItemPayloadDto,
@@ -21,6 +22,7 @@ const GET_ITEM = 'yob_storefront.api.catalog.get_item';
 const GET_ITEMS = 'yob_storefront.api.catalog.get_items';
 const RESOLVE_VARIANT = 'yob_storefront.api.catalog.resolve_variant';
 const GET_CATEGORY_FILTERS = 'yob_storefront.api.catalog.get_category_filters';
+const GET_PRODUCT_SUGGESTIONS = 'yob_storefront.api.catalog.get_product_suggestions';
 
 /** `get_category` returns its counts in `meta`; the payload and counts travel together. */
 export interface CategoryResult {
@@ -137,6 +139,30 @@ export class CatalogApi {
   getCategoryFilters(scopeValue: string): Observable<CategoryFiltersDto> {
     return this.api
       .get<CategoryFiltersDto>(GET_CATEGORY_FILTERS, { scope_value: scopeValue })
+      .pipe(map((response) => response.data));
+  }
+
+  /**
+   * A few products for the header typeahead.
+   *
+   * **Navigation only.** At most eight rows, no pagination and no money - see
+   * {@link ProductSuggestionDto}. This is not a listing, and there is deliberately no
+   * search-results page behind it.
+   *
+   * The backend applies the catalogue's own eligibility and its own matching (each word
+   * against the product name **or** its item code, AND across words), so a suggestion is
+   * always something `get_items` would list. Angular sends the typed string and matches
+   * nothing itself.
+   *
+   * Under three characters the backend answers an empty list rather than an error. The
+   * caller applies the same floor so a buyer mid-word costs nothing at all.
+   *
+   * Wire-documented failure: `search_too_long` (422) for over 100 characters or more than
+   * six words, exactly as `get_items` does.
+   */
+  getProductSuggestions(search: string): Observable<ProductSuggestionsDto> {
+    return this.api
+      .get<ProductSuggestionsDto>(GET_PRODUCT_SUGGESTIONS, { search })
       .pipe(map((response) => response.data));
   }
 

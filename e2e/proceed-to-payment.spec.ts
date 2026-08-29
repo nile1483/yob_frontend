@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
+import { cartLink } from './support/header';
 
 /**
  * Checkout → Proceed to Payment → public payment route, in a real browser at every
@@ -35,9 +36,7 @@ async function openCheckout(page: Page, flags?: string): Promise<void> {
   }
 
   await addBoltToCart(page);
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('link', { name: 'Cart' })
+  await cartLink(page)
     .click();
   await page.getByTestId('cart-checkout-link').click();
   await expect(page).toHaveURL('/checkout');

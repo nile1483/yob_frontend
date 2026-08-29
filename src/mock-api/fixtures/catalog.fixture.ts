@@ -1,4 +1,5 @@
 import type {
+  ProductSuggestionDto,
   CategoryFiltersDto,
   CatalogItemDto,
   ItemDetailDto,
@@ -903,3 +904,72 @@ function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
 /** Every item the mock can serve in detail, keyed by its slug. */
 export const MOCK_ITEM_DETAILS_BY_SLUG: Readonly<Record<string, ItemDetailDto>> =
   Object.fromEntries(FASTENER_ITEMS.map((listing) => [listing.slug, toItemDetail(listing)]));
+
+/* --------------------------------------------------- product suggestions (26B) */
+
+/**
+ * What the header typeahead can find.
+ *
+ * Deliberately **not** derived from the listing rows: a suggestion is a different
+ * contract for a different job - five fields, no money - and building it from
+ * `CatalogItemDto` would quietly couple the two.
+ *
+ * The set is chosen to prove the frontend's behaviour, not to reproduce the backend's
+ * SQL. It carries a variant FAMILY (`is_template: true`) so a click can be shown to open
+ * the family page without resolving anything, a row with no image for the placeholder
+ * path, and codes distinct enough from names that a code-only query proves the backend -
+ * not Angular - decides matching. Generated variant children are absent, exactly as the
+ * contract says they never appear.
+ */
+const SUGGESTIONS: readonly ProductSuggestionDto[] = [
+  {
+    item_code: 'YOB-BOLT-M10',
+    item_name: 'Hex Bolt M10 x 50mm',
+    slug: 'hex-bolt-m10-50',
+    image: IMAGE_PORTRAIT,
+    is_template: false,
+  },
+  {
+    item_code: 'YOB-NUT-M10',
+    item_name: 'Hex Nut M10',
+    slug: 'hex-nut-m10',
+    image: IMAGE_SQUARE,
+    is_template: false,
+  },
+  {
+    item_code: 'YOB-ANCHOR-HD-12',
+    item_name: 'Through Bolt Anchor M12 x 120mm',
+    // No image at all, so the dropdown's placeholder path is exercised.
+    image: null,
+    slug: 'through-bolt-anchor-m12-120',
+    is_template: false,
+  },
+  {
+    item_code: FAMILY_CODE,
+    item_name: VEST_FAMILY.item_name,
+    slug: MOCK_FAMILY_SLUG,
+    image: VEST_FAMILY.image,
+    // A family: one row, opening the options page. Its children are never suggested.
+    is_template: true,
+  },
+];
+
+/**
+ * The backend's matching, reproduced only as far as the frontend needs.
+ *
+ * Each word must match the name **or** the item code, AND across words - the rule
+ * Phase 26A-1 published. Angular implements none of this; it exists here so a
+ * code-fragment query and a name query can both be shown to work end to end.
+ */
+export function mockProductSuggestions(search: string): readonly ProductSuggestionDto[] {
+  const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return [];
+  }
+
+  return SUGGESTIONS.filter((suggestion) => {
+    const name = suggestion.item_name.toLowerCase();
+    const code = suggestion.item_code.toLowerCase();
+    return words.every((word) => name.includes(word) || code.includes(word));
+  }).slice(0, 8);
+}

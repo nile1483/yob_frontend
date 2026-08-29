@@ -89,9 +89,9 @@ function code(file: string): string {
     .replace(/<!--[\s\S]*?-->/g, ' ');
 }
 
-test.describe('system route content contract (API 3.7.0)', () => {
+test.describe('system route content contract (API 3.8.0)', () => {
   test('the mirrored contract is present, versioned and identical in both locations', () => {
-    expect(REFERENCE.info.version).toBe('3.7.0');
+    expect(REFERENCE.info.version).toBe('3.8.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(publishedSlots(HANDOFF)).toEqual(publishedSlots(REFERENCE));
   });
@@ -264,6 +264,88 @@ test.describe('placement style and width contract (Phase 25L)', () => {
     }).map((file) => file.replace(`${process.cwd()}/`, ''));
 
     expect(offenders).toEqual([]);
+  });
+});
+
+test.describe('product suggestion contract (Phase 26B)', () => {
+  const PATH = '/api/method/yob_storefront.api.catalog.get_product_suggestions';
+
+  test('the endpoint is published as a GET taking search', () => {
+    const path = REFERENCE.paths[PATH];
+    expect(path, 'the endpoint is published').toBeDefined();
+
+    const params = (path!['get']?.parameters ?? []).map((parameter) => parameter.name);
+    expect(params).toEqual(['search']);
+  });
+
+  test('ProductSuggestion publishes exactly the five fields Angular renders', () => {
+    const schema = REFERENCE.components.schemas['ProductSuggestion'];
+    expect(schema, 'ProductSuggestion is published').toBeDefined();
+
+    expect([...(schema!.required ?? [])].sort()).toEqual([
+      'image',
+      'is_template',
+      'item_code',
+      'item_name',
+      'slug',
+    ]);
+    expect(HANDOFF.components.schemas['ProductSuggestion']!.required).toEqual(schema!.required);
+  });
+
+  test('it carries nothing monetary, and no listing field', () => {
+    const schema = REFERENCE.components.schemas['ProductSuggestion']!;
+    const properties = Object.keys(schema.properties ?? {});
+
+    // A price in a dropdown is a second place for money to be wrong. The contract says
+    // these will never be here; this fails loudly if that ever changes.
+    for (const forbidden of [
+      'rate',
+      'base_price',
+      'discount_percentage',
+      'net_amount',
+      'tax_amount',
+      'total_amount',
+      'uom',
+      'stock_uom',
+      'conversion_factor',
+      'stock_qty',
+      'price_state',
+      'pricing_rule_label',
+    ]) {
+      expect(properties, `ProductSuggestion published ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  test('the Angular DTO spells the same five fields, and no others', () => {
+    // The DTO is hand-written, so it is asserted against the published schema rather
+    // than trusted. An invented field would be one no backend could ever send.
+    const published = Object.keys(
+      REFERENCE.components.schemas['ProductSuggestion']!.properties ?? {},
+    ).sort();
+
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/catalog/contracts/catalog.types.ts'),
+      'utf8',
+    );
+    const declared = /export interface ProductSuggestionDto \{([\s\S]*?)\n\}/.exec(source)?.[1] ?? '';
+    const fields = [...declared.matchAll(/readonly (\w+):/g)].map((match) => match[1]!).sort();
+
+    expect(fields).toEqual(published);
+  });
+
+  test('the header never reaches for a listing endpoint', () => {
+    // Discovery is the dedicated endpoint's job. A listing, item or resolver call from
+    // the search widget would be a different feature leaking into the header.
+    const search = readFileSync(
+      resolve(process.cwd(), 'src/app/widgets/product-search/product-search.ts'),
+      'utf8',
+    );
+
+    for (const forbidden of ['getItems', 'getItem(', 'resolveVariant']) {
+      expect(code(resolve(process.cwd(), 'src/app/widgets/product-search/product-search.ts')),
+        `product search calls ${forbidden}`).not.toContain(forbidden);
+    }
+    expect(search).toContain('getProductSuggestions');
   });
 });
 
