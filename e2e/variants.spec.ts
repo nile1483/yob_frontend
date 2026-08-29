@@ -125,28 +125,64 @@ test.describe('variant family page', () => {
     await expect(page).toHaveURL(FAMILY);
   });
 
-  test('swaps to the variant image, and keeps the family one when there is none', async ({
+  test('the template gallery survives variant resolution, selection included', async ({
+    page,
+  }) => {
+    // ## The Phase 27C ownership test
+    //
+    // This test used to assert the opposite - that resolving a variant SWAPPED the image.
+    // That was correct when a product had one picture; it is wrong now. Merchandising
+    // belongs to the public storefront entity, which for a family is the template, and
+    // 3.9.1 removed gallery and content from the resolver's payload entirely.
+    //
+    // So the buyer picks the second template image, resolves a variant whose own
+    // photograph is a file that appears in no gallery row, and everything transactional
+    // changes while the column they are looking at does not.
+    await signInAsMockBuyer(page, { goTo: FAMILY });
+
+    const thumbs = page.getByTestId('product-gallery-thumb');
+    await expect(thumbs).toHaveCount(3);
+
+    await thumbs.nth(1).click();
+    const chosen = await page.getByTestId('item-image').locator('img').getAttribute('src');
+    expect(chosen).not.toBeNull();
+
+    await chooseOrangeMedium(page);
+
+    // The buying area moved to the resolved SKU...
+    await expect(page.locator('body')).toContainText(ORANGE_MEDIUM);
+    await expect(page.getByTestId('item-uom')).toContainText('Box');
+
+    // ...and the merchandising column did not.
+    await expect(page.getByTestId('item-image').locator('img')).toHaveAttribute('src', chosen!);
+    await expect(page.getByTestId('item-image').locator('img')).not.toHaveAttribute(
+      'src',
+      /variant-orange-medium/,
+    );
+    await expect(thumbs).toHaveCount(3);
+    await expect(thumbs.nth(1)).toHaveAttribute('aria-pressed', 'true');
+
+    // The variant's own file never enters the strip.
+    for (const src of await thumbs.locator('img').evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('src') ?? ''),
+    )) {
+      expect(src).not.toContain('variant-orange-medium');
+    }
+  });
+
+  test('the yellow variant, which has no image of its own, changes nothing either', async ({
     page,
   }) => {
     await signInAsMockBuyer(page, { goTo: FAMILY });
-    const familyImage = await page
-      .getByTestId('item-image')
-      .locator('img')
-      .getAttribute('src');
+    const opening = await page.getByTestId('item-image').locator('img').getAttribute('src');
 
-    await chooseOrangeMedium(page);
-    await expect(page.getByTestId('item-image').locator('img')).not.toHaveAttribute(
-      'src',
-      familyImage ?? '',
-    );
-
-    // The yellow variant has no photograph of its own; the family's stays.
     await option(page, 'Colour', 'Yellow').click();
     await option(page, 'Size', 'Large').click();
     await expect(page.getByTestId('item-rate')).toContainText('60');
+
     await expect(page.getByTestId('item-image').locator('img')).toHaveAttribute(
       'src',
-      familyImage ?? '',
+      opening ?? '',
     );
   });
 

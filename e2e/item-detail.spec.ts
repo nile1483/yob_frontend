@@ -152,8 +152,10 @@ test.describe('item detail content', () => {
 
     const img = page.getByTestId('item-image-image');
     await expect(img).toBeVisible();
-    // Named here, unlike on a card: this image is the subject of the page.
-    await expect(img).toHaveAttribute('alt', 'Hex Bolt M10 x 50mm');
+    // Named here, unlike on a card: this image is the subject of the page. Since Phase
+    // 27C the bolt has a gallery, and a row that carries its own alt text is described
+    // by it rather than by the product's name.
+    await expect(img).toHaveAttribute('alt', 'Hex bolt head, straight on');
     await expect(page.getByTestId('item-image-placeholder')).toHaveCount(0);
   });
 

@@ -132,7 +132,7 @@ test.describe('one block renderer, not one per host', () => {
     expect(dispatchers).toEqual(['src/app/domains/content/parts/content-blocks.ts']);
   });
 
-  test('no host page names a block type at all', () => {
+  test('no host page names a CMS block type at all', () => {
     // A cart, an order or an account page must not learn that carousels exist.
     const hosts = APP_FILES.filter(
       (file) => !file.includes('/domains/content/') && !file.endsWith('.spec.ts'),
@@ -140,8 +140,54 @@ test.describe('one block renderer, not one per host', () => {
 
     for (const file of hosts) {
       const source = readFileSync(file, 'utf8');
-      for (const blockType of ['banner_carousel', 'promo_grid', 'image_banner', 'rich_text']) {
+      // Exclusive to the CMS union. Nothing outside the content domain may name one.
+      for (const blockType of ['banner_carousel', 'promo_grid', 'image_banner']) {
         expect(source, `${file} names the block type ${blockType}`).not.toContain(blockType);
+      }
+    }
+  });
+
+  test('rich_text outside the content domain is the product union, and only that', () => {
+    // ## Why this is not simply forbidden any more
+    //
+    // Until Phase 27B `rich_text` belonged to one union, so its appearance anywhere
+    // outside the content domain meant a host page had learned the CMS vocabulary. It
+    // now names a member of TWO unions - the CMS block and the product-content block -
+    // which the contract deliberately keeps separate and which have different shapes.
+    //
+    // So the token alone no longer proves coupling, and the guard says what it means
+    // instead: exactly one file outside the content domain may spell it, the catalog
+    // domain's own contract, and it is named here. A second one fails this test, which
+    // is the coupling the original guard was protecting against.
+    const offenders = APP_FILES.filter((file) => {
+      if (file.includes('/domains/content/') || file.endsWith('.spec.ts')) {
+        return false;
+      }
+      return readFileSync(file, 'utf8').includes('rich_text');
+    }).map((file) => file.replace(`${process.cwd()}/`, ''));
+
+    expect(offenders).toEqual(['src/app/domains/catalog/contracts/catalog.types.ts']);
+  });
+
+  test('the catalog domain never reaches for a CMS block renderer', () => {
+    // The Phase 27D risk, guarded before it can happen: product content must get its own
+    // renderer, not `ContentBlocks` or `ContentSection`. Those carry the placement's
+    // section_style/content_width, which product content does not have and Angular owns.
+    // `ContentSlot` is deliberately allowed - the product page hosts two route slots.
+    const catalog = APP_FILES.filter(
+      (file) => file.includes('/domains/catalog/') && !file.endsWith('.spec.ts'),
+    );
+
+    for (const file of catalog) {
+      // Matched on the import specifier rather than the bare token: the catalog's own
+      // `ProductContentSectionDto` contains "ContentSection" as a substring and is
+      // exactly the separate type this guard exists to keep separate.
+      const imported = [...code(file).matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s+from/g)]
+        .flatMap((match) => match[1]!.split(','))
+        .map((name) => name.replace(/\btype\b/, '').trim());
+
+      for (const renderer of ['ContentBlocks', 'ContentSection', 'RichTextBlock', 'ImageBannerBlock']) {
+        expect(imported, `${file} imports the CMS renderer ${renderer}`).not.toContain(renderer);
       }
     }
   });

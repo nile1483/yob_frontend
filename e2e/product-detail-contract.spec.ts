@@ -487,6 +487,63 @@ test.describe('Phase 27B product detail merchandising contract', () => {
     }
   });
 
+  test('the Angular types keep the same split the contract makes', () => {
+    // Phase 27C wires this contract into the application. The distinction 3.9.1 exists to
+    // draw must survive that: one DTO for the resolved SKU, another for the product page,
+    // and merchandising on the second only. A single convenient interface serving both -
+    // which is easy to reach for, since they share 29 fields - would reintroduce in
+    // Angular the exact mistake the backend just corrected.
+    const types = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/catalog/contracts/catalog.types.ts'),
+      'utf8',
+    );
+
+    // The serializer DTO, and what it must not declare.
+    const detail = /export interface ItemDetailDto \{([\s\S]*?)\n\}/.exec(types)?.[1] ?? '';
+    expect(detail, 'ItemDetailDto is declared').not.toBe('');
+    expect(detail, 'ItemDetailDto declares a gallery').not.toContain('gallery');
+    expect(detail, 'ItemDetailDto declares sections').not.toContain('sections');
+
+    // Merchandising is its own interface, composed - mirroring ProductMerchandising.
+    expect(types).toContain('export interface ProductMerchandisingDto');
+    expect(types).toMatch(
+      /export interface ProductPageDetailDto extends ItemDetailDto, ProductMerchandisingDto/,
+    );
+    expect(types).toMatch(/export interface ItemFamilyDto extends ProductMerchandisingDto/);
+
+    // get_item answers the page payloads; the resolver's DTO is not one of them.
+    expect(types).toMatch(
+      /export type ItemPayloadDto = ProductPageDetailDto \| ItemFamilyDto/,
+    );
+  });
+
+  test('the gallery DTO spells exactly the published fields', () => {
+    const published = Object.keys(schema('ProductGalleryImage').properties ?? {}).sort();
+
+    const types = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/catalog/contracts/catalog.types.ts'),
+      'utf8',
+    );
+    const declared =
+      /export interface ProductGalleryImageDto \{([\s\S]*?)\n\}/.exec(types)?.[1] ?? '';
+    const fieldNames = [...declared.matchAll(/readonly (\w+):/g)].map((match) => match[1]!).sort();
+
+    expect(fieldNames).toEqual(published);
+  });
+
+  test('the resolver method still returns the serializer DTO, not the page one', () => {
+    // The one line that would undo the whole split: typing resolveVariant's response as
+    // the page payload would put a gallery back on a resolved SKU.
+    const api = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/catalog/data/catalog.api.ts'),
+      'utf8',
+    );
+
+    expect(api).toMatch(/resolveVariant\([\s\S]*?\): Observable<ItemDetailDto>/);
+    expect(api).not.toMatch(/resolveVariant\([\s\S]*?\): Observable<ProductPageDetailDto>/);
+    expect(api).toMatch(/getItem\([^)]*\): Observable<ItemPayloadDto>/);
+  });
+
   test('the existing product fields are unchanged, so the sync is additive', () => {
     // Every field Angular already reads on a product page, asserted as still published.
     // A rename or a removal is a breaking change wearing an additive release number.

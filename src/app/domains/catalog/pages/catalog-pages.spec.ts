@@ -508,10 +508,24 @@ describe('catalog pages', () => {
       const view = await open('/catalog/item/hex-bolt-m10-50');
       const img = view.testId('item-image-image');
 
+      // The bolt's gallery opens on its primary row (Phase 27C), which is this file.
       expect(img?.getAttribute('src')).toBe('/mock-media/product-portrait.svg');
-      // Unlike a card, this image is the subject of the page, so it carries the name.
-      expect(img?.getAttribute('alt')).toBe('Hex Bolt M10 x 50mm');
+      // Unlike a card, this image is the subject of the page, so it is always named.
+      // A gallery row that carries its own alt text is described by it - the merchant
+      // wrote something more useful about this particular photograph than the product's
+      // name would be.
+      expect(img?.getAttribute('alt')).toBe('Hex bolt head, straight on');
       expect(view.testId('item-image-placeholder')).toBeNull();
+    });
+
+    it('names a gallery-less product by the product itself', async () => {
+      // The anchor's single gallery row has no alt text of its own, so the fallback is
+      // the product's name - never its item code.
+      const view = await open('/catalog/item/through-bolt-anchor-m12-120');
+
+      expect(view.testId('item-image-image')?.getAttribute('alt')).toBe(
+        'Heavy Duty Through Bolt Anchor M12 x 120mm, Hot Dip Galvanised, Boxed Quantity',
+      );
     });
 
     it('shows a not-found state for an unknown slug', async () => {

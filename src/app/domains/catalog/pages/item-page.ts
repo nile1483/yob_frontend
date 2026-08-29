@@ -6,7 +6,6 @@ import { finalize } from 'rxjs';
 
 import { Alert } from '../../../design/alert/alert';
 import { Badge } from '../../../design/badge/badge';
-import { Media } from '../../../design/media/media';
 import { Button } from '../../../design/button/button';
 import { Field } from '../../../design/field/field';
 import { EmptyState } from '../../../design/empty-state/empty-state';
@@ -22,6 +21,7 @@ import {
   type ItemVariantDto,
 } from '../contracts/catalog.types';
 import { CatalogApi } from '../data/catalog.api';
+import { ProductGallery } from '../parts/product-gallery';
 import { ContentSlot } from '../../content/parts/content-slot';
 
 /**
@@ -60,7 +60,7 @@ import { ContentSlot } from '../../content/parts/content-slot';
  */
 @Component({
   selector: 'app-item-page',
-  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, Media, RouterLink, Spinner, ContentSlot],
+  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, ProductGallery, RouterLink, Spinner, ContentSlot],
   template: `
     <!-- Application band: full width outside, the storefront's one column inside.
          The hook is source-owned - a Content Placement can style its own band,
@@ -126,25 +126,19 @@ import { ContentSlot } from '../../content/parts/content-slot';
         } @else if (payload(); as payload) {
           <article class="mt-4 grid grid-cols-1 gap-8 md:grid-cols-2 md:items-start lg:gap-12">
             <!-- Sticky on desktop so the product stays in view while the buy box and the
-                 specifications below it are read. -->
+                 specifications below it are read. Unchanged by Phase 27C: the gallery owns
+                 its own combined height budget so this column is no taller than the single
+                 hero image it replaced. -->
             <div class="md:sticky md:top-24">
-              <!-- The buying surface's main image: larger than a card, the whole product
-                   visible, and capped in height so a tall portrait cannot push the price and
-                   Add to cart below the fold on a laptop. Named here rather than left with an
-                   empty alt - unlike a card, this image is the subject of the page. It is
-                   the only image in the storefront loaded with priority. -->
-              <!-- The resolved variant's own photograph once there is one, and the family's
-                   until then. A resolved variant with no image of its own keeps showing the
-                   template's - the backend said nothing about that variant's appearance, and
-                   blanking the page would be inventing an answer. -->
-              <app-media
-                class="overflow-hidden rounded-lg border border-slate-200"
-                [src]="displayImage()"
-                [alt]="displayName()"
-                ratio="hero"
-                [priority]="true"
-                sizes="(min-width: 768px) 50vw, 100vw"
-                testId="item-image"
+              <!-- The merchandising image area, and it belongs to the PAGE PRODUCT: a
+                   simple Item's own gallery, or a family's template gallery.
+                   resolvedVariant() is deliberately not passed and deliberately not
+                   consulted - see galleryFallbackImage below. -->
+              <app-product-gallery
+                [gallery]="gallery()"
+                [fallbackImage]="galleryFallbackImage()"
+                [productName]="galleryProductName()"
+                [ownerKey]="itemSlug()"
               />
             </div>
 
@@ -835,16 +829,45 @@ export class ItemPage {
   // --------------------------------------------------------------- presentation
 
   /**
-   * The photograph on screen.
+   * The page product's gallery: this Item's own, or this family's template gallery.
    *
-   * The resolved variant's own when it has one; the family's or the item's otherwise. A
-   * resolved variant with `image: null` keeps the template's picture rather than blanking
-   * - the backend said nothing about that variant's appearance, and an empty frame would
-   * be a claim of its own.
+   * ## Why there is no resolved-variant branch here
+   *
+   * Until Phase 27C the image on this page was `resolvedVariant()?.image ?? payload.image`
+   * - the resolved child's photograph won. That was right when a product had exactly one
+   * picture and nothing owned a gallery. It is wrong now, and wrong on ownership rather
+   * than on mechanics: merchandising belongs to the **public storefront entity**, which is
+   * the simple Item or the template. A generated variant owns neither a gallery nor
+   * content, `resolve_variant` carries neither, and 3.9.1 split the schemas so that a
+   * resolved SKU has no type on which one could arrive.
+   *
+   * So choosing Orange/Medium changes the item code, the price, the UOM, the stock and the
+   * availability - and leaves this column exactly as the buyer left it, including which
+   * thumbnail they had selected. `ProductGallery` is never handed a resolved variant, so
+   * that is structural rather than a rule someone has to remember.
+   *
+   * Empty is ordinary: the gallery then falls back to the product's own `image`.
    */
-  protected readonly displayImage = computed(
-    () => this.resolvedVariant()?.image ?? this.payload()?.image ?? null,
-  );
+  protected readonly gallery = computed(() => this.payload()?.gallery ?? []);
+
+  /**
+   * The single image shown when no gallery is configured.
+   *
+   * The **page product's** `image` - the simple Item's, or the template's for a family.
+   * Never `resolvedVariant()?.image`: a family whose template has no gallery still shows
+   * the template's photograph after a variant resolves, because the merchandising area
+   * belongs to the family throughout.
+   */
+  protected readonly galleryFallbackImage = computed(() => this.payload()?.image ?? null);
+
+  /**
+   * The name describing the merchandising images.
+   *
+   * The page product's, not {@link displayName} - the pictures are the owner's, so a
+   * template gallery is described by the family's name even after a variant resolves.
+   * Used only where a gallery row supplies no `alt_text` of its own.
+   */
+  protected readonly galleryProductName = computed(() => this.payload()?.item_name ?? '');
 
   /** The resolved variant's name once there is one, the family's or item's until then. */
   protected readonly displayName = computed(

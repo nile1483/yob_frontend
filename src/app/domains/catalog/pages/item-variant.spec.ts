@@ -426,24 +426,45 @@ describe('ItemPage variant family', () => {
       expect(el('item-availability')?.textContent).not.toContain('5 Box');
     });
 
-    it('replaces the family image with the variant own', async () => {
+    it('never puts the resolved variant own photograph in the merchandising area', async () => {
+      // ## The Phase 27C ownership correction
+      //
+      // This test used to assert the opposite - that a resolved variant REPLACED the
+      // family image. That was right when a product had one picture and nothing owned a
+      // gallery, and it is wrong now: merchandising belongs to the public storefront
+      // entity, which for a family is the template. A generated child owns neither a
+      // gallery nor content, and 3.9.1 removed both from the resolver's payload
+      // entirely, so there is no longer a shape on which one could arrive.
       await open();
       await resolveOrangeMedium();
 
-      expect(el('item-image')?.querySelector('img')?.getAttribute('src')).toContain(
+      expect(el('item-image')?.querySelector('img')?.getAttribute('src')).toContain('family');
+      expect(el('item-image')?.querySelector('img')?.getAttribute('src')).not.toContain(
         'orange-medium',
       );
     });
 
-    it('keeps the family image when the variant has none', async () => {
+    it('keeps the family image when the variant has none, for the same reason', async () => {
       await open();
       await choose('Colour', 'Yellow');
       await choose('Size', 'Large');
       pendingResolve().flush(variantPayload({ name: YELLOW_LARGE, image: null }));
       await settle();
 
-      // Nothing is inherited or invented: the template's picture simply stays.
+      // Unchanged behaviour, but it no longer depends on the variant's image being null.
       expect(el('item-image')?.querySelector('img')?.getAttribute('src')).toContain('family');
+    });
+
+    it('still changes every transactional fact when a variant resolves', async () => {
+      // The other half of the split, pinned beside it: the gallery holding still must
+      // not be achieved by the page ignoring the resolver.
+      await open();
+      await resolveOrangeMedium();
+
+      expect(text()).toContain(ORANGE_MEDIUM);
+      expect(el('item-rate')?.textContent).toContain('1,000');
+      expect(el('item-uom')?.textContent).toContain('Box');
+      expect(el('item-availability')?.textContent).toContain('125');
     });
   });
 

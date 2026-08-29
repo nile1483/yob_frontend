@@ -523,7 +523,7 @@ export interface ItemVariantDto {
  * optional fields. A template that tried to render as a priced item would show a page of
  * blanks and an unlabelled quantity box.
  */
-export interface ItemFamilyDto {
+export interface ItemFamilyDto extends ProductMerchandisingDto {
   /** The template's item code, e.g. `YOB-VEST`. Never sent to the cart. */
   readonly name: string;
   readonly item_name: string;
@@ -556,12 +556,140 @@ export interface ItemFamilyDto {
   readonly variants: readonly ItemVariantDto[];
 }
 
+/* ------------------------------------------------- product merchandising (27B) */
+
 /**
- * What `get_item` can answer: one salable item, or a family to choose from.
+ * One row of the product gallery (API 3.9.1 `ProductGalleryImage`).
+ *
+ * ## Array order is the order
+ *
+ * There is no `sort_order` and no `idx` on this contract, deliberately: the merchant's
+ * arrangement *is* the array. Nothing here sorts a gallery, and {@link is_primary} is not
+ * an ordering key - see below.
+ *
+ * ## Primacy and position are independent
+ *
+ * `is_primary` marks which image the page **opens on**. It does not move that image to
+ * the front. A gallery ordered Side / Front / Back with Front primary shows thumbnails in
+ * that same order and opens on the second one; promoting it would silently rewrite a
+ * merchandising decision.
+ *
+ * `image` is a stored path (`/files/...`), resolved by the one media helper like every
+ * other image in the storefront.
+ */
+export interface ProductGalleryImageDto {
+  readonly image: string;
+  /** Nullable on the wire. Blank falls back to the product's name, never to a code. */
+  readonly alt_text: string | null;
+  /** Nullable on the wire. Blank renders no caption row at all. */
+  readonly caption: string | null;
+  readonly is_primary: boolean;
+}
+
+/**
+ * One product-content block (API 3.9.1 `ProductContentBlock`), discriminated on `type`.
+ *
+ * ## Data only in Phase 27C
+ *
+ * Typed because the page response genuinely carries it and an untyped `sections` would be
+ * a lie about what arrives. **Nothing renders it yet** - the renderer is Phase 27D. It is
+ * described here exactly as published so that phase inherits a contract rather than
+ * re-deriving one.
+ *
+ * ## Not the Phase 25 CMS `ContentBlockDto`
+ *
+ * A separate union for a separate job. `rich_text` and `image` exist in both with
+ * **different shapes** - the CMS block carries `title`/`html` plus the placement's
+ * `section_style`/`content_width`, this one carries `content` and no presentation at all,
+ * because Angular owns product-page layout outright. Merging them would make one renderer
+ * serve a page builder and a product page. The backend split them on purpose; so does this.
+ */
+export type ProductContentBlockDto =
+  | { readonly type: 'rich_text'; readonly content: string }
+  | { readonly type: 'key_value'; readonly items: readonly ProductSpecEntryDto[] }
+  | {
+      readonly type: 'table';
+      readonly columns: readonly string[];
+      readonly rows: readonly (readonly string[])[];
+    }
+  | {
+      readonly type: 'image';
+      readonly image: string;
+      readonly alt_text: string | null;
+      readonly caption: string | null;
+    }
+  | {
+      readonly type: 'download';
+      readonly file: string;
+      readonly label: string | null;
+      readonly description: string | null;
+    }
+  | { readonly type: 'video'; readonly url: string };
+
+/** One row of a `key_value` block (API 3.9.1 `ProductSpecEntry`). */
+export interface ProductSpecEntryDto {
+  readonly key: string;
+  readonly value: string;
+}
+
+/**
+ * One merchant-authored section of product content (API 3.9.1 `ProductContentSection`).
+ *
+ * The section's `title` is the merchant's **grouping** and is independent of what the
+ * blocks inside it are: "Specifications" may hold a table and a paragraph, and
+ * "Description" may hold prose and an image. Section semantics and block type are
+ * deliberately not the same axis.
+ *
+ * Ordered by the backend, sections and blocks alike. Data only until Phase 27D.
+ */
+export interface ProductContentSectionDto {
+  readonly title: string;
+  readonly blocks: readonly ProductContentBlockDto[];
+}
+
+/**
+ * What a product **page** carries beyond the product itself (API 3.9.1
+ * `ProductMerchandising`).
+ *
+ * ## Who owns it
+ *
+ * The public storefront entity: a simple Item, or the **template** of a variant family.
+ * A generated variant child owns neither array, which is why this is a separate interface
+ * composed into the two page payloads rather than fields on {@link ItemDetailDto}.
+ *
+ * That mirrors the backend's own 3.9.1 correction exactly. 3.9.0 put these two arrays on
+ * the shared serializer, which is also what `resolve_variant` answers with - so the
+ * document promised merchandising back from a variant selection that never sends it.
+ * Keeping the split here is what stops the same mistake being made in Angular: there is
+ * no type on which a resolved SKU could carry a gallery.
+ *
+ * Both arrays are always present and may be empty. Empty is the ordinary case, not an
+ * error, and never a reason to hide the product.
+ */
+export interface ProductMerchandisingDto {
+  readonly gallery: readonly ProductGalleryImageDto[];
+  readonly sections: readonly ProductContentSectionDto[];
+}
+
+/**
+ * The `data` payload of `get_item` for a simple product (API 3.9.1 `ProductPageDetail`).
+ *
+ * `ProductDetail` plus `ProductMerchandising`, composed the same way the contract composes
+ * them. {@link ItemDetailDto} stays exactly what it was - the money-and-identity
+ * serializer that `resolve_variant` returns - and gains nothing from this file.
+ */
+export interface ProductPageDetailDto extends ItemDetailDto, ProductMerchandisingDto {}
+
+/**
+ * What `get_item` can answer: one salable product page, or a family to choose from.
  *
  * Narrow it with {@link isItemFamily} - never by looking for a missing price.
+ *
+ * Both members carry merchandising, because both are public product pages. The resolver's
+ * {@link ItemDetailDto} is deliberately **not** a member: it is what comes back from
+ * `resolve_variant`, and it has no gallery to render.
  */
-export type ItemPayloadDto = ItemDetailDto | ItemFamilyDto;
+export type ItemPayloadDto = ProductPageDetailDto | ItemFamilyDto;
 
 /** Whether this payload is a template the buyer must choose a variant from. */
 export function isItemFamily(payload: ItemPayloadDto): payload is ItemFamilyDto {

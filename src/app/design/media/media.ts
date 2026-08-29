@@ -4,7 +4,7 @@ import { Component, computed, input, signal } from '@angular/core';
 import { mediaUrl } from '../../foundation/media/media-url';
 
 /** The shape of the box, chosen by what the image is *for*. */
-export type MediaRatio = 'product' | 'category' | 'square' | 'thumb' | 'hero';
+export type MediaRatio = 'product' | 'category' | 'square' | 'thumb' | 'hero' | 'gallery';
 
 /**
  * How the image sits inside its box.
@@ -183,4 +183,15 @@ const RATIOS: Record<MediaRatio, string> = {
   // viewport and never from the image, so this is still layout-shift free - the box is
   // the same size before the picture arrives as after.
   hero: 'h-[min(70vh,34rem)]',
+  // The product gallery's large preview (Phase 27C). Shorter than `hero` for one
+  // reason: a gallery is a preview *plus* a thumbnail strip, and the two together must
+  // occupy roughly what the single hero image occupied - otherwise adding a gallery
+  // would push the price and Add to cart down the page, which is the exact regression
+  // `hero`'s own cap exists to prevent. ~26rem of preview and ~5rem of thumbnails lands
+  // just under the 34rem it replaces.
+  //
+  // A separate key rather than a change to `hero`: the hero box is still correct for a
+  // product with no gallery configured elsewhere, and every existing `hero` and `thumb`
+  // caller is deliberately untouched by this phase.
+  gallery: 'h-[min(52vh,26rem)]',
 };

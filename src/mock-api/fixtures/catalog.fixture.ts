@@ -5,6 +5,8 @@ import type {
   ItemDetailDto,
   ItemFamilyDto,
   ItemPricingDto,
+  ProductGalleryImageDto,
+  ProductPageDetailDto,
   CategoryDetailDto,
   CategoryListItemDto,
   CategoryPayloadDto,
@@ -65,6 +67,14 @@ export const IMAGE_SQUARE = '/mock-media/product-square.svg';
 export const IMAGE_HUGE = '/mock-media/product-huge.svg';
 const IMAGE_CATEGORY = '/mock-media/category-square.svg';
 /**
+ * A generated variant's own photograph, and deliberately in **no** family gallery.
+ *
+ * Phase 27C turns on proving a negative: resolving Orange/Medium must not put this file
+ * on screen. That is only provable if the variant's image is one no gallery row shares,
+ * so this file exists for exactly one assertion.
+ */
+export const IMAGE_VARIANT = '/mock-media/variant-orange-medium.svg';
+/**
  * A well-formed path that resolves to nothing.
  *
  * The broken-image case: the data says there is a picture and the network disagrees.
@@ -72,6 +82,60 @@ const IMAGE_CATEGORY = '/mock-media/category-square.svg';
  * broken-image icon.
  */
 const IMAGE_BROKEN = '/mock-media/deliberately-missing.svg';
+
+/* ------------------------------------------------- product galleries (27C) */
+
+/**
+ * Gallery rows per product slug, covering every case the Gallery UI must tell apart.
+ *
+ * | Slug | Case |
+ * | --- | --- |
+ * | hex bolt | four rows, **primary second**, captions on some - the ordering-vs-primacy case |
+ * | hex nut | eight rows, so the strip must scroll rather than widen the page |
+ * | flat washer | none, **and no base image either** - the placeholder path |
+ * | anchor | one row only, so no thumbnail strip is drawn |
+ *
+ * Deliberately absent: `through-bolt` has a base `Item.image`, and the washer has
+ * neither, which is what makes the two fallback branches distinguishable in a browser.
+ *
+ * `alt_text`/`caption` are `null` on some rows on purpose - both are nullable on the wire
+ * and blank must fall back rather than render an empty caption row.
+ */
+const GALLERY_BY_SLUG: Readonly<Record<string, readonly ProductGalleryImageDto[]>> = {
+  // Backend order is Side / Front / Back / Detail with **Front** primary. The strip must
+  // stay in that order and the preview must open on the second row - the single most
+  // important gallery assertion, and the reason this fixture is shaped this way.
+  'hex-bolt-m10-50': [
+    { image: IMAGE_LANDSCAPE, alt_text: 'Hex bolt seen from the side', caption: 'Side view', is_primary: false },
+    { image: IMAGE_PORTRAIT, alt_text: 'Hex bolt head, straight on', caption: 'Front view', is_primary: true },
+    { image: IMAGE_SQUARE, alt_text: null, caption: 'Thread detail', is_primary: false },
+    { image: IMAGE_HUGE, alt_text: null, caption: null, is_primary: false },
+  ],
+  // Eight rows, no primary at all: the preview opens on the first, and the strip has to
+  // scroll inside its own box without the page gaining a horizontal scrollbar.
+  'hex-nut-m10': Array.from({ length: 8 }, (_, index) => ({
+    image: [IMAGE_SQUARE, IMAGE_PORTRAIT, IMAGE_LANDSCAPE][index % 3] ?? IMAGE_SQUARE,
+    alt_text: `Hex nut, view ${index + 1}`,
+    caption: index % 2 === 0 ? `View ${index + 1}` : null,
+    is_primary: false,
+  })),
+  // One row: enough for a preview, not enough to be worth a picker.
+  'through-bolt-anchor-m12-120': [
+    { image: IMAGE_PORTRAIT, alt_text: null, caption: null, is_primary: true },
+  ],
+};
+
+/**
+ * The template's gallery - the family's, and the only one a family page ever shows.
+ *
+ * Its rows are deliberately distinct from every variant image below, so a browser test
+ * can prove that resolving Orange/Medium leaves all three of these in place.
+ */
+export const MOCK_FAMILY_GALLERY: readonly ProductGalleryImageDto[] = [
+  { image: IMAGE_LANDSCAPE, alt_text: 'Hi-vis vest, front', caption: 'Front', is_primary: true },
+  { image: IMAGE_PORTRAIT, alt_text: 'Hi-vis vest, back', caption: 'Back', is_primary: false },
+  { image: IMAGE_SQUARE, alt_text: 'Reflective banding', caption: null, is_primary: false },
+];
 
 const NULL_MEDIA = { thumbnail: null, banner: null } as const;
 
@@ -499,6 +563,12 @@ const VEST_FAMILY: ItemFamilyDto = {
     { item_code: 'YOB-VEST-ORG-M', attributes: { Colour: 'Orange', Size: 'Medium' } },
     { item_code: 'YOB-VEST-YEL-L', attributes: { Colour: 'Yellow', Size: 'Large' } },
   ],
+
+  // The FAMILY's merchandising, which is the template's. A resolved variant never
+  // replaces it - `MOCK_VARIANT_DETAILS` deliberately carry different images so a test
+  // can prove exactly that.
+  gallery: MOCK_FAMILY_GALLERY,
+  sections: [],
 };
 
 /**
@@ -521,6 +591,8 @@ const KIT_FAMILY: ItemFamilyDto = {
   variant_of: null,
   attributes: [],
   variants: [],
+  gallery: [],
+  sections: [],
 };
 
 /** Every family the mock serves from `get_item`, by slug. */
@@ -547,7 +619,8 @@ const VEST_VARIANTS: readonly {
     detail: {
       name: 'YOB-VEST-ORG-M',
       item_name: 'Hi-Vis Safety Vest - Orange, Medium',
-      image: IMAGE_PORTRAIT,
+      // Distinct from every row of MOCK_FAMILY_GALLERY, on purpose. See IMAGE_VARIANT.
+      image: IMAGE_VARIANT,
       item_group: 'Safety Equipment',
       custom_slug: MOCK_FAMILY_SLUG,
       qty: VARIANT_QTY,
@@ -830,7 +903,7 @@ function priced(value: number | null, field: string, listing: CatalogItemDto): n
   return value;
 }
 
-function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
+function toItemDetail(listing: CatalogItemDto): ProductPageDetailDto {
   const taxAmount = priced(listing.tax_amount, 'tax_amount', listing);
   const conversionFactor = priced(listing.conversion_factor, 'conversion_factor', listing);
   // Only the anchor item carries tax in these fixtures.
@@ -898,11 +971,18 @@ function toItemDetail(listing: CatalogItemDto): ItemDetailDto {
     pricing_rule_label: listing.pricing_rule_label,
     pricing_rule_apply_on: listing.pricing_rule_label === null ? null : 'Item Code',
     available_rules: OFFERS_BY_SLUG[listing.slug] ?? [],
+
+    // Phase 27B merchandising. Present on every product PAGE payload, empty where the
+    // merchant configured none - which is the ordinary case and not an error. The base
+    // `image` above is never folded in as a gallery row: an empty array genuinely means
+    // "no gallery", and the page falls back to `image` itself.
+    gallery: GALLERY_BY_SLUG[listing.slug] ?? [],
+    sections: [],
   };
 }
 
 /** Every item the mock can serve in detail, keyed by its slug. */
-export const MOCK_ITEM_DETAILS_BY_SLUG: Readonly<Record<string, ItemDetailDto>> =
+export const MOCK_ITEM_DETAILS_BY_SLUG: Readonly<Record<string, ProductPageDetailDto>> =
   Object.fromEntries(FASTENER_ITEMS.map((listing) => [listing.slug, toItemDetail(listing)]));
 
 /* --------------------------------------------------- product suggestions (26B) */

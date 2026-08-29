@@ -329,10 +329,11 @@ describe('variant wire contract (API 3.3.0)', () => {
       expect(el('item-uom')?.textContent).toContain('Box');
       expect(el('item-availability')?.textContent).toContain('125');
       expect(el('item-availability-uom')?.textContent?.trim()).toBe('Nos');
-      // Image and offers
-      expect(el('item-image')?.querySelector('img')?.getAttribute('src')).toContain(
-        'tee-orange',
-      );
+      // The merchandising image is the FAMILY's throughout - see the Phase 27C tests
+      // below. What the resolver changed is everything transactional above.
+      expect(el('item-image')?.querySelector('img')?.getAttribute('src')).toContain('tee.png');
+      // Offers
+
       expect(el('item-offers')?.textContent).toContain('10% off on 5 boxes or more');
       expect(el('item-pricing-rule')?.textContent).toContain('Launch offer');
     });
@@ -376,10 +377,16 @@ describe('variant wire contract (API 3.3.0)', () => {
       http.expectOne((r) => r.url.includes('get_cart')).flush({ message: { data: {} } });
     });
 
-    it('keeps the family image when the resolved variant has none', async () => {
+    it('keeps the family image whether or not the resolved variant has one', async () => {
+      // Phase 27C: this used to hold only because the variant's image was null. It now
+      // holds unconditionally - merchandising belongs to the template, so a resolved
+      // child's photograph never reaches this column either way.
       await open();
       await resolveOrangeMedium(resolvedPayload({ image: null }));
+      expect(el('item-image')?.querySelector('img')?.getAttribute('src')).toContain('tee.png');
 
+      await open();
+      await resolveOrangeMedium(resolvedPayload({ image: '/files/tee-orange.png' }));
       expect(el('item-image')?.querySelector('img')?.getAttribute('src')).toContain('tee.png');
     });
   });
