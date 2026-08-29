@@ -6,6 +6,7 @@ import type {
   ItemFamilyDto,
   ItemPricingDto,
   ProductGalleryImageDto,
+  ProductContentSectionDto,
   ProductPageDetailDto,
   CategoryDetailDto,
   CategoryListItemDto,
@@ -124,6 +125,120 @@ const GALLERY_BY_SLUG: Readonly<Record<string, readonly ProductGalleryImageDto[]
     { image: IMAGE_PORTRAIT, alt_text: null, caption: null, is_primary: true },
   ],
 };
+
+/* ---------------------------------------------- product content sections (27D) */
+
+/**
+ * Ordered product content per slug, covering the six block types and their mixing.
+ *
+ * Shaped to prove ORDER rather than to look like a real datasheet: Description holds
+ * prose then an image, Specifications holds a key/value list then a table, and Resources
+ * holds a download then two videos. Nothing groups by type, so a renderer that floated
+ * images to the top or collected the tables together would fail visibly.
+ *
+ * The two video rows are deliberately one of each kind - a direct `.mp4` with a query
+ * string, which must become a native player, and a provider page URL, which must become
+ * a link and never an iframe.
+ */
+const CONTENT_BY_SLUG: Readonly<Record<string, readonly ProductContentSectionDto[]>> = {
+  'hex-bolt-m10-50': [
+    {
+      title: 'Description',
+      blocks: [
+        {
+          type: 'rich_text',
+          content:
+            '<p>A general-purpose <strong>hex bolt</strong> for structural fixing.</p>' +
+            '<ul><li>Zinc plated</li><li>Metric thread</li></ul>' +
+            '<p>See the <a href="/catalog">catalogue</a> for the full range.</p>',
+        },
+        {
+          type: 'image',
+          image: IMAGE_LANDSCAPE,
+          alt_text: 'Dimension drawing showing head width and shank length',
+          caption: 'Dimensions in millimetres',
+        },
+      ],
+    },
+    {
+      title: 'Specifications',
+      blocks: [
+        {
+          type: 'key_value',
+          items: [
+            { key: 'Material', value: 'Grade 8.8 carbon steel' },
+            { key: 'Finish', value: 'Zinc plated' },
+            { key: 'Thread', value: 'M10 x 1.5' },
+            // Deliberately long, to prove a value wraps rather than widening the page.
+            { key: 'Standards', value: 'ISO 4014, DIN 931, BS 3692 - and equivalent national standards where applicable' },
+          ],
+        },
+        {
+          type: 'table',
+          columns: ['Size', 'Length', 'Thread', 'Weight', 'Pack', 'Code'],
+          rows: [
+            ['M10', '50 mm', '1.5', '38 g', '100', 'YOB-BOLT-M10-50'],
+            ['M10', '65 mm', '1.5', '46 g', '100', 'YOB-BOLT-M10-65'],
+            ['M10', '80 mm', '1.5', '54 g', '50', 'YOB-BOLT-M10-80'],
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Resources',
+      blocks: [
+        {
+          type: 'download',
+          file: '/mock-media/product-datasheet.pdf',
+          label: 'Installation Manual',
+          description: 'Torque figures and hole preparation.',
+        },
+        // A direct media file, with a query string the extension test must ignore.
+        { type: 'video', url: 'https://cdn.example.test/demo.mp4?version=1' },
+        // A provider page. Must become a link, never an embed.
+        { type: 'video', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      ],
+    },
+  ],
+
+  // A download whose label and description are both blank, so the filename fallback and
+  // the omitted description row are both reachable in a browser.
+  'hex-nut-m10': [
+    {
+      title: 'Downloads',
+      blocks: [
+        { type: 'download', file: '/mock-media/product-datasheet.pdf', label: null, description: null },
+      ],
+    },
+  ],
+};
+
+/**
+ * The FAMILY's content, which is the template's.
+ *
+ * Distinct wording from every variant below, so a browser test can prove that resolving
+ * Orange/Medium leaves all of it in place.
+ */
+export const MOCK_FAMILY_CONTENT: readonly ProductContentSectionDto[] = [
+  {
+    title: 'Description',
+    blocks: [
+      { type: 'rich_text', content: '<p>A high-visibility vest for site work.</p>' },
+    ],
+  },
+  {
+    title: 'Specifications',
+    blocks: [
+      {
+        type: 'key_value',
+        items: [
+          { key: 'Standard', value: 'EN ISO 20471 Class 2' },
+          { key: 'Closure', value: 'Hook and loop' },
+        ],
+      },
+    ],
+  },
+];
 
 /**
  * The template's gallery - the family's, and the only one a family page ever shows.
@@ -568,7 +683,7 @@ const VEST_FAMILY: ItemFamilyDto = {
   // replaces it - `MOCK_VARIANT_DETAILS` deliberately carry different images so a test
   // can prove exactly that.
   gallery: MOCK_FAMILY_GALLERY,
-  sections: [],
+  sections: MOCK_FAMILY_CONTENT,
 };
 
 /**
@@ -977,7 +1092,7 @@ function toItemDetail(listing: CatalogItemDto): ProductPageDetailDto {
     // `image` above is never folded in as a gallery row: an empty array genuinely means
     // "no gallery", and the page falls back to `image` itself.
     gallery: GALLERY_BY_SLUG[listing.slug] ?? [],
-    sections: [],
+    sections: CONTENT_BY_SLUG[listing.slug] ?? [],
   };
 }
 

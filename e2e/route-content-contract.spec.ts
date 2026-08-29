@@ -166,7 +166,48 @@ test.describe('one block renderer, not one per host', () => {
       return readFileSync(file, 'utf8').includes('rich_text');
     }).map((file) => file.replace(`${process.cwd()}/`, ''));
 
-    expect(offenders).toEqual(['src/app/domains/catalog/contracts/catalog.types.ts']);
+    // The catalog domain's own contract, plus the two Phase 27D files that render the
+    // product union. Named individually rather than allowed by directory: a THIRD file
+    // outside the content domain spelling `rich_text` is the coupling this guards.
+    expect(offenders).toEqual([
+      'src/app/domains/catalog/contracts/catalog.types.ts',
+      'src/app/domains/catalog/parts/product-content/product-content-blocks.ts',
+      'src/app/domains/catalog/parts/product-content/product-content.ts',
+    ]);
+  });
+
+  test('the product content renderers never bypass Angular sanitisation', () => {
+    // `rich_text` renders through ordinary `[innerHTML]`, which runs the DOM sanitiser,
+    // and `video` renders a native player or a link rather than an embed. Both positions
+    // are one API call away from being undone, and this is the file that would contain
+    // the call. The behavioural proof is in `product-content-blocks.spec.ts`; this is the
+    // proof that the behaviour cannot be switched off.
+    // Application source only: the specs beside it deliberately contain `<iframe` and
+    // the bypass names, because asserting their absence is what those tests are for.
+    const productContent = APP_FILES.filter(
+      (file) => file.includes('/parts/product-content/') && !file.endsWith('.spec.ts'),
+    );
+    expect(productContent.length, 'the product content renderers exist').toBeGreaterThan(0);
+
+    for (const file of productContent) {
+      // `code()` rather than the raw text: these files DOCUMENT the rule they follow
+      // ("there is no bypassSecurityTrustHtml here, and there must never be"), and a
+      // scan that could not tell prose from markup would fail on the comment explaining
+      // why it passes. The repository already has this helper for exactly that.
+      const source = code(file);
+      for (const unsafe of [
+        'bypassSecurityTrustHtml',
+        'bypassSecurityTrustResourceUrl',
+        'bypassSecurityTrustUrl',
+        'bypassSecurityTrustScript',
+        'bypassSecurityTrustStyle',
+        'DomSanitizer',
+        '<iframe',
+        'innerText =',
+      ]) {
+        expect(source, `${file} uses ${unsafe}`).not.toContain(unsafe);
+      }
+    }
   });
 
   test('the catalog domain never reaches for a CMS block renderer', () => {

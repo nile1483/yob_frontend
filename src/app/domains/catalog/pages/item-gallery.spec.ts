@@ -347,26 +347,6 @@ describe('ItemPage product gallery', () => {
   });
 
   describe('page composition', () => {
-    it('renders no product content section yet', async () => {
-      // Phase 27C is the gallery only. `sections` arrives and is deliberately not drawn;
-      // the renderer is 27D, and this fails if one appears early.
-      await open(
-        SIMPLE_SLUG,
-        simplePayload({
-          gallery: GALLERY,
-          sections: [
-            { title: 'Description', blocks: [{ type: 'rich_text', content: '<p>Hello</p>' }] },
-          ],
-        }),
-      );
-
-      expect(el('product-content')).toBeNull();
-      expect(((fixture.nativeElement as HTMLElement).textContent ?? '')).not.toContain(
-        'Description',
-      );
-      expect((fixture.nativeElement as HTMLElement).innerHTML).not.toContain('Hello');
-    });
-
     it('keeps the route content slots in their locked positions', async () => {
       await open(SIMPLE_SLUG, simplePayload({ gallery: GALLERY }));
 
@@ -384,6 +364,137 @@ describe('ItemPage product gallery', () => {
       if (below > -1) {
         expect(below).toBeGreaterThan(gallery);
       }
+    });
+  });
+
+  describe('product content (Phase 27D)', () => {
+    const SECTIONS = [
+      {
+        title: 'Description',
+        blocks: [
+          { type: 'rich_text', content: '<p>Zinc plated fixing.</p>' },
+          { type: 'image', image: '/files/diagram.png', alt_text: 'Diagram', caption: 'Dims' },
+        ],
+      },
+      {
+        title: 'Specifications',
+        blocks: [
+          { type: 'key_value', items: [{ key: 'Material', value: 'Steel' }] },
+          { type: 'table', columns: ['Size'], rows: [['M10']] },
+        ],
+      },
+    ];
+
+    function sectionTitles(): (string | null)[] {
+      return all('product-content-section').map((node) => node.getAttribute('data-section-title'));
+    }
+
+    it('renders a simple product own sections', async () => {
+      await open(SIMPLE_SLUG, simplePayload({ sections: SECTIONS }));
+
+      expect(sectionTitles()).toEqual(['Description', 'Specifications']);
+      expect(all('product-content-block').map((n) => n.getAttribute('data-block-type'))).toEqual([
+        'rich_text',
+        'image',
+        'key_value',
+        'table',
+      ]);
+    });
+
+    it('renders a family template sections', async () => {
+      await open(FAMILY_SLUG, familyPayload({ sections: SECTIONS }));
+
+      expect(sectionTitles()).toEqual(['Description', 'Specifications']);
+    });
+
+    it('renders no content region when there are no sections', async () => {
+      await open(SIMPLE_SLUG, simplePayload({ sections: [] }));
+
+      expect(el('product-content-section')).toBeNull();
+    });
+
+    it('sits after the product article and before below_product', async () => {
+      // The locked page order, asserted on the rendered document rather than on the
+      // template's source: breadcrumb, above_product, gallery + buying area, content,
+      // below_product.
+      await open(SIMPLE_SLUG, simplePayload({ gallery: GALLERY, sections: SECTIONS }));
+
+      const html = (fixture.nativeElement as HTMLElement).innerHTML;
+      const gallery = html.indexOf('data-testid="product-gallery"');
+      const addToCart = html.indexOf('data-testid="add-to-cart"');
+      const content = html.indexOf('data-testid="product-content-section"');
+      const above = html.indexOf('data-slot="above_product"');
+      const below = html.indexOf('data-slot="below_product"');
+
+      expect(content).toBeGreaterThan(gallery);
+      expect(content).toBeGreaterThan(addToCart);
+      if (above > -1) {
+        expect(above).toBeLessThan(content);
+      }
+      if (below > -1) {
+        expect(below).toBeGreaterThan(content);
+      }
+    });
+
+    it('renders content outside the two-column buying grid', async () => {
+      await open(SIMPLE_SLUG, simplePayload({ gallery: GALLERY, sections: SECTIONS }));
+
+      const article = (fixture.nativeElement as HTMLElement).querySelector('article');
+      expect(article).not.toBeNull();
+      expect(article?.querySelector('[data-testid="product-content-section"]')).toBeNull();
+    });
+
+    it('keeps the template content unchanged when a variant resolves', async () => {
+      await open(FAMILY_SLUG, familyPayload({ gallery: GALLERY, sections: SECTIONS }));
+      const before = el('product-content-section')?.parentElement?.innerHTML ?? '';
+      expect(before).not.toBe('');
+
+      await chooseOrangeMedium();
+
+      // The buying area moved to the resolved SKU...
+      expect(el('item-uom')?.textContent).toContain('Box');
+      // ...and not one word of the content did.
+      expect(sectionTitles()).toEqual(['Description', 'Specifications']);
+      expect(el('product-content-section')?.parentElement?.innerHTML).toBe(before);
+    });
+
+    it('ignores sections even if a resolver response illegally carries them', async () => {
+      await open(FAMILY_SLUG, familyPayload({ sections: SECTIONS }));
+      await chooseOrangeMedium(
+        variantPayload({
+          sections: [{ title: 'ROGUE', blocks: [{ type: 'rich_text', content: '<p>x</p>' }] }],
+        }),
+      );
+
+      expect(sectionTitles()).toEqual(['Description', 'Specifications']);
+      expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('ROGUE');
+    });
+
+    it('issues no request to render content', async () => {
+      await open(SIMPLE_SLUG, simplePayload({ sections: SECTIONS }));
+
+      // `afterEach` verifies; stated here so the intent is explicit. Content arrived
+      // with get_item, and drawing it must cost nothing.
+      http.verify();
+      expect(all('product-content-section')).toHaveLength(2);
+    });
+
+    it('shows no tabs or accordion', async () => {
+      await open(SIMPLE_SLUG, simplePayload({ sections: SECTIONS }));
+
+      const root = fixture.nativeElement as HTMLElement;
+      expect(root.querySelector('[role="tablist"]')).toBeNull();
+      expect(root.querySelector('details')).toBeNull();
+      expect(all('product-content-section')).toHaveLength(2);
+    });
+
+    it('leaves the buying area and gallery untouched', async () => {
+      await open(SIMPLE_SLUG, simplePayload({ gallery: GALLERY, sections: SECTIONS }));
+
+      expect(el('product-gallery')).not.toBeNull();
+      expect(all('product-gallery-thumb')).toHaveLength(3);
+      expect(el('add-to-cart')).not.toBeNull();
+      expect(el('item-rate')).not.toBeNull();
     });
   });
 });

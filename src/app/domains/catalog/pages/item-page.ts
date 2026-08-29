@@ -21,6 +21,7 @@ import {
   type ItemVariantDto,
 } from '../contracts/catalog.types';
 import { CatalogApi } from '../data/catalog.api';
+import { ProductContent } from '../parts/product-content/product-content';
 import { ProductGallery } from '../parts/product-gallery';
 import { ContentSlot } from '../../content/parts/content-slot';
 
@@ -60,7 +61,7 @@ import { ContentSlot } from '../../content/parts/content-slot';
  */
 @Component({
   selector: 'app-item-page',
-  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, ProductGallery, RouterLink, Spinner, ContentSlot],
+  imports: [Alert, Badge, Button, CurrencyPipe, EmptyState, Field, ProductContent, ProductGallery, RouterLink, Spinner, ContentSlot],
   template: `
     <!-- Application band: full width outside, the storefront's one column inside.
          The hook is source-owned - a Content Placement can style its own band,
@@ -418,6 +419,14 @@ import { ContentSlot } from '../../content/parts/content-slot';
 
       </div>
     </section>
+
+    <!-- Merchant-authored product information, below both columns and at the page's
+         full width - never inside the gallery/buying grid, which is a two-column
+         arrangement for one product and one buy box. Owned by the PAGE PRODUCT exactly
+         as the gallery is: a simple Item's own sections, or a family template's, and
+         never a resolved variant's. Empty renders nothing at all. -->
+    <app-product-content [sections]="sections()" />
+
     <yob-content-slot routeKey="product" slotKey="below_product" />
   `,
 })
@@ -868,6 +877,20 @@ export class ItemPage {
    * Used only where a gallery row supplies no `alt_text` of its own.
    */
   protected readonly galleryProductName = computed(() => this.payload()?.item_name ?? '');
+
+  /**
+   * The page product's content sections: this Item's own, or this family's template's.
+   *
+   * The same ownership rule the gallery follows, and for the same reason. Merchandising
+   * belongs to the public storefront entity; `resolve_variant` carries no sections, and
+   * 3.9.1 gives a resolved SKU no shape one could arrive on. So choosing an attribute
+   * changes the price and the stock and leaves every word of this content alone - it is
+   * not refetched, not reset and not reordered.
+   *
+   * Read from the same payload the page already has. Rendering content issues no request
+   * of any kind: it arrived with `get_item`.
+   */
+  protected readonly sections = computed(() => this.payload()?.sections ?? []);
 
   /** The resolved variant's name once there is one, the family's or item's until then. */
   protected readonly displayName = computed(

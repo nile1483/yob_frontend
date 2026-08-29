@@ -21,6 +21,22 @@ function mainImage(page: Page) {
 }
 
 /**
+ * Every RPC the app has made so far, read from the mock's own log.
+ *
+ * The mock answers inside `HttpClient`, so nothing reaches the network; the log records
+ * each call at the mock's server boundary, which is what "did the gallery ask the
+ * backend anything?" actually means.
+ */
+async function rpcCalls(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const log = (globalThis as Record<string, unknown>)['__yobMockRequests'] as
+      | { rpcMethod: string }[]
+      | undefined;
+    return (log ?? []).map((record) => record.rpcMethod);
+  });
+}
+
+/**
  * The product gallery in a real browser (Phase 27C).
  *
  * The unit suite proves the rules; this proves they survive a real layout, a real click
@@ -57,13 +73,11 @@ test.describe('product gallery', () => {
     const before = await mainImage(page).getAttribute('src');
     const url = page.url();
 
-    // Every catalog request this page makes, counted from the moment it is loaded.
-    const calls: string[] = [];
-    page.on('request', (request) => {
-      if (request.url().includes('/api/method/')) {
-        calls.push(request.url());
-      }
-    });
+    // Read from the mock's own log, not from `page.on('request')`. The mock answers
+    // INSIDE HttpClient, so an API call never reaches the network and a browser request
+    // event never fires for one - counting those would pass no matter what the gallery
+    // did.
+    const rpcBefore = await rpcCalls(page);
 
     await thumbs(page).nth(0).click();
 
@@ -76,7 +90,7 @@ test.describe('product gallery', () => {
 
     // No navigation, and no backend call of any kind. The gallery arrived with get_item.
     expect(page.url()).toBe(url);
-    expect(calls).toEqual([]);
+    expect(await rpcCalls(page)).toEqual(rpcBefore);
   });
 
   test('omits the caption row for an image that has none', async ({ page }) => {

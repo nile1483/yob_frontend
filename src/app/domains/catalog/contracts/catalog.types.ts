@@ -605,31 +605,116 @@ export interface ProductGalleryImageDto {
  * serve a page builder and a product page. The backend split them on purpose; so does this.
  */
 export type ProductContentBlockDto =
-  | { readonly type: 'rich_text'; readonly content: string }
-  | { readonly type: 'key_value'; readonly items: readonly ProductSpecEntryDto[] }
-  | {
-      readonly type: 'table';
-      readonly columns: readonly string[];
-      readonly rows: readonly (readonly string[])[];
-    }
-  | {
-      readonly type: 'image';
-      readonly image: string;
-      readonly alt_text: string | null;
-      readonly caption: string | null;
-    }
-  | {
-      readonly type: 'download';
-      readonly file: string;
-      readonly label: string | null;
-      readonly description: string | null;
-    }
-  | { readonly type: 'video'; readonly url: string };
+  | ProductRichTextBlockDto
+  | ProductKeyValueBlockDto
+  | ProductTableBlockDto
+  | ProductImageBlockDto
+  | ProductDownloadBlockDto
+  | ProductVideoBlockDto;
+
+/** Merchant prose (API 3.9.1 `ProductRichTextBlock`). Sanitised HTML, never trusted. */
+export interface ProductRichTextBlockDto {
+  readonly type: 'rich_text';
+  readonly content: string;
+}
+
+/** A specification list (API 3.9.1 `ProductKeyValueBlock`), in the merchant's order. */
+export interface ProductKeyValueBlockDto {
+  readonly type: 'key_value';
+  readonly items: readonly ProductSpecEntryDto[];
+}
+
+/**
+ * A table (API 3.9.1 `ProductTableBlock`).
+ *
+ * The contract guarantees every row carries exactly `columns.length` cells, padded with
+ * `""`, so no width reconciliation is needed here - and a merchant who narrows a table
+ * keeps the wider data in the database while the runtime only ever sends the current
+ * width. Renderers still index defensively rather than relying on it.
+ */
+export interface ProductTableBlockDto {
+  readonly type: 'table';
+  readonly columns: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+}
+
+/**
+ * A content image (API 3.9.1 `ProductImageBlock`): a diagram, a drawing, a step.
+ *
+ * **Not gallery imagery.** A blank `alt_text` is not filled in from the product's name
+ * here - naming a torque chart after the product would be actively misleading - so it
+ * becomes `alt=""` instead.
+ */
+export interface ProductImageBlockDto {
+  readonly type: 'image';
+  readonly image: string;
+  readonly alt_text: string | null;
+  readonly caption: string | null;
+}
+
+/** A document link (API 3.9.1 `ProductDownloadBlock`). `file` is a stored Frappe URL. */
+export interface ProductDownloadBlockDto {
+  readonly type: 'download';
+  readonly file: string;
+  readonly label: string | null;
+  readonly description: string | null;
+}
+
+/**
+ * A video (API 3.9.1 `ProductVideoBlock`).
+ *
+ * An http(s) **URL only** - the contract is explicit that it is never embed markup. How
+ * it is presented is entirely the frontend's decision; see `product-video-url.ts`.
+ */
+export interface ProductVideoBlockDto {
+  readonly type: 'video';
+  readonly url: string;
+}
 
 /** One row of a `key_value` block (API 3.9.1 `ProductSpecEntry`). */
 export interface ProductSpecEntryDto {
   readonly key: string;
   readonly value: string;
+}
+
+/**
+ * A product-content block whose `type` this release does not know.
+ *
+ * The same admission the CMS union makes, for the same reason: a backend that adds a
+ * seventh block type must not take a product page down. It is typed as a bare `type` so
+ * nothing can read fields off it without narrowing first.
+ */
+export interface UnknownProductContentBlockDto {
+  readonly type: string;
+}
+
+/** What `blocks` actually contains once an unknown type is admitted as possible. */
+export type AnyProductContentBlockDto =
+  | ProductContentBlockDto
+  | UnknownProductContentBlockDto;
+
+/** The six product-content types this release can draw. */
+const RENDERABLE_PRODUCT_CONTENT_TYPES = new Set<ProductContentBlockDto['type']>([
+  'rich_text',
+  'key_value',
+  'table',
+  'image',
+  'download',
+  'video',
+]);
+
+/**
+ * Whether this release can draw a product-content block.
+ *
+ * **Deliberately not `isRenderableBlock`.** That one guards the Phase 25 CMS union, whose
+ * five types are a different set entirely - it would admit the CMS's carousel and promo
+ * types and reject `table`. Two unions that overlap on two names still need two guards,
+ * and sharing one would be the coupling the whole split exists to prevent.
+ */
+export function isRenderableProductContentBlock(
+  block: AnyProductContentBlockDto,
+): block is ProductContentBlockDto {
+  return RENDERABLE_PRODUCT_CONTENT_TYPES.has(block.type as ProductContentBlockDto['type']);
 }
 
 /**
@@ -644,7 +729,7 @@ export interface ProductSpecEntryDto {
  */
 export interface ProductContentSectionDto {
   readonly title: string;
-  readonly blocks: readonly ProductContentBlockDto[];
+  readonly blocks: readonly AnyProductContentBlockDto[];
 }
 
 /**
