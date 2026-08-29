@@ -128,6 +128,86 @@ Both are now scoped to `cart-lines`, which is what they were actually claiming.
 - Domain-specific reusable UI is called `parts`.
 - Angular framework classes can still technically be components/services; the architecture vocabulary avoids using `components` as a generic business folder name.
 
+## CONFIRMED - Product Detail Content decisions (Phase 27, 2026-08-29)
+
+Locked in session before any code exists. Backend Phase 27A is in progress; the runtime
+contract arrives in **Phase 27B**. Nothing below has been implemented, and nothing may be
+implemented from it until that contract is published.
+
+### Gallery ownership is by merchandising owner, not by resolved SKU
+
+Product merchandising belongs to the **public storefront entity**, which is either a simple
+Item or a variant family/template. **Generated variant children own neither a Gallery nor
+Product Content.**
+
+So selecting an attribute combination **must not replace, reset or otherwise change the
+displayed Gallery**. This supersedes the Phase 27 reconstruction note that suggested the
+gallery should reset on variant resolution - that was wrong, and it was wrong about
+ownership rather than about mechanics.
+
+The image area falls back in owner order:
+
+| Entity | Merchandising image area shows |
+|---|---|
+| simple Item with a gallery | its own gallery |
+| simple Item without a gallery | its own base Item `image` |
+| family with a gallery | the **template's** gallery |
+| family without a gallery | the **template's** base Item `image` |
+| resolved variant child | nothing of its own - it never overrides the area |
+
+Note what this changes about existing behaviour: `displayImage()` in `ItemPage` currently
+prefers `resolvedVariant()?.image` over the payload's. Under this decision the resolved
+child's image no longer wins the merchandising area. That is a deliberate behaviour change
+to be made in the implementation phase, not a defect in what ships today.
+
+Variant selection keeps doing everything else it does now. It remains the only authority on
+the **transactional** facts - `item_code`, price, discount, tax, UOM, conversion factor,
+stock and availability - all of which stay backend-resolved and untouched by this decision.
+
+### Product Content position on the page is locked
+
+```text
+breadcrumb
+above_product ContentSlot          (Phase 25H route content)
+Gallery + Buying Area              (the existing <article>)
+Product Detail Content Sections    (Phase 27)
+below_product ContentSlot          (Phase 25H route content)
+```
+
+Product Content sits **after** the product article and **before** the existing
+`below_product` slot. In `domains/catalog/pages/item-page.ts` that is between the closing
+`</article>` and the trailing `<yob-content-slot routeKey="product" slotKey="below_product" />`.
+
+### Renderers stay dedicated to the catalog domain
+
+Gallery and Product Content get their own components under `domains/catalog/parts/`. The
+Phase 25 CMS `ContentBlockDto` union, `ContentBlocks`' `@switch` and `ContentSection`'s
+`section_style`/`content_width` banding are **not** reused and **not** extended for product
+merchandising. Page/route CMS content and product-detail content are separate concerns that
+happen to both be merchant-authored.
+
+What may be reused, because it is not CMS-specific: `mediaUrl()`, the `Media` box, the
+sanitiser-only `[innerHTML]` rich-text pattern (never `bypassSecurityTrustHtml`), the
+unknown-type-degrades-quietly rule, and the `yob-page-section` / `yob-content-container`
+banding.
+
+### DEFERRED - everything else, until Phase 27B
+
+No DTOs, no API method, no fixtures, no components and no tests. Typing a contract that does
+not exist yet is exactly the invented-field failure `CLAUDE.md` forbids: 3.8.0's
+`ProductDetail` carries a single `image` and no description, gallery or sections.
+
+### OPEN - to resolve when 27B publishes
+
+- Exact DocType and wire field names, which must not collide with the Phase 25 CMS
+  `Content Block` vocabulary.
+- Whether gallery and sections arrive on `get_item` or as a separate call, and what
+  `resolve_variant` returns for them (under the ownership rule above, a child's answer is
+  not consumed for the image area regardless).
+- Whether Product Content sections carry any presentation hint at all. Default assumption
+  until told otherwise: they do not, and Angular owns all layout, spacing and typography.
+
+
 ## CONFIRMED - Responsive storefront header and product typeahead (Phase 26B, 2026-08-27)
 
 Frontend for backend Phases 26A/26A-1, against API **3.8.0**. The authenticated header
