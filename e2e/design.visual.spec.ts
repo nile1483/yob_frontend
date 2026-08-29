@@ -351,11 +351,22 @@ test.describe('transactional reading order', () => {
 
     // On a phone it scrolls away entirely rather than following the buyer down a long
     // address list; there is room to spare on wider screens, where it stays put.
+    //
+    // What matters is that the phone header is NOT pinned. Phase 26B had to make the bar
+    // `relative` at every width - `z-index` is inert on a static element, which is why a
+    // content block could paint over the search panel on a phone - and a relative header
+    // scrolls away with the page exactly as a static one does. Only `sticky`/`fixed`
+    // would follow the buyer, and that is what this rules out.
     await page.evaluate(() => window.scrollTo(0, 400));
     const position = await page
       .getByRole('banner')
       .evaluate((el) => getComputedStyle(el).position);
-    expect(position).toBe(viewport.width < 640 ? 'static' : 'sticky');
+
+    if (viewport.width < 640) {
+      expect(['static', 'relative'], `phone header is ${position}`).toContain(position);
+    } else {
+      expect(position).toBe('sticky');
+    }
   });
 });
 

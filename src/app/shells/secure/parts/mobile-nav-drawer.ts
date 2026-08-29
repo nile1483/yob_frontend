@@ -24,6 +24,17 @@ import { MenuStore } from '../../../domains/content/state/menu.store';
  * panel tells a buyer the store is broken; a header without a hamburger simply looks like
  * a store with no published navigation, which is what it is.
  *
+ * ## A viewport overlay, not a header dropdown
+ *
+ * The backdrop and the surface are both `position: fixed` against the **viewport**, and
+ * the surface is explicitly `h-dvh` and opaque. That only works because the header no
+ * longer carries a `backdrop-filter`: such a property makes an element the containing
+ * block for its fixed descendants, and the drawer was being sized against the header's
+ * own 116px box instead of the 844px viewport. The page showed through beneath it.
+ *
+ * The scrim and the surface take their depth from the one overlay scale in `styles.css`
+ * rather than inventing numbers.
+ *
  * ## Groups expand, they do not navigate
  *
  * A group is organisational - `destination: null` - so it is a `<button>` that discloses
@@ -59,7 +70,7 @@ import { MenuStore } from '../../../domains/content/state/menu.store';
            tap outside it should close it without also activating whatever was under the
            finger. -->
       <div
-        class="fixed inset-0 z-40 bg-slate-900/40"
+        class="yob-layer-scrim fixed inset-0 bg-slate-900/40"
         (click)="close()"
         data-testid="nav-drawer-backdrop"
         aria-hidden="true"
@@ -67,8 +78,8 @@ import { MenuStore } from '../../../domains/content/state/menu.store';
 
       <div
         id="mobile-nav-drawer"
-        class="fixed inset-y-0 start-0 z-50 flex w-80 max-w-[85%] flex-col overflow-y-auto
-               border-e border-slate-200 bg-white"
+        class="yob-layer-overlay fixed inset-y-0 start-0 flex h-dvh w-80 max-w-[85%] flex-col
+               overflow-y-auto border-e border-slate-200 bg-white"
         role="dialog"
         aria-modal="true"
         [attr.aria-label]="drawerLabel"

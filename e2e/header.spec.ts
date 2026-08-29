@@ -278,3 +278,189 @@ test.describe('Enter does nothing', () => {
     expect(page.url()).not.toContain('search=');
   });
 });
+
+test.describe('the overlay layers', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/home' });
+  });
+
+  test('the drawer is a viewport overlay, not a header dropdown', async ({ page }, info) => {
+    test.skip(info.project.name === 'chromium-desktop', COMPACT_ONLY);
+
+    await page.getByTestId('nav-hamburger').click();
+    await expect(page.getByTestId('nav-drawer')).toBeVisible();
+
+    const measured = await page.evaluate(() => {
+      const drawer = document.querySelector('[data-testid="nav-drawer"]') as HTMLElement;
+      const backdrop = document.querySelector(
+        '[data-testid="nav-drawer-backdrop"]',
+      ) as HTMLElement;
+      const style = getComputedStyle(drawer);
+      return {
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+        drawer: drawer.getBoundingClientRect().toJSON(),
+        backdrop: backdrop.getBoundingClientRect().toJSON(),
+        position: style.position,
+        background: style.backgroundColor,
+      };
+    });
+
+    // The regression: `backdrop-filter` on the header made it the containing block for
+    // fixed descendants, so this box was the height of the header (116px in an 844px
+    // viewport) and the page showed through beneath it.
+    expect(measured.position).toBe('fixed');
+    expect(measured.drawer.height).toBeCloseTo(measured.viewportHeight, 0);
+    expect(measured.drawer.top).toBeCloseTo(0, 0);
+
+    // The backdrop covers the whole viewport, not just the header band.
+    expect(measured.backdrop.height).toBeCloseTo(measured.viewportHeight, 0);
+    expect(measured.backdrop.width).toBeCloseTo(measured.viewportWidth, 0);
+
+    // Opaque, so nothing reads through it.
+    expect(measured.background).toBe('rgb(255, 255, 255)');
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('no page content can paint above the open drawer', async ({ page }, info) => {
+    test.skip(info.project.name === 'chromium-desktop', COMPACT_ONLY);
+
+    await page.getByTestId('nav-hamburger').click();
+    await expect(page.getByTestId('nav-drawer')).toBeVisible();
+
+    // Deep down the panel, well past the header band and over the hero content block.
+    const topmost = await page.evaluate(() => {
+      const el = document.elementFromPoint(60, Math.round(window.innerHeight * 0.85));
+      return el?.closest('[data-testid="nav-drawer"]') !== null;
+    });
+
+    expect(topmost, 'page content painted above the drawer').toBe(true);
+  });
+
+  test('the header keeps no property that would trap a fixed overlay', async ({ page }) => {
+    const style = await page.evaluate(() => {
+      const header = document.querySelector('header') as HTMLElement;
+      const s = getComputedStyle(header);
+      return { backdropFilter: s.backdropFilter, filter: s.filter, transform: s.transform };
+    });
+
+    // Any of these makes the header the containing block for its fixed descendants, which
+    // is what broke the drawer. Reintroducing one means moving the overlay out first.
+    expect(style.backdropFilter).toBe('none');
+    expect(style.filter).toBe('none');
+    expect(style.transform).toBe('none');
+  });
+
+  test('the search panel paints above a content block, and takes the click', async ({ page }) => {
+    // `/home` opens with a full-width image banner directly beneath the header, which is
+    // exactly what was painting over the dropdown.
+    await expect(page.getByTestId('block-image-banner')).toBeVisible();
+
+    const input = searchInput(page);
+    await input.click();
+    // Every fixture product carries a `YOB-` code, so this fills the panel rather than
+    // returning one short row that would sit clear of the banner and prove nothing.
+    await input.fill('yob');
+    const panel = page.getByTestId('product-search-panel');
+    await expect(panel.getByTestId('product-suggestion').nth(3)).toBeVisible();
+
+    const overlap = await page.evaluate(() => {
+      const panelEl = document.querySelector('[data-testid="product-search-panel"]')!;
+      const block = document.querySelector('[data-testid="block-image-banner"]')!;
+      const p = panelEl.getBoundingClientRect();
+      const b = block.getBoundingClientRect();
+      const overlaps = p.bottom > b.top && p.top < b.bottom && p.right > b.left && p.left < b.right;
+
+      // A point inside BOTH rectangles - the area the banner used to win.
+      const x = Math.round(Math.max(p.left, b.left) + 8);
+      const y = Math.round(Math.max(p.top, b.top) + 8);
+      const hit = document.elementFromPoint(x, y);
+      return {
+        overlaps,
+        panelWins: hit?.closest('[data-testid="product-search-panel"]') !== null,
+        hit: hit?.tagName ?? 'none',
+      };
+    });
+
+    expect(overlap.overlaps, 'the panel and the banner do not overlap - test proves nothing').toBe(
+      true,
+    );
+    // Geometry alone is not enough: the panel must actually receive the pointer.
+    expect(overlap.panelWins, `the content block intercepted the pointer (${overlap.hit})`).toBe(
+      true,
+    );
+
+    // And a real interaction in that area still works.
+    await panel.getByTestId('product-suggestion').first().click();
+    await expect(page).toHaveURL('/catalog/item/hex-bolt-m10-50');
+  });
+
+  test('the search panel is not clipped by the header', async ({ page }) => {
+    const input = searchInput(page);
+    await input.click();
+    await input.fill('bolt');
+    await expect(page.getByTestId('product-search-panel')).toBeVisible();
+
+    const measured = await page.evaluate(() => {
+      const panel = document.querySelector('[data-testid="product-search-panel"]')!;
+      const header = document.querySelector('header')!;
+      return {
+        panel: panel.getBoundingClientRect().toJSON(),
+        header: header.getBoundingClientRect().toJSON(),
+        headerOverflow: getComputedStyle(header).overflow,
+      };
+    });
+
+    // The panel hangs below the header, which only works while nothing clips it.
+    expect(measured.panel.bottom).toBeGreaterThan(measured.header.bottom);
+    expect(measured.headerOverflow).toBe('visible');
+    await expectNoHorizontalOverflow(page);
+  });
+});
+
+test.describe('removing a recent product', () => {
+  async function rememberBolt(page: Page) {
+    const input = searchInput(page);
+    await input.click();
+    await input.fill('bolt');
+    await page.getByTestId('product-suggestion').first().click();
+    await expect(page).toHaveURL('/catalog/item/hex-bolt-m10-50');
+  }
+
+  test('removes it, stays put, and it does not come back', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/home' });
+    await rememberBolt(page);
+
+    await searchInput(page).click();
+    await expect(page.getByTestId('recent-heading')).toBeVisible();
+    await expect(page.getByTestId('recent-remove')).toHaveCount(1);
+
+    const before = page.url();
+    await page.getByTestId('recent-remove').first().click();
+
+    // Gone from the list, and emphatically not a navigation.
+    await expect(page.getByTestId('product-suggestion')).toHaveCount(0);
+    expect(page.url()).toBe(before);
+
+    // The panel had nothing left to show, so it closed rather than leaving an empty box.
+    await expect(page.getByTestId('recent-heading')).toHaveCount(0);
+
+    // Still absent when the buyer comes back to the box.
+    await searchInput(page).click();
+    await expect(page.getByTestId('recent-heading')).toHaveCount(0);
+  });
+
+  test('is offered on recent rows only, never on live suggestions', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/home' });
+    await rememberBolt(page);
+
+    const input = searchInput(page);
+    await input.click();
+    await expect(page.getByTestId('recent-remove')).toHaveCount(1);
+
+    await input.fill('nut');
+    await expect(page.getByTestId('suggestion-name').first()).toContainText('Nut');
+    // A server suggestion is not the buyer's list; there is nothing there to remove.
+    await expect(page.getByTestId('recent-remove')).toHaveCount(0);
+  });
+});

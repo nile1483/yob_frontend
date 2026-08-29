@@ -404,6 +404,115 @@ describe('product search', () => {
     });
   });
 
+  /* --------------------------------------------------- removing a recent row */
+
+  describe('removing a recent product', () => {
+    async function chooseBolt(view: Awaited<ReturnType<typeof open>>) {
+      await view.type('bolt');
+      (view.testId('product-suggestion') as HTMLElement).click();
+      await view.settle();
+    }
+
+    it('offers a labelled remove button on a recent row', async () => {
+      const view = await open();
+      await chooseBolt(view);
+      await view.focus();
+
+      const remove = view.testId('recent-remove');
+      expect(remove).not.toBeNull();
+      expect(remove?.tagName).toBe('BUTTON');
+      // Not a bare "×": the label says which product it removes.
+      expect(remove?.getAttribute('aria-label')).toBe(
+        'Remove Hex Bolt M10 x 50mm from recent products',
+      );
+    });
+
+    it('offers none on a live server suggestion', async () => {
+      const view = await open();
+      await view.type('bolt');
+
+      // A server suggestion is not the buyer's list; there is nothing there to remove.
+      expect(view.all('product-suggestion').length).toBeGreaterThan(0);
+      expect(view.all('recent-remove')).toHaveLength(0);
+    });
+
+    it('removes the row without navigating', async () => {
+      const view = await open();
+      await chooseBolt(view);
+      const url = router.url;
+
+      await view.focus();
+      (view.testId('recent-remove') as HTMLElement).click();
+      await view.settle();
+
+      // The whole trap this guards: a control nested in a clickable row that navigates.
+      expect(router.url).toBe(url);
+      expect(view.all('product-suggestion')).toHaveLength(0);
+    });
+
+    it('keeps the order of what remains', async () => {
+      const view = await open();
+      await chooseBolt(view);
+      await view.type('nut');
+      (view.testId('product-suggestion') as HTMLElement).click();
+      await view.settle();
+      await view.type('anchor');
+      (view.testId('product-suggestion') as HTMLElement).click();
+      await view.settle();
+
+      await view.focus();
+      expect(view.all('suggestion-name').map((el) => el.textContent?.trim() ?? '')).toHaveLength(3);
+
+      // Remove the middle row.
+      const middle = view.all('recent-remove')[1] as HTMLElement;
+      middle.click();
+      await view.settle();
+
+      const names = view.all('suggestion-name').map((el) => el.textContent?.trim() ?? '');
+      expect(names[0]).toContain('Anchor');
+      expect(names[1]).toContain('Bolt');
+      expect(names).toHaveLength(2);
+    });
+
+    it('closes the panel rather than leaving an empty box', async () => {
+      const view = await open();
+      await chooseBolt(view);
+      await view.focus();
+
+      (view.testId('recent-remove') as HTMLElement).click();
+      await view.settle();
+
+      // Nothing left to show, so nothing is shown - no heading over an empty container.
+      expect(view.testId('recent-heading')).toBeNull();
+      expect(view.testId('product-search-panel')).toBeNull();
+    });
+
+    it('leaves the rest of the row navigating normally', async () => {
+      const view = await open();
+      await chooseBolt(view);
+
+      await view.focus();
+      (view.testId('product-suggestion') as HTMLElement).click();
+      await view.settle();
+
+      expect(router.url).toBe('/catalog/item/hex-bolt-m10-50');
+    });
+
+    it('writes the removal through to storage', async () => {
+      const view = await open();
+      await chooseBolt(view);
+      expect(localStorage.getItem(`${RECENT_PRODUCTS_KEY_PREFIX}${BUYER}`)).toContain('YOB-BOLT');
+
+      await view.focus();
+      (view.testId('recent-remove') as HTMLElement).click();
+      await view.settle();
+
+      expect(localStorage.getItem(`${RECENT_PRODUCTS_KEY_PREFIX}${BUYER}`)).not.toContain(
+        'YOB-BOLT',
+      );
+    });
+  });
+
   /* ------------------------------------------------------- storage failures */
 
   describe('when storage misbehaves', () => {

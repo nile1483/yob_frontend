@@ -34,6 +34,23 @@ import { UserMenu } from './user-menu';
  * layout, hamburger included. A tablet is a small screen for this header, and treating it
  * as one is the honest answer.
  *
+ * ## Why this element is `relative` and carries no backdrop filter
+ *
+ * Both were live-smoke defects, and both came from one property.
+ *
+ * `backdrop-blur` made the header the **containing block** for its `position: fixed`
+ * descendants, so the navigation drawer's `inset-y-0` resolved against the header's own
+ * 116px box rather than the 844px viewport - a drawer the height of the header, with the
+ * page showing through below it. It is gone, and the bar is simply opaque.
+ *
+ * `relative` exists because `z-index` does nothing on a static element. The header is
+ * `sticky` only from `sm` up, so on a phone its layer was inert and it painted in tree
+ * order - before `main` - which let a content block paint over an open search panel.
+ *
+ * Nothing here may reintroduce `transform`, `filter` or `backdrop-filter` without first
+ * moving the drawer overlay out of this element. `header.spec.ts` measures the drawer
+ * against the viewport and fails if that happens.
+ *
  * ## The search row is not a second header
  *
  * On a phone the search input takes its own full-width row rather than competing with the
@@ -45,7 +62,7 @@ import { UserMenu } from './user-menu';
   imports: [CartAction, MobileNavDrawer, ProductSearch, RouterLink, SecureNav, UserMenu],
   template: `
     <header
-      class="z-20 border-b border-slate-200 bg-white/95 backdrop-blur sm:sticky sm:top-0"
+      class="yob-layer-header relative border-b border-slate-200 bg-white sm:sticky sm:top-0"
       data-testid="secure-header"
     >
       <div [class]="container">

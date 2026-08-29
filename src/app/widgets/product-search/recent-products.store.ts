@@ -92,6 +92,23 @@ export class RecentProductsStore {
     write(identity, next);
   }
 
+  /**
+   * Drop one product from this user's list.
+   *
+   * Order is preserved for everything that remains: the list answers "what was I looking
+   * at", and removing the third entry must not reshuffle the other four.
+   */
+  forget(itemCode: string): void {
+    const identity = this.identity();
+    if (identity === null) {
+      return;
+    }
+
+    const next = this.products().filter((item) => item.item_code !== itemCode);
+    this.loaded.set({ identity, items: next });
+    write(identity, next);
+  }
+
   /** Forget this user's list, in storage and in memory. */
   clear(): void {
     const identity = this.identity();

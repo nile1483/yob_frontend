@@ -65,8 +65,8 @@ import { SessionStore } from '../../../foundation/session/session.store';
     @if (isOpen()) {
       <div
         id="user-menu-panel"
-        class="absolute end-0 z-30 mt-1 min-w-48 rounded-md border border-slate-200 bg-white
-               py-1 shadow-lg"
+        class="yob-layer-popover absolute end-0 mt-1 min-w-48 rounded-md border
+               border-slate-200 bg-white py-1 shadow-lg"
         role="menu"
         [attr.aria-label]="panelLabel"
         data-testid="user-menu-panel"

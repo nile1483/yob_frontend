@@ -59,6 +59,50 @@
   }
 }
 
+/* ------------------------------------------------------- overlay layers (26B)
+
+   One small, ordered scale for everything that paints above the page, so a component
+   never has to invent a number and hope.
+
+     page content        (no z-index at all - the default layer)
+     yob-layer-header    the header bar
+     yob-layer-popover   search suggestions, the user menu
+     yob-layer-scrim     the drawer's backdrop
+     yob-layer-overlay   the drawer surface itself
+
+   ## Why the header must be positioned at every width
+
+   `z-index` does nothing on a static element. The header is `sticky` only from `sm` up,
+   so below that its z-index was silently inert and it painted in tree order - before
+   `main` - which is why a content block could paint over an open search panel. `relative`
+   costs nothing and makes the layer real at every width.
+
+   ## Why the header must NOT have a backdrop-filter
+
+   An element with `backdrop-filter` (or `filter`, or `transform`) becomes the CONTAINING
+   BLOCK for its `position: fixed` descendants. The header used `backdrop-blur`, so the
+   drawer's `fixed inset-y-0` resolved against the header's own 116px box instead of the
+   844px viewport: the panel was header-height, and the page showed through beneath it.
+   Measured, not guessed. Nothing in this header may reintroduce one of those properties
+   without moving the drawer overlay out of it first - `header.spec.ts` fails if it does. */
+@layer components {
+  .yob-layer-header {
+    z-index: 30;
+  }
+
+  .yob-layer-popover {
+    z-index: 40;
+  }
+
+  .yob-layer-scrim {
+    z-index: 50;
+  }
+
+  .yob-layer-overlay {
+    z-index: 60;
+  }
+}
+
 /* --------------------------------------------------- content section styles (25J)
 
    The five bands `SectionStyle` publishes, mapped to surfaces this repository already

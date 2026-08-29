@@ -100,8 +100,8 @@ type PanelMode = 'recent' | 'results' | 'empty' | 'failed';
     @if (isOpen() && mode(); as panel) {
       <div
         id="product-search-panel"
-        class="absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-md
-               border border-slate-200 bg-white py-1 shadow-lg"
+        class="yob-layer-popover absolute inset-x-0 top-full mt-1 max-h-80 overflow-y-auto
+               rounded-md border border-slate-200 bg-white py-1 shadow-lg"
         role="listbox"
         [attr.aria-label]="panelLabel"
         data-testid="product-search-panel"
@@ -125,35 +125,56 @@ type PanelMode = 'recent' | 'results' | 'empty' | 'failed';
           </p>
         } @else {
           @for (product of shown(); track product.item_code) {
-            <a
-              [routerLink]="['/catalog', 'item', product.slug]"
-              (click)="onChoose(product)"
-              class="flex items-center gap-3 px-3 py-2 hover:bg-slate-50"
-              role="option"
-              [attr.aria-selected]="false"
-              data-testid="product-suggestion"
-              [attr.data-item-code]="product.item_code"
-              [attr.data-is-template]="product.is_template"
-            >
-              <app-media
-                class="w-10 shrink-0 overflow-hidden rounded"
-                [src]="product.image"
-                alt=""
-                ratio="square"
-                testId="suggestion-media"
-              />
+            <!-- The row and its remove control are SIBLINGS. A button inside an anchor is
+                 invalid, and nesting one is how a "remove" ends up navigating: as
+                 siblings there is no propagation path to suppress in the first place. -->
+            <div class="flex items-center hover:bg-slate-50">
+              <a
+                [routerLink]="['/catalog', 'item', product.slug]"
+                (click)="onChoose(product)"
+                class="flex min-w-0 flex-1 items-center gap-3 px-3 py-2"
+                role="option"
+                [attr.aria-selected]="false"
+                data-testid="product-suggestion"
+                [attr.data-item-code]="product.item_code"
+                [attr.data-is-template]="product.is_template"
+              >
+                <app-media
+                  class="w-10 shrink-0 overflow-hidden rounded"
+                  [src]="product.image"
+                  alt=""
+                  ratio="square"
+                  testId="suggestion-media"
+                />
 
-              <span class="min-w-0">
-                <span class="block truncate text-sm text-slate-900" data-testid="suggestion-name">{{
-                  product.item_name
-                }}</span>
-                <!-- A B2B buyer often searches by code, so the code they matched on is
-                     visible - quietly, because the name is what identifies the product. -->
-                <span class="block truncate text-xs text-slate-500" data-testid="suggestion-code">{{
-                  product.item_code
-                }}</span>
-              </span>
-            </a>
+                <span class="min-w-0">
+                  <span class="block truncate text-sm text-slate-900" data-testid="suggestion-name">{{
+                    product.item_name
+                  }}</span>
+                  <!-- A B2B buyer often searches by code, so the code they matched on is
+                       visible - quietly, because the name is what identifies the product. -->
+                  <span class="block truncate text-xs text-slate-500" data-testid="suggestion-code">{{
+                    product.item_code
+                  }}</span>
+                </span>
+              </a>
+
+              @if (panel === 'recent') {
+                <!-- Recent rows only. A server suggestion is not the buyer's list, so
+                     there is nothing there to remove. -->
+                <button
+                  type="button"
+                  class="me-1 flex size-9 shrink-0 items-center justify-center rounded-md
+                         text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                  [attr.aria-label]="removeLabel(product)"
+                  (click)="onRemove(product, $event)"
+                  data-testid="recent-remove"
+                  [attr.data-item-code]="product.item_code"
+                >
+                  <span aria-hidden="true">&#10005;</span>
+                </button>
+              }
+            </div>
           }
         }
       </div>
@@ -275,6 +296,25 @@ export class ProductSearch {
   protected onChoose(product: ProductSuggestionDto): void {
     this.recent.remember(product);
     this.reset();
+  }
+
+  /** An accessible name that says which product is being removed, not just "remove". */
+  protected removeLabel(product: ProductSuggestionDto): string {
+    return $localize`:@@search.recent.remove:Remove ${product.item_name}:product: from recent products`;
+  }
+
+  /**
+   * Drop one product from this buyer's list.
+   *
+   * The panel deliberately stays open: removing an entry is housekeeping, and closing the
+   * dropdown after each one would make clearing two products a four-gesture job. The
+   * default is prevented because the control sits inside a listbox row - nothing should
+   * treat it as choosing that row.
+   */
+  protected onRemove(product: ProductSuggestionDto, event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.recent.forget(product.item_code);
   }
 
   private reset(): void {

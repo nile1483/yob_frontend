@@ -95,7 +95,7 @@ let nextNavInstance = 0;
               @if (openGroup() === $index) {
                 <ul
                   [id]="groupPanelId($index)"
-                  class="absolute left-0 z-30 mt-1 min-w-48 rounded-md border border-slate-200
+                  class="yob-layer-popover absolute left-0 mt-1 min-w-48 rounded-md border border-slate-200
                          bg-white py-1 shadow-lg"
                   data-testid="nav-group-panel"
                 >

@@ -125,6 +125,66 @@ describe('recent products', () => {
     });
   });
 
+  describe('removing one', () => {
+    it('drops it and preserves the order of the rest', () => {
+      const recent = store();
+      for (const code of ['A', 'B', 'C', 'D']) {
+        recent.remember(product(code));
+      }
+      expect(recent.products().map((p) => p.item_code)).toEqual(['D', 'C', 'B', 'A']);
+
+      // The middle one: everything else must keep its place, not reshuffle.
+      recent.forget('C');
+
+      expect(recent.products().map((p) => p.item_code)).toEqual(['D', 'B', 'A']);
+      expect((stored(ALICE) as { item_code: string }[]).map((p) => p.item_code)).toEqual([
+        'D',
+        'B',
+        'A',
+      ]);
+    });
+
+    it('empties the list when the last one goes', () => {
+      const recent = store();
+      recent.remember(product('ONLY'));
+
+      recent.forget('ONLY');
+
+      expect(recent.products()).toEqual([]);
+      expect(stored(ALICE)).toEqual([]);
+    });
+
+    it('ignores a code that is not in the list', () => {
+      const recent = store();
+      recent.remember(product('A'));
+
+      recent.forget('NOT-THERE');
+
+      expect(recent.products().map((p) => p.item_code)).toEqual(['A']);
+    });
+
+    it('touches only the signed-in user list', () => {
+      const recent = store();
+      recent.remember(product('ALICE-ONLY'));
+
+      user.set({ name: BOB, full_name: 'Bob' });
+      recent.remember(product('BOB-ONLY'));
+      recent.forget('BOB-ONLY');
+      expect(recent.products()).toEqual([]);
+
+      user.set({ name: ALICE, full_name: 'Alice' });
+      // Bob removing his own product cannot reach into Alice's list.
+      expect(recent.products().map((p) => p.item_code)).toEqual(['ALICE-ONLY']);
+    });
+
+    it('does nothing when nobody is signed in', () => {
+      user.set(null);
+
+      expect(() => store().forget('A')).not.toThrow();
+      expect(localStorage.length).toBe(0);
+    });
+  });
+
   describe('one buyer never sees another', () => {
     it('keeps two users on a shared browser apart', () => {
       const recent = store();
