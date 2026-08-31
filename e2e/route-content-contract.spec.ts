@@ -89,9 +89,9 @@ function code(file: string): string {
     .replace(/<!--[\s\S]*?-->/g, ' ');
 }
 
-test.describe('system route content contract (API 3.10.0)', () => {
+test.describe('system route content contract (API 3.11.0)', () => {
   test('the mirrored contract is present, versioned and identical in both locations', () => {
-    expect(REFERENCE.info.version).toBe('3.10.0');
+    expect(REFERENCE.info.version).toBe('3.11.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(publishedSlots(HANDOFF)).toEqual(publishedSlots(REFERENCE));
   });
@@ -208,6 +208,24 @@ test.describe('one block renderer, not one per host', () => {
         expect(source, `${file} uses ${unsafe}`).not.toContain(unsafe);
       }
     }
+  });
+
+  test('nothing outside the contract file switches on a destination type', () => {
+    // The reason this phase needed no navigation change, stated as a guard: routing reads
+    // `href` and `external`. `storefront_page` is the single documented exception - its
+    // route is the client's to build - and it lives in `cms.types.ts` beside the union.
+    // A second `type ===` comparison anywhere else would be the assumption this pins
+    // against, and would have to be revisited every time the backend adds a type.
+    const offenders = APP_FILES.filter((file) => {
+      if (file.endsWith('cms.types.ts') || file.endsWith('.spec.ts')) {
+        return false;
+      }
+      return /\.type\s*===\s*'(home|catalog|all_products|storefront_category|storefront_page|product|external_url)'/.test(
+        code(file),
+      );
+    }).map((file) => file.replace(`${process.cwd()}/`, ''));
+
+    expect(offenders).toEqual([]);
   });
 
   test('the catalog domain never reaches for a CMS block renderer', () => {

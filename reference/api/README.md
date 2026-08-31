@@ -8,8 +8,8 @@ the full package (markdown + OpenAPI + Postman + examples) is mirrored at
 
 | File | Version | Contents |
 |---|---|---|
-| `openapi.json` | **3.10.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract, the Phase 27B product-detail merchandising contract and the Phase 28A quick browse |
-| `postman_collection.json` | 3.10.0 | runnable requests, including the family → resolve → add-to-cart flow |
+| `openapi.json` | **3.11.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract, the Phase 27B product-detail merchandising contract and the Phase 28A quick browse |
+| `postman_collection.json` | 3.11.0 | runnable requests, including the family → resolve → add-to-cart flow |
 | `live/` | 2.0.0 (**superseded**) | a 2026-08-13 response capture, kept for history only |
 
 The table above went stale between 3.4.0 and 3.8.0 while the JSON itself was
@@ -19,6 +19,28 @@ it. Per-version detail for every release lives in
 [`docs/api-handoff/API-CHANGELOG.md`](../../docs/api-handoff/API-CHANGELOG.md),
 which is the backend's own changelog and is not summarised again here; only the
 newest release is described below.
+
+## What changed in 3.11.0 (Phase 28C)
+
+**Additive, and one enum value.** `Destination.type` gains `all_products`.
+
+A merchant who wanted a menu item pointing at `/products` previously had to pick
+`External URL` and type the route by hand. That still works and is still
+supported; `All Products` is simply the tidier way to express it.
+
+```jsonc
+{"type":"all_products","target":null,"href":"/products",
+ "external":false,"open_in_new_tab":false}
+```
+
+Like `home` and `catalog` it is a **fixed route**: `target` is null and `href` is
+backend-owned and always exactly `/products`, so there is no merchant input to
+mistype and nothing for the client to validate. The visible menu text stays the
+merchant's own `label` — never render the type name.
+
+**Angular needed no navigation change.** Routing already reads `href` and
+`external` rather than switching on `type`, so the new value only had to be added
+to `MenuDestinationType`.
 
 ## What changed in 3.10.0 (Phase 28A)
 

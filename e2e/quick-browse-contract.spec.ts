@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 /**
- * The Phase 28A quick-browse contract, as `/products` consumes it (API 3.10.0).
+ * The Phase 28A quick-browse contract, as `/products` consumes it (API 3.11.0).
  *
  * Two claims are worth pinning against the document rather than against a restatement of
  * it, because the whole feature rests on them:
@@ -21,6 +21,7 @@ import { expect, test } from '@playwright/test';
 interface Schema {
   readonly type?: string;
   readonly default?: unknown;
+  readonly description?: string;
   readonly nullable?: boolean;
   readonly enum?: readonly string[];
   readonly required?: readonly string[];
@@ -73,8 +74,8 @@ function parameter(method: string, name: string): Parameter {
 }
 
 test.describe('quick browse contract (Phase 28A)', () => {
-  test('the mirrors are 3.10.0 and identical', () => {
-    expect(REFERENCE.info.version).toBe('3.10.0');
+  test('the mirrors are 3.11.0 and identical', () => {
+    expect(REFERENCE.info.version).toBe('3.11.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(JSON.stringify(HANDOFF)).toBe(JSON.stringify(REFERENCE));
   });
@@ -159,6 +160,48 @@ test.describe('quick browse contract (Phase 28A)', () => {
     // nothing to filter out and must not invent a reason to.
     for (const absent of ['is_group', 'disabled', 'items', 'item_count', 'price', 'thumbnail']) {
       expect(fields, `BrowseCategory published ${absent}`).not.toContain(absent);
+    }
+  });
+
+  test('the Angular destination union is exactly the published enum (Phase 28D)', () => {
+    // Two copies of one list: the contract publishes the destination types, and Angular
+    // restates them as a union so a fixture cannot spell one that does not exist. This is
+    // what keeps them equal - including `all_products`, added in 3.11.0.
+    const published = [
+      ...(REFERENCE.components.schemas['Destination']!.properties?.['type']?.enum ?? []),
+    ].sort();
+    expect(published).toContain('all_products');
+
+    const types = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/content/contracts/cms.types.ts'),
+      'utf8',
+    );
+    const declared = /export type MenuDestinationType =([\s\S]*?);/.exec(types)?.[1] ?? '';
+    const values = [...declared.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!).sort();
+
+    expect(values).toEqual(published);
+  });
+
+  test('all_products is a fixed route the merchant cannot retarget', () => {
+    const destination = REFERENCE.components.schemas['Destination']!;
+
+    // The contract's own words. `href` is backend-owned and always exactly `/products`,
+    // and `target` is null - so there is no merchant input to validate and nothing for
+    // the client to build. That is why the existing renderer needed no new branch.
+    expect(destination.properties?.['type']?.description ?? '').toContain('all_products');
+    expect(destination.properties?.['href']?.description ?? '').toContain('/products');
+
+    // And it is additive: every type Angular already handled is still published.
+    const published = destination.properties?.['type']?.enum ?? [];
+    for (const existing of [
+      'home',
+      'catalog',
+      'storefront_category',
+      'storefront_page',
+      'product',
+      'external_url',
+    ]) {
+      expect(published, `the contract dropped ${existing}`).toContain(existing);
     }
   });
 

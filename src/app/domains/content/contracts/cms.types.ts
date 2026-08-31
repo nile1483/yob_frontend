@@ -32,10 +32,32 @@ export interface MenuDestinationDto {
   readonly open_in_new_tab: boolean;
 }
 
-/** The destination types API 3.4.0 publishes. */
+/**
+ * The destination types the contract publishes (API 3.11.0).
+ *
+ * ## Three of these are fixed routes
+ *
+ * `home`, `catalog` and `all_products` carry a `null` target and a backend-owned `href`
+ * that no merchant can type into - `/`, `/catalog` and `/products` respectively. The rest
+ * name a record.
+ *
+ * ## Adding a value here is normally the whole change
+ *
+ * Nothing in this application switches exhaustively on `type`. Routing reads `href` (with
+ * one documented exception, `storefront_page`, whose route the client owns) and
+ * internal-vs-external reads the `external` boolean. So a new destination type is a
+ * contract-sync concern rather than a navigation one, and `all_products` needed no
+ * renderer change at all: it arrives with `href: '/products'` and `external: false`, and
+ * the existing internal branch already draws it.
+ *
+ * `all_products` is new in 3.11.0 and is the tidy replacement for a merchant typing
+ * `/products` into an `External URL`. That older arrangement still works and is still
+ * supported - the new type is additive, not a migration.
+ */
 export type MenuDestinationType =
   | 'home'
   | 'catalog'
+  | 'all_products'
   | 'storefront_category'
   | 'storefront_page'
   | 'product'

@@ -37,6 +37,21 @@ function menuPayload(over: Record<string, unknown> = {}) {
             children: [],
           },
           {
+            // Phase 28C/3.11.0: the same destination expressed as a first-class type.
+            // A FIXED route - null target, backend-owned href - and the merchant's own
+            // wording for the label, which is deliberately not the type name.
+            label: 'Shop All',
+            type: 'all_products',
+            destination: {
+              type: 'all_products',
+              target: null,
+              href: '/products',
+              external: false,
+              open_in_new_tab: false,
+            },
+            children: [],
+          },
+          {
             label: 'Catalog',
             type: 'catalog',
             destination: {
@@ -332,6 +347,54 @@ describe('merchant navigation', () => {
       // taken, and the application router - not the browser - ended up on /products.
       expect(event.defaultPrevented).toBe(true);
       expect(router.url).toBe('/products');
+    });
+
+    it('routes an all_products destination internally (Phase 28D)', async () => {
+      // The new first-class type. It needed no renderer change: `href` and `external`
+      // decide, and this arrives with `/products` and `external: false` like any other
+      // internal destination. The assertions are what a buyer would notice going wrong -
+      // a new tab, a rel, or a full browser navigation out of the SPA.
+      await render();
+
+      const link = byLabel('nav-link', 'Shop All');
+      expect(link?.getAttribute('href')).toBe('/products');
+      expect(link?.getAttribute('target')).toBeNull();
+      expect(link?.getAttribute('rel')).toBeNull();
+    });
+
+    it('navigates to /products through the router for an all_products type', async () => {
+      await render();
+      const router = TestBed.inject(Router);
+
+      const link = byLabel('nav-link', 'Shop All') as HTMLAnchorElement;
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(event);
+      await fixture.whenStable();
+      await settle();
+
+      // RouterLink takes the click; a plain anchor would let the browser leave the SPA.
+      expect(event.defaultPrevented).toBe(true);
+      expect(router.url).toBe('/products');
+    });
+
+    it('renders the merchant label, never the destination type name', async () => {
+      // `All Products` is the admin-facing TYPE. What a buyer reads is whatever the
+      // merchant typed - here "Shop All".
+      await render();
+
+      expect(byLabel('nav-link', 'Shop All')).toBeDefined();
+      const labels = all('nav-link').map((node) => node.textContent?.trim());
+      expect(labels).not.toContain('all_products');
+    });
+
+    it('still treats the Phase 28B external_url form as internal', async () => {
+      // The new type is additive. A merchant who already typed `/products` into an
+      // External URL keeps working exactly as before.
+      await render();
+
+      const legacy = byLabel('nav-link', 'All Products');
+      expect(legacy?.getAttribute('href')).toBe('/products');
+      expect(legacy?.getAttribute('target')).toBeNull();
     });
 
     it('renders a null destination as text, not a link', async () => {
