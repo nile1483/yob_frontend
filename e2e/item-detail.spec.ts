@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { signInAsMockBuyer, signInWithMockFlags } from './support/auth';
 import { expectNoHorizontalOverflow, expectShellUsable } from './support/layout';
@@ -214,5 +214,170 @@ test.describe('failure states', () => {
     await expect(page.getByTestId('item-loading')).toBeVisible();
     await expect(page.getByTestId('item-title')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('item-loading')).toHaveCount(0);
+  });
+});
+
+/**
+ * MRP and quantity guidance in a real browser (Phase 29B).
+ *
+ * The unit suite pins the rules; three things are only observable here. That the native
+ * control agrees with the guidance - a `step` whose base disagreed with the start blocked
+ * submission outright with the browser's own validation, which no unit assertion about
+ * values would have shown. That editing a quantity costs no request. And that the guided
+ * quantity reaches the cart as an ordinary qty.
+ */
+test.describe('MRP and quantity guidance (Phase 29B)', () => {
+  /** Every RPC so far, from the mock's own log - the mock answers inside HttpClient. */
+  async function rpcCalls(page: Page): Promise<string[]> {
+    return page.evaluate(() => {
+      const log = (globalThis as Record<string, unknown>)['__yobMockRequests'] as
+        | { rpcMethod: string }[]
+        | undefined;
+      return (log ?? []).map((record) => record.rpcMethod);
+    });
+  }
+
+  test('shows the MRP quietly beside the rate', async ({ page }) => {
+    // The nut: MRP 30, MOQ 10, step 6.
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-nut-m10' });
+
+    const mrp = page.getByTestId('item-mrp');
+    await expect(mrp).toBeVisible();
+    await expect(mrp).toContainText('MRP');
+    await expect(mrp).toContainText('30');
+
+    // Subordinate to the rate, and no derived saving anywhere on the page.
+    const rateSize = await page
+      .getByTestId('item-rate')
+      .evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
+    const mrpSize = await mrp.evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
+    expect(mrpSize).toBeLessThan(rateSize);
+    await expect(page.locator('body')).not.toContainText('You save');
+  });
+
+  test('renders no MRP line for a product without one', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: WASHER });
+
+    await expect(page.getByTestId('item-mrp')).toHaveCount(0);
+  });
+
+  test('opens at the MOQ and steps from it', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-nut-m10' });
+
+    const quantity = page.getByTestId('item-quantity');
+    await expect(quantity).toHaveValue('10');
+    await expect(quantity).toHaveAttribute('min', '10');
+    await expect(quantity).toHaveAttribute('step', '6');
+
+    // The browser's own spinner counts FROM min: 10, 16, 22 - not multiples of six.
+    await quantity.click();
+    await quantity.press('ArrowUp');
+    await expect(quantity).toHaveValue('16');
+    await quantity.press('ArrowUp');
+    await expect(quantity).toHaveValue('22');
+    await quantity.press('ArrowDown');
+    await expect(quantity).toHaveValue('16');
+
+    // And the value the native validator sees is valid, so Add to cart is reachable.
+    expect(await quantity.evaluate((n: HTMLInputElement) => n.checkValidity())).toBe(true);
+  });
+
+  test('cannot be driven below the MOQ by the control', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-nut-m10' });
+    const quantity = page.getByTestId('item-quantity');
+
+    for (let i = 0; i < 5; i += 1) {
+      await quantity.press('ArrowDown');
+    }
+    await expect(quantity).toHaveValue('10');
+  });
+
+  test('normalises a typed off-sequence value downward on commit', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-nut-m10' });
+    const quantity = page.getByTestId('item-quantity');
+
+    await quantity.fill('19');
+    await quantity.blur();
+    await expect(quantity).toHaveValue('16');
+
+    await quantity.fill('2');
+    await quantity.blur();
+    await expect(quantity).toHaveValue('10');
+  });
+
+  test('steps from the ordinary start when only a multiplier is configured', async ({ page }) => {
+    // The washer: multiplier 5, no MOQ. Starts at 1 and offers 1, 6, 11 - the start is
+    // NOT forced up to 5, and the native validator must accept 1.
+    await signInAsMockBuyer(page, { goTo: WASHER });
+    const quantity = page.getByTestId('item-quantity');
+
+    await expect(quantity).toHaveValue('1');
+    await expect(quantity).toHaveAttribute('step', '5');
+    expect(await quantity.evaluate((n: HTMLInputElement) => n.checkValidity())).toBe(true);
+
+    await quantity.press('ArrowUp');
+    await expect(quantity).toHaveValue('6');
+  });
+
+  test('ignores both values when a Pricing Rule disallows the guidance', async ({ page }) => {
+    // The anchor: MOQ 12 and step 4 are published, and `allowed` is false. Neither may be
+    // applied - while the MRP still shows, because an MRP has no quantity behaviour.
+    await signInAsMockBuyer(page, { goTo: ANCHOR });
+    const quantity = page.getByTestId('item-quantity');
+
+    await expect(quantity).toHaveValue('1');
+    await expect(quantity).toHaveAttribute('step', 'any');
+    await expect(quantity).not.toHaveAttribute('min', /.+/);
+    await expect(page.getByTestId('item-mrp')).toContainText('4,200');
+  });
+
+  test('editing the quantity costs no application request', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-nut-m10' });
+    const quantity = page.getByTestId('item-quantity');
+    await expect(quantity).toHaveValue('10');
+
+    const before = await rpcCalls(page);
+
+    await quantity.press('ArrowUp');
+    await quantity.press('ArrowUp');
+    await quantity.fill('19');
+    await quantity.blur();
+    await expect(quantity).toHaveValue('16');
+
+    // No reprice, no re-read, no resolver call - the price on screen is the backend's
+    // standalone preview and stepping never asks for another.
+    expect(await rpcCalls(page)).toEqual(before);
+  });
+
+  test('sends the guided quantity to the cart as an ordinary qty', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-nut-m10' });
+    await page.getByTestId('item-quantity').fill('22');
+    await page.getByTestId('item-quantity').blur();
+
+    await page.getByTestId('add-to-cart').click();
+    await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
+
+    const body = await page.evaluate(() => {
+      const log = (globalThis as Record<string, unknown>)['__yobMockRequests'] as
+        | { rpcMethod: string; body: unknown }[]
+        | undefined;
+      return (log ?? []).filter((r) => r.rpcMethod.endsWith('cart.add_to_cart')).at(-1)?.body;
+    });
+
+    // No moq, no multiplier, no mrp: the guidance shapes the input and never the request.
+    expect(Object.keys((body ?? {}) as Record<string, unknown>).sort()).toEqual([
+      'item_code',
+      'qty',
+    ]);
+    expect((body as Record<string, unknown>)['qty']).toBe(22);
+  });
+
+  test('claims no backend enforcement', async ({ page }) => {
+    await signInAsMockBuyer(page, { goTo: '/catalog/item/hex-nut-m10' });
+
+    const text = ((await page.locator('body').textContent()) ?? '').toLowerCase();
+    for (const phrase of ['minimum order', 'will be rejected', 'pack size', 'moq']) {
+      expect(text, `the page claims: ${phrase}`).not.toContain(phrase);
+    }
   });
 });

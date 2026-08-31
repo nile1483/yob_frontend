@@ -167,8 +167,8 @@ function payloadOf(wrapper: Schema): Schema {
 }
 
 test.describe('Phase 27B product detail merchandising contract', () => {
-  test('the mirrors are 3.11.0, identical, and the README agrees', () => {
-    expect(REFERENCE.info.version).toBe('3.11.0');
+  test('the mirrors are 3.12.0, identical, and the README agrees', () => {
+    expect(REFERENCE.info.version).toBe('3.12.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(JSON.stringify(HANDOFF)).toBe(JSON.stringify(REFERENCE));
 
@@ -487,6 +487,75 @@ test.describe('Phase 27B product detail merchandising contract', () => {
     }
   });
 
+  test('MRP and quantity guidance live on ProductDetail, and nowhere else (29B)', () => {
+    const detail = schema('ProductDetail');
+
+    expect(requiredOf(detail)).toContain('mrp');
+    expect(requiredOf(detail)).toContain('quantity_control');
+    expect(detail.properties?.['mrp']?.nullable).toBe(true);
+
+    // Exactly three keys, all required. A fourth would be a behaviour nobody has agreed.
+    const control = detail.properties?.['quantity_control'];
+    expect(Object.keys(control?.properties ?? {}).sort()).toEqual([
+      'allowed',
+      'moq',
+      'quantity_multiplier',
+    ]);
+    expect([...(control?.required ?? [])].sort()).toEqual([
+      'allowed',
+      'moq',
+      'quantity_multiplier',
+    ]);
+    expect(control?.properties?.['moq']?.nullable).toBe(true);
+    expect(control?.properties?.['quantity_multiplier']?.nullable).toBe(true);
+    expect(control?.properties?.['allowed']?.nullable ?? false).toBe(false);
+
+    // NOT on the nested pricing object. That block duplicates the money fields, and
+    // reading these from it would be a second source for one fact.
+    const pricing = Object.keys(detail.properties?.['pricing']?.properties ?? {});
+    expect(pricing).not.toContain('mrp');
+    expect(pricing).not.toContain('quantity_control');
+
+    // NOT on a listing card or a suggestion: an MRP belongs to the buying area, and a
+    // card that showed one would be a second place for money to be wrong.
+    for (const name of ['ListingCard', 'ProductSuggestion']) {
+      const fields = Object.keys(schema(name).properties ?? {});
+      expect(fields, `${name} gained mrp`).not.toContain('mrp');
+      expect(fields, `${name} gained quantity_control`).not.toContain('quantity_control');
+    }
+  });
+
+  test('the Angular DTO mirrors the guidance shape exactly', () => {
+    const types = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/catalog/contracts/catalog.types.ts'),
+      'utf8',
+    );
+
+    const declared = /export interface QuantityControlDto \{([\s\S]*?)\n\}/.exec(types)?.[1] ?? '';
+    const fields = [...declared.matchAll(/readonly (\w+):/g)].map((m) => m[1]!).sort();
+    expect(fields).toEqual(['allowed', 'moq', 'quantity_multiplier']);
+
+    // On the serializer, which is what `resolve_variant` returns too - a resolved variant
+    // carries its own Item Price facts.
+    const detail = /export interface ItemDetailDto \{([\s\S]*?)\n\}/.exec(types)?.[1] ?? '';
+    expect(detail).toContain('mrp');
+    expect(detail).toContain('quantity_control');
+  });
+
+  test('no card or suggestion DTO gained these fields in Angular either', () => {
+    const types = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/catalog/contracts/catalog.types.ts'),
+      'utf8',
+    );
+
+    for (const name of ['CatalogItemDto', 'ProductSuggestionDto']) {
+      const declared = new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`).exec(types)?.[1] ?? '';
+      expect(declared, `${name} is declared`).not.toBe('');
+      expect(declared, `${name} gained mrp`).not.toContain('mrp');
+      expect(declared, `${name} gained quantity_control`).not.toContain('quantity_control');
+    }
+  });
+
   test('the Angular types keep the same split the contract makes', () => {
     // Phase 27C wires this contract into the application. The distinction 3.9.1 exists to
     // draw must survive that: one DTO for the resolved SKU, another for the product page,
@@ -582,13 +651,17 @@ test.describe('Phase 27B product detail merchandising contract', () => {
       expect(detail, `ProductDetail dropped ${field}`).toContain(field);
     }
 
-    // The serializer is those 29 fields and nothing else - it did not gain merchandising
-    // in 3.9.0, and it did not lose anything in the 3.9.1 split either.
-    expect(detail.length).toBe(29);
+    // 29 through 3.11.0, plus `mrp` and `quantity_control` in 3.12.0. Still no
+    // merchandising: those two remain the page payload's, not the serializer's.
+    for (const added of ['mrp', 'quantity_control']) {
+      expect(detail, `ProductDetail is missing ${added}`).toContain(added);
+    }
+    expect(detail.length).toBe(31);
 
     // The page payload is the same 29 plus exactly the two merchandising keys. Read
     // through composition, so this is what a client of `get_item` genuinely receives.
     expect(fields(schema('ProductPageDetail'))).toEqual([...detail, 'gallery', 'sections'].sort());
+    expect(fields(schema('ProductPageDetail'))).toHaveLength(33);
 
     const family = fields(schema('VariantFamily'));
     for (const field of [

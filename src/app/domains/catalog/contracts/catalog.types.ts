@@ -392,6 +392,44 @@ export interface ItemPricingDto {
 }
 
 /**
+ * Storefront quantity-input guidance from the resolved Item Price (API 3.12.0).
+ *
+ * ## Guidance, and never enforcement
+ *
+ * The contract could not be plainer: these are **never enforced by the backend**. Cart,
+ * checkout and Sales Order accept exactly the quantities they accepted before the fields
+ * existed. So this shapes the input control and nothing else - it is not a validation
+ * rule, it is not a promise about what the server will refuse, and no message may tell a
+ * buyer that a quantity would be rejected.
+ *
+ * ## The step counts from the start, not from zero
+ *
+ * `moq: 10` with `quantity_multiplier: 6` offers 10, 16, 22 - **not** multiples of six,
+ * and **not** a divisible-by-six rule. The multiplier is a step measured from the
+ * starting quantity, and it is unrelated to UOM, conversion factor and pack size.
+ *
+ * ## The two are a pair, governed by one flag
+ *
+ * {@link allowed} is `false` when the authoritative pricing preview applied a Pricing
+ * Rule: a rule may change behaviour at a quantity threshold, so stepping is no longer a
+ * promise the storefront can keep. When it is `false`, **both** values are ignored - not
+ * one of them - and the ordinary quantity input returns. It does not mean the product
+ * cannot be bought.
+ *
+ * It also describes the **current preview quantity only**. Nothing here may be used to
+ * predict whether a rule would activate at some other quantity: that would need a
+ * pricing call per step, which is exactly the loop this page has always refused.
+ */
+export interface QuantityControlDto {
+  /** Starting/minimum quantity, or `null`. Blank, `0` and negative all arrive as `null`. */
+  readonly moq: number | null;
+  /** Step counted FROM the start, or `null`. See the note above about what it is not. */
+  readonly quantity_multiplier: number | null;
+  /** Whether the client may apply the two values above. */
+  readonly allowed: boolean;
+}
+
+/**
  * The `data` payload of `get_item`.
  *
  * **Source-verified only.** Every field comes from `yob_storefront/api/catalog.py`;
@@ -526,6 +564,24 @@ export interface ItemDetailDto {
 
   /** Human-readable offer labels, already sorted by the backend. Strings, not objects. */
   readonly available_rules: readonly string[];
+
+  /**
+   * Maximum Retail Price from the resolved Item Price, or `null` (API 3.12.0).
+   *
+   * **Informational display only.** It is not a base price, a rate, a discount or a
+   * total; no monetary field is derived from it, and neither side computes a saving or a
+   * percentage against it. The contract is explicit that it is *not* validated against
+   * the selling rate and may legitimately be lower - so a storefront that rendered
+   * "you save X" would sometimes be quoting a negative number as a discount.
+   *
+   * `null` when not configured; blank, zero and negative all normalise to `null` at the
+   * backend. Published independently of {@link QuantityControlDto.allowed}, because it
+   * has no quantity behaviour and therefore no conflict with a Pricing Rule.
+   */
+  readonly mrp: number | null;
+
+  /** Quantity-input guidance for this resolved item. See {@link QuantityControlDto}. */
+  readonly quantity_control: QuantityControlDto;
 }
 
 /**

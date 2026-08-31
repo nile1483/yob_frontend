@@ -8,8 +8,8 @@ the full package (markdown + OpenAPI + Postman + examples) is mirrored at
 
 | File | Version | Contents |
 |---|---|---|
-| `openapi.json` | **3.11.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract, the Phase 27B product-detail merchandising contract and the Phase 28A quick browse |
-| `postman_collection.json` | 3.11.0 | runnable requests, including the family → resolve → add-to-cart flow |
+| `openapi.json` | **3.12.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract, the Phase 27B product-detail merchandising contract and the Phase 28A quick browse |
+| `postman_collection.json` | 3.12.0 | runnable requests, including the family → resolve → add-to-cart flow |
 | `live/` | 2.0.0 (**superseded**) | a 2026-08-13 response capture, kept for history only |
 
 The table above went stale between 3.4.0 and 3.8.0 while the JSON itself was
@@ -19,6 +19,32 @@ it. Per-version detail for every release lives in
 [`docs/api-handoff/API-CHANGELOG.md`](../../docs/api-handoff/API-CHANGELOG.md),
 which is the backend's own changelog and is not summarised again here; only the
 newest release is described below.
+
+## What changed in 3.12.0 (Phase 29A)
+
+**Additive.** Two fields on `ProductDetail`, both resolved Item Price facts, and
+both reaching the client through the calls that already exist — `get_item` and
+`resolve_variant`. Nothing is fetched separately.
+
+* `mrp: number | null` — **informational display only**. Not a base price, rate,
+  discount or total; nothing is derived from it on either side. It is *not*
+  validated against the selling rate and may legitimately be lower, so a computed
+  "saving" would sometimes be negative. Blank, zero and negative all arrive as
+  `null`.
+* `quantity_control: { moq, quantity_multiplier, allowed }` — quantity-input
+  **guidance**, and **never enforced by the backend**: cart, checkout and Sales
+  Order accept exactly the quantities they accepted before. The multiplier is a
+  step counted FROM the start — `moq 10` with multiplier `6` offers 10, 16, 22,
+  not multiples of six — and is unrelated to UOM, conversion factor and pack size.
+
+`allowed` is `false` when the pricing preview applied a Pricing Rule, because a
+rule may change behaviour at a quantity threshold. The two values are a **pair**
+governed by that one flag: when it is false, both are ignored and the ordinary
+quantity input returns. It describes the current preview quantity only — nothing
+may predict whether a rule would activate at some other quantity.
+
+Neither field appears on `ListingCard`, `ProductSuggestion` or the nested
+`pricing` object.
 
 ## What changed in 3.11.0 (Phase 28C)
 

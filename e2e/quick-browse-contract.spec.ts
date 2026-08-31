@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 /**
- * The Phase 28A quick-browse contract, as `/products` consumes it (API 3.11.0).
+ * The Phase 28A quick-browse contract, as `/products` consumes it (API 3.12.0).
  *
  * Two claims are worth pinning against the document rather than against a restatement of
  * it, because the whole feature rests on them:
@@ -74,8 +74,8 @@ function parameter(method: string, name: string): Parameter {
 }
 
 test.describe('quick browse contract (Phase 28A)', () => {
-  test('the mirrors are 3.11.0 and identical', () => {
-    expect(REFERENCE.info.version).toBe('3.11.0');
+  test('the mirrors are 3.12.0 and identical', () => {
+    expect(REFERENCE.info.version).toBe('3.12.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(JSON.stringify(HANDOFF)).toBe(JSON.stringify(REFERENCE));
   });

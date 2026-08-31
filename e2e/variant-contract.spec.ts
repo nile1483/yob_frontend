@@ -85,7 +85,7 @@ test.describe('published contract, as the browser uses it', () => {
     // Pinned on purpose, and bumped by hand. A backend release that changes the contract
     // should stop the gate until someone has reconciled Angular against it - which is
     // what Phase 25D did for 3.4.0, and what this line records.
-    expect(REFERENCE.info.version).toBe('3.11.0');
+    expect(REFERENCE.info.version).toBe('3.12.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(JSON.stringify(HANDOFF)).toBe(JSON.stringify(REFERENCE));
 
@@ -169,7 +169,9 @@ test.describe('published contract, as the browser uses it', () => {
     await option(page, 'Size', 'Medium').click();
     await expect(page.getByTestId('item-rate')).toBeVisible();
 
-    await page.getByTestId('item-quantity').fill('3');
+    // 22 is on this variant's guided sequence (Phase 29B: moq 10, step 6 -> 10/16/22),
+    // so it commits unchanged and the subject of this test stays the PAYLOAD SHAPE.
+    await page.getByTestId('item-quantity').fill('22');
     await page.getByTestId('item-quantity').blur();
 
     await page.getByTestId('add-to-cart').click();
@@ -182,7 +184,9 @@ test.describe('published contract, as the browser uses it', () => {
     expect(Object.keys(body).sort()).toEqual(['item_code', 'qty']);
     expect(body['item_code']).toBe(RESOLVED_SKU);
     expect(body['item_code']).not.toBe(TEMPLATE_CODE);
-    expect(body['qty']).toBe(3);
+    // The guided quantity is sent as an ordinary qty. No moq, no multiplier, no mrp -
+    // the guidance shapes the input and never the request.
+    expect(body['qty']).toBe(22);
   });
 
   test('the resolver is called once per complete selection, and never for a partial one', async ({

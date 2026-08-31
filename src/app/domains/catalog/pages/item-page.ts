@@ -255,6 +255,19 @@ import { ContentSlot } from '../../content/parts/content-slot';
                 }
               </div>
 
+              @if (displayMrp(); as mrp) {
+                <!-- Informational, and deliberately quiet: small, muted, and subordinate
+                     to the rate above it. No badge, no strike-through and no computed
+                     saving - the contract says the MRP is not validated against the
+                     selling price and may be lower, so any derived percentage would
+                     sometimes be a negative discount. Same currency context as the rate;
+                     there is no separate MRP currency. -->
+                <p class="-mt-4 text-sm text-slate-500" data-testid="item-mrp">
+                  <ng-container i18n="@@item.mrp">MRP</ng-container>
+                  {{ mrp | currency: currency }}
+                </p>
+              }
+
               <div class="-mt-3 flex flex-col gap-1">
                 <!-- The **selling** UOM: the unit the price above is for, and the unit the
                      quantity below is counted in. ERPNext resolves it; the buyer never
@@ -328,14 +341,23 @@ import { ContentSlot } from '../../content/parts/content-slot';
                   [error]="quantityError()"
                 >
                   <div class="flex items-baseline gap-2">
+                    <!-- The same control as before, given min and step when the Item
+                         Price configured guidance. With both set, the browser's own
+                         spinner counts FROM min - 10, 16, 22 - which is the contract's
+                         rule for free. step falls back to &quot;any&quot; and min to nothing,
+                         so an item without guidance behaves exactly as it always has.
+                         Typing is handled by the normalisation on commit. -->
                     <input
                       type="number"
-                      step="any"
+                      [attr.step]="quantityStepAttr()"
+                      [attr.min]="quantityMinAttr()"
                       inputmode="decimal"
                       [value]="quantity()"
                       (input)="onQuantityInput($event)"
                       (change)="onQuantityCommitted($event)"
                       data-testid="item-quantity"
+                      [attr.data-moq]="quantityMinAttr()"
+                      [attr.data-step]="quantityStepAttr()"
                       class="w-32 rounded-md border border-slate-300 px-3 py-2 text-base sm:text-sm"
                     />
                     <span
@@ -450,7 +472,101 @@ export class ItemPage {
    * quantity entered against one variant's selling unit can never be submitted against
    * another's - the two variants may not even be sold in the same unit.
    */
-  protected readonly quantity = signal(DEFAULT_QUANTITY);
+  /**
+   * The quantity in the box.
+   *
+   * A `linkedSignal` keyed on **which item is being bought and where its guidance
+   * starts**. Typing leaves the source untouched, so a buyer's value is theirs to keep;
+   * but a new product, a newly resolved variant, or a variant whose Item Price starts
+   * somewhere else all change the source and reset the box to that item's own start.
+   *
+   * Keyed on the code as well as the number so two variants that happen to share a start
+   * still reset - the reset is about the SKU changing, not about the number changing.
+   *
+   * This is also what gives a simple product its MOQ: the payload arrives asynchronously,
+   * the source changes when it does, and the box moves from 1 to 10 without the page
+   * needing to know whether it loaded a product or resolved a variant.
+   */
+  protected readonly quantity = linkedSignal<
+    { code: string | null; start: number },
+    number
+  >({
+    source: () => ({
+      code: this.purchasable()?.name ?? null,
+      start: this.effectiveStart(),
+    }),
+    computation: (source) => source.start,
+  });
+
+  /**
+   * The quantity guidance in force, or `null` when there is none to apply.
+   *
+   * `null` covers three cases the page treats identically: no purchasable item yet, an
+   * item whose Item Price configured neither value, and - the one that matters - an item
+   * whose pricing preview applied a Pricing Rule, which the backend reports as
+   * `allowed: false`.
+   *
+   * The flag governs the **pair**. When it is false neither value is applied, because a
+   * rule may change behaviour at a quantity threshold and stepping is no longer a promise
+   * the storefront can keep. Applying the MOQ but not the multiplier - or vice versa -
+   * would be inventing a third behaviour the contract does not describe.
+   */
+  private readonly guidance = computed(() => {
+    const control = this.purchasable()?.quantity_control;
+    if (control === undefined || !control.allowed) {
+      return null;
+    }
+
+    const moq = positiveOrNull(control.moq);
+    const step = positiveOrNull(control.quantity_multiplier);
+    return moq === null && step === null ? null : { moq, step };
+  });
+
+  /**
+   * The quantity the input starts at, and the floor it will not go below.
+   *
+   * The MOQ when one is configured; otherwise the ordinary default this page has always
+   * used. Nothing else changes: with no MOQ, a multiplier steps from 1 rather than
+   * forcing the start up to the multiplier.
+   */
+  protected readonly effectiveStart = computed(() => this.guidance()?.moq ?? DEFAULT_QUANTITY);
+
+  /**
+   * The step, or `null` to leave the input exactly as unconstrained as it was.
+   *
+   * `null` becomes `step="any"` in the template - the existing behaviour - rather than a
+   * step of 1, because the backend's rule is any float greater than zero and this page
+   * has never restricted that.
+   */
+  protected readonly effectiveStep = computed(() => this.guidance()?.step ?? null);
+
+  /** `step` for the native control: the multiplier, or the unconstrained default. */
+  protected readonly quantityStepAttr = computed(() => {
+    const step = this.effectiveStep();
+    return step === null ? 'any' : String(step);
+  });
+
+  /**
+   * `min` for the native control whenever guidance applies, or `null`.
+   *
+   * ## Why this is set even without an MOQ
+   *
+   * HTML computes a step from a **step base**, and that base is `min` - or **zero** when
+   * no `min` is given. So `step="5"` on its own makes 0, 5, 10 the valid values, and the
+   * browser rejects a starting quantity of 1 with its own validation bubble, blocking
+   * submission entirely. That is not the contract's rule: a multiplier with no MOQ steps
+   * from the ordinary start, giving 1, 6, 11.
+   *
+   * Setting `min` to the effective start fixes the base, so the native spinner and the
+   * native validator both agree with `normalizeQuantity`. It also makes the start a real
+   * floor for the MOQ case, which is the other half of what the guidance means.
+   *
+   * `null` when there is no guidance at all, so an ordinary item keeps an input with no
+   * `min` and no `step`, exactly as before.
+   */
+  protected readonly quantityMinAttr = computed(() =>
+    this.guidance() === null ? null : String(this.effectiveStart()),
+  );
 
   protected readonly isQuantityValid = computed(() => isPositiveFinite(this.quantity()));
 
@@ -764,10 +880,13 @@ export class ItemPage {
   private resolveSelection(): void {
     const family = this.family();
 
+    // Cleared first, so nothing of the previous variant survives while the resolver is
+    // in flight - not its MRP, not its guidance and not its quantity. `effectiveStart`
+    // reads `purchasable()`, which is null the moment `resolvedSignal` is cleared, so the
+    // box returns to the ordinary default until the new SKU arrives with its own.
     this.resolvedSignal.set(null);
     this.resolveErrorSignal.set(null);
     this.addedSignal.set(false);
-    this.quantity.set(DEFAULT_QUANTITY);
     this.quantityTouched.set(false);
 
     if (family === null || !this.isSelectionComplete()) {
@@ -786,8 +905,11 @@ export class ItemPage {
       .subscribe({
         next: (variant) => {
           this.resolvedSignal.set(variant);
-          // Belt and braces with the reset above: whatever SKU comes back starts at 1.
-          this.quantity.set(DEFAULT_QUANTITY);
+          // No quantity assignment here: `quantity` is linked to the purchasable item and
+          // its start, so setting the resolved variant already moved the box to that
+          // SKU's own starting quantity. Variant A at MOQ 10 followed by Variant B at
+          // MOQ 2 lands on 2, and B never inherits A's sequence.
+          this.quantityTouched.set(false);
         },
         error: (failure: unknown) => {
           this.resolveErrorSignal.set(normalizeYobFailure(failure));
@@ -926,6 +1048,26 @@ export class ItemPage {
    *
    * Informational only. Nothing here restricts what may be added - ERPNext owns that.
    */
+  /**
+   * The MRP to show, or `null` to show nothing at all.
+   *
+   * Displayed only when the backend published a positive figure. Zero, negative and
+   * unconfigured all arrive as `null` already; the `> 0` check is belt and braces for a
+   * payload that predates the field.
+   *
+   * **Nothing is derived from it.** No saving, no percentage, no comparison with the
+   * rate - the contract says it is not validated against the selling price and may be
+   * lower, so a computed "discount" would sometimes be negative. It is a number with a
+   * label, and that is the whole feature.
+   *
+   * Independent of the quantity guidance: an item whose Pricing Rule disallows stepping
+   * still shows its MRP, because an MRP has no quantity behaviour to conflict with.
+   */
+  protected readonly displayMrp = computed(() => {
+    const mrp = this.purchasable()?.mrp ?? null;
+    return mrp !== null && mrp > 0 ? mrp : null;
+  });
+
   protected readonly availability = computed(() => {
     const item = this.purchasable();
     if (item === null || item.is_stock_item !== 1 || item.actual_qty === null) {
@@ -1008,7 +1150,54 @@ export class ItemPage {
    * it was entered.
    */
   protected onQuantityCommitted(event: Event): void {
-    this.quantity.set(readNumber(event));
+    this.quantity.set(this.normalizeQuantity(readNumber(event)));
+  }
+
+  /**
+   * Bring a committed quantity onto the guided sequence.
+   *
+   * ## The rule, chosen and stated
+   *
+   * With guidance active the valid values are `start + n*step`. A committed value is
+   * **clamped up to the start** and then **rounded DOWN** to the nearest valid value.
+   * With start 10 and step 6, a typed 19 settles at 16, and a typed 5 settles at 10.
+   *
+   * Rounding down rather than to the nearest: the alternative silently increases what a
+   * buyer is about to commit to buying, and for a guidance-only feature that is the more
+   * expensive way to be wrong. The start is the one exception - it is a floor, so a value
+   * below it moves up, because there is nothing valid beneath it to round down to.
+   *
+   * There is no error message and no request. The contract is explicit that these values
+   * are never enforced by the backend, so a rejection here would be the storefront
+   * inventing a refusal that the cart itself would not make.
+   *
+   * A blank or unparseable field is left exactly as it was - `NaN` flows through to the
+   * existing validation, which is what already tells the buyer to enter a quantity.
+   */
+  private normalizeQuantity(value: number): number {
+    if (!Number.isFinite(value)) {
+      return value;
+    }
+
+    const start = this.effectiveStart();
+    const step = this.effectiveStep();
+
+    if (this.guidance() === null) {
+      return value;
+    }
+
+    if (value <= start) {
+      return start;
+    }
+
+    if (step === null) {
+      return value;
+    }
+
+    // Floating-point tolerance: a value the buyer stepped to with the spinner can land a
+    // hair under an exact multiple, and flooring that would drop a whole step.
+    const steps = Math.floor((value - start) / step + EPSILON);
+    return start + steps * step;
   }
 
   protected addToCart(event: Event, itemCode: string): void {
@@ -1072,6 +1261,21 @@ export class ItemPage {
  * afterwards - which is what stops this becoming a quantity-driven pricing loop.
  */
 const DEFAULT_QUANTITY = 1;
+
+/**
+ * Slack for the guided-sequence arithmetic.
+ *
+ * `10 + 3*0.1` is not exactly `10.3` in binary floating point, and flooring the raw
+ * division would drop a whole step for a value the buyer had legitimately stepped to.
+ * Small enough that it can never absorb a real step, since the backend's own rule is
+ * simply "greater than zero".
+ */
+const EPSILON = 1e-9;
+
+/** A configured positive number, or `null`. Blank, zero and negative are all "unset". */
+function positiveOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
 
 /** The verified backend rule, and nothing more: a finite number greater than zero. */
 function isPositiveFinite(value: number): boolean {

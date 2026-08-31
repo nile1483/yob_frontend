@@ -7,6 +7,7 @@ import type {
   ItemPricingDto,
   ProductGalleryImageDto,
   ProductContentSectionDto,
+  QuantityControlDto,
   ProductPageDetailDto,
   CategoryDetailDto,
   CategoryListItemDto,
@@ -765,6 +766,11 @@ const VEST_VARIANTS: readonly {
       pricing_rule_label: null,
       pricing_rule_apply_on: null,
       available_rules: [],
+
+      // Phase 29B: guidance ACTIVE, with both values. Starts at 10 and steps 10/16/22 -
+      // a step FROM the start, never multiples of six.
+      mrp: 1400,
+      quantity_control: { moq: 10, quantity_multiplier: 6, allowed: true },
     },
   },
   {
@@ -802,6 +808,13 @@ const VEST_VARIANTS: readonly {
       pricing_rule_label: null,
       pricing_rule_apply_on: null,
       available_rules: [],
+
+      // Deliberately carries BOTH values with `allowed: false`. A page that applied one
+      // of them anyway - or that ignored the flag because the numbers looked usable -
+      // fails here rather than in front of a buyer. The MRP still shows: it has no
+      // quantity behaviour, so it has no conflict with a Pricing Rule.
+      mrp: 95,
+      quantity_control: { moq: 4, quantity_multiplier: 4, allowed: false },
     },
   },
 ];
@@ -1000,6 +1013,59 @@ const DEFAULT_STOCK: MockStockMeta = {
   actual_qty: 12,
 };
 
+/* ------------------------------------------------- MRP and quantity guidance (29B) */
+
+/** What an Item Price with none of this configured projects as. */
+const NO_GUIDANCE = {
+  mrp: null,
+  quantity_control: { moq: null, quantity_multiplier: null, allowed: true },
+} as const;
+
+/**
+ * MRP and quantity guidance per slug, one product per case the UI must tell apart.
+ *
+ * | Slug | Case |
+ * | --- | --- |
+ * | hex bolt | MRP, MOQ **and** multiplier - the full guidance, 10/16/22 |
+ * | hex nut | MOQ only; the step stays whatever the input already did |
+ * | flat washer | multiplier only; the start stays the ordinary default |
+ * | anchor | a Pricing Rule item: values present but `allowed: false`, MRP still shown |
+ *
+ * The anchor is the important one. It is the fixture that proves the flag is obeyed
+ * rather than the numbers being used because they happen to look usable - and it is
+ * genuinely a priced-with-a-rule item in these fixtures, so the pairing is honest.
+ */
+const GUIDANCE_BY_SLUG: Readonly<
+  Record<string, { mrp: number | null; quantity_control: QuantityControlDto }>
+> = {
+  // hex bolt is deliberately ABSENT: it is the storefront's most-used fixture and the
+  // one the pre-29B quantity tests assert against, so it stays exactly as it was - no
+  // MRP, no guidance, start 1, step "any". That is the fallback this phase must not
+  // disturb, and leaving one product unconfigured is what proves it.
+
+  // The full guidance: starts at 10 and steps 10/16/22 - FROM the start, never multiples.
+  'hex-nut-m10': {
+    mrp: 30,
+    quantity_control: { moq: 10, quantity_multiplier: 6, allowed: true },
+  },
+
+  // Multiplier only. The start stays the ordinary default, so the sequence is 1/6/11 -
+  // the start is NOT forced up to 5. No MRP either, so the MRP line must not render.
+  'flat-washer-m10': {
+    mrp: null,
+    quantity_control: { moq: null, quantity_multiplier: 5, allowed: true },
+  },
+
+  // A Pricing Rule item. Both values are present and both must be IGNORED, while the MRP
+  // still shows - an MRP has no quantity behaviour, so it has no conflict with a rule.
+  // The most important fixture here: it fails a page that used the numbers because they
+  // looked usable rather than because the flag allowed it.
+  'through-bolt-anchor-m12-120': {
+    mrp: 4200,
+    quantity_control: { moq: 12, quantity_multiplier: 4, allowed: false },
+  },
+};
+
 /** What `get_item` prices when the caller asks for no particular quantity. */
 const DEFAULT_QTY = 1;
 
@@ -1093,6 +1159,10 @@ function toItemDetail(listing: CatalogItemDto): ProductPageDetailDto {
     // "no gallery", and the page falls back to `image` itself.
     gallery: GALLERY_BY_SLUG[listing.slug] ?? [],
     sections: CONTENT_BY_SLUG[listing.slug] ?? [],
+
+    // Phase 29B Item Price facts. Both are always present on a product payload; the
+    // per-slug table decides what they say. See `GUIDANCE_BY_SLUG`.
+    ...(GUIDANCE_BY_SLUG[listing.slug] ?? NO_GUIDANCE),
   };
 }
 

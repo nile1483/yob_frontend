@@ -190,24 +190,31 @@ test.describe('variant family page', () => {
     await signInAsMockBuyer(page, { goTo: FAMILY });
     await chooseOrangeMedium(page);
 
-    await page.getByTestId('item-quantity').fill('4');
+    // Orange/Medium carries Phase 29B guidance - MOQ 10, step 6 - so it opens on 10 and
+    // 22 is on its sequence.
+    await expect(page.getByTestId('item-quantity')).toHaveValue('10');
+    await page.getByTestId('item-quantity').fill('22');
     await page.getByTestId('item-quantity').blur();
-    await expect(page.getByTestId('item-quantity')).toHaveValue('4');
+    await expect(page.getByTestId('item-quantity')).toHaveValue('22');
 
     await option(page, 'Colour', 'Yellow').click();
     await option(page, 'Size', 'Large').click();
     await expect(page.getByTestId('item-rate')).toContainText('60');
 
-    // 4 Box must not become 4 Nos of a different product.
+    // 22 Box must not become 22 Nos of a different product. Yellow/Large's Item Price
+    // has a Pricing Rule, so its guidance is disallowed and the box returns to the
+    // ordinary default - never to Orange/Medium's sequence.
     await expect(page.getByTestId('item-quantity')).toHaveValue('1');
     await expect(page.getByTestId('item-quantity-uom')).toHaveText('Nos');
+    await expect(page.getByTestId('item-quantity')).not.toHaveAttribute('min', /.+/);
   });
 
   test('adds the resolved SKU to the cart, never the template', async ({ page }) => {
     await signInAsMockBuyer(page, { goTo: FAMILY });
     await chooseOrangeMedium(page);
 
-    await page.getByTestId('item-quantity').fill('2');
+    // On this variant's guided sequence (10, 16, 22), so it commits unchanged.
+    await page.getByTestId('item-quantity').fill('16');
     await page.getByTestId('item-quantity').blur();
     await page.getByTestId('add-to-cart').click();
     await expect(page.getByTestId('add-to-cart-success')).toBeVisible();
@@ -224,7 +231,7 @@ test.describe('variant family page', () => {
     await expect(page.getByTestId('cart-line-code')).toHaveText(ORANGE_MEDIUM);
     expect(ORANGE_MEDIUM).not.toBe(TEMPLATE_CODE);
     await expect(page.getByTestId('cart-line-uom')).toHaveText('Box');
-    await expect(page.getByTestId('cart-line-quantity')).toHaveText('2');
+    await expect(page.getByTestId('cart-line-quantity')).toHaveText('16');
   });
 
   test('has no horizontal overflow while choosing', async ({ page }) => {
