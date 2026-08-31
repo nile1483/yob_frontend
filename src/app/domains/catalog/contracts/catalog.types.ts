@@ -224,8 +224,25 @@ export interface ItemListingFilter {
  */
 export interface ItemListingQuery {
   readonly scopeType: 'category';
-  readonly scopeValue: string;
-  /** Backend search exists; there is no search UI, so this is always `''` today. */
+  /**
+   * The category slug to browse, or `null` for the whole catalogue.
+   *
+   * `null` is the Phase 28A quick-browse scope: `scope_value` is omitted from the
+   * request and the backend lists every eligible product instead of one category's. Only
+   * the SCOPE differs - same eligibility, same pricing, same sort, same cursor, same
+   * response shape - so a product cannot be public catalogue-wide and invisible on its
+   * own category page.
+   *
+   * `scopeType` stays `'category'` either way: the contract leaves it unaffected, and
+   * `all`/`collection` remain reserved words that answer `unsupported_scope`.
+   */
+  readonly scopeValue: string | null;
+  /**
+   * The buyer's submitted search, or `''`.
+   *
+   * Matched by the backend against the product NAME or its ITEM CODE, AND across words.
+   * Angular sends the string and matches nothing itself.
+   */
   readonly search: string;
   /** Always empty today - the backend rejects anything else. */
   readonly filters: readonly ItemListingFilter[];
@@ -278,6 +295,39 @@ export interface ItemListingDto {
 
 /** The page size the storefront asks for. The backend accepts 1..48. */
 export const ITEM_PAGE_SIZE = 24;
+
+/**
+ * A fresh first-page query for the `/products` quick browse.
+ *
+ * Everything the category form takes plus a search, and with the category made optional.
+ * Kept beside {@link categoryListingQuery} rather than replacing it: one page browses a
+ * category and one browses the catalogue, and a single function with four optional
+ * arguments would make each caller's intent harder to read than it is now.
+ *
+ * ## Merchandising filters need a category
+ *
+ * A facet list is a property of a category, so the backend answers
+ * `storefront_filter_context_required` for a selection sent with no `scope_value`. This
+ * refuses to build that request at all: with no category the selection is dropped rather
+ * than sent and rejected.
+ */
+export function browseListingQuery(
+  categorySlug: string | null,
+  sort: ItemListingSort = 'name_asc',
+  search = '',
+  storefrontFilters: StorefrontFilterSelection = NO_FILTERS,
+): ItemListingQuery {
+  return {
+    scopeType: 'category',
+    scopeValue: categorySlug,
+    search: search.trim(),
+    filters: [],
+    sort,
+    pageSize: ITEM_PAGE_SIZE,
+    cursor: null,
+    storefrontFilters: categorySlug === null ? NO_FILTERS : storefrontFilters,
+  };
+}
 
 /** A fresh first-page query for a category. */
 export function categoryListingQuery(
@@ -878,3 +928,49 @@ export interface ProductSuggestionsDto {
  * a buyer typing `bo` costs nothing. One constant, so the two cannot drift.
  */
 export const PRODUCT_SUGGESTION_MIN_CHARS = 3;
+
+/* ------------------------------------------------------- browse categories (28A) */
+
+/**
+ * One chip on the `/products` quick browse (API 3.10.0 `BrowseCategory`).
+ *
+ * ## Every row is a valid listing target
+ *
+ * That is the contract's own promise: a category published here will not answer
+ * `category_not_listable` when a buyer clicks it. The backend has already dropped the
+ * three kinds that cannot be listed - disabled, no public slug, and group categories.
+ *
+ * ## Flat, at every depth, and not a tree
+ *
+ * Rows arrive at any depth of the taxonomy, and {@link parent_category} may name a
+ * category that is **not in this list** - a group ancestor, say, which is never itself
+ * listable. So nothing here reconstructs a hierarchy: {@link level} and
+ * {@link parent_category} are metadata, and the chips are flat selectable controls.
+ *
+ * Selecting a chip means exactly that category's own listing. There is no descendant
+ * aggregation, because `get_items` has none.
+ */
+export interface BrowseCategoryDto {
+  /** Docname. Identity for tracking; never used for navigation. */
+  readonly name: string;
+  /** The chip's label. */
+  readonly category_name: string;
+  /** The public identity, passed back as `get_items?scope_value=`. */
+  readonly slug: string;
+  /** Parent DOCNAME, `null` for a root. May name a category absent from this list. */
+  readonly parent_category: string | null;
+  readonly display_order: number | null;
+  /** Depth over the full taxonomy, `0` for a root - groups and disabled ancestors included. */
+  readonly level: number;
+}
+
+/**
+ * The `data` payload of `get_browse_categories`.
+ *
+ * Metadata only: no items, no prices, no stock. **There is no synthetic `All` row** -
+ * the backend does not publish one, and the storefront adds it client-side because "no
+ * category" is the absence of a scope rather than a category the merchant configured.
+ */
+export interface BrowseCategoriesDto {
+  readonly categories: readonly BrowseCategoryDto[];
+}

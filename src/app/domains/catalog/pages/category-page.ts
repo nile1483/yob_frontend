@@ -19,6 +19,7 @@ import { EmptyState } from '../../../design/empty-state/empty-state';
 import { Spinner } from '../../../design/spinner/spinner';
 import { YobApiError } from '../../../foundation/network/yob-api-error';
 import { CatalogApi } from '../data/catalog.api';
+import { ITEM_SORT_OPTIONS } from '../catalog-sort';
 import { toCategoryLink, type ItemListingSort } from '../contracts/catalog.types';
 import { CategoryFilters } from '../parts/category-filters';
 import { ItemListing } from '../state/item-listing';
@@ -391,14 +392,8 @@ export class CategoryPage {
     computation: () => 'name_asc',
   });
 
-  protected readonly sortOptions: readonly { value: ItemListingSort; label: string }[] = [
-    { value: 'name_asc', label: $localize`:@@catalog.sort.nameAsc:Name: A to Z` },
-    { value: 'name_desc', label: $localize`:@@catalog.sort.nameDesc:Name: Z to A` },
-    // Price sorting is deliberately absent: the backend has no global customer-price
-    // order, and sorting only the loaded page would be wrong for every page after the
-    // first while looking authoritative.
-    { value: 'newest', label: $localize`:@@catalog.sort.newest:Newest` },
-  ];
+  /** Shared with `/products`, so the two browsing surfaces cannot offer different orders. */
+  protected readonly sortOptions = ITEM_SORT_OPTIONS;
 
   /**
    * This category's own merchandising filters.

@@ -89,9 +89,9 @@ function code(file: string): string {
     .replace(/<!--[\s\S]*?-->/g, ' ');
 }
 
-test.describe('system route content contract (API 3.9.1)', () => {
+test.describe('system route content contract (API 3.10.0)', () => {
   test('the mirrored contract is present, versioned and identical in both locations', () => {
-    expect(REFERENCE.info.version).toBe('3.9.1');
+    expect(REFERENCE.info.version).toBe('3.10.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(publishedSlots(HANDOFF)).toEqual(publishedSlots(REFERENCE));
   });

@@ -8,8 +8,8 @@ the full package (markdown + OpenAPI + Postman + examples) is mirrored at
 
 | File | Version | Contents |
 |---|---|---|
-| `openapi.json` | **3.9.1** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract and the Phase 27B product-detail merchandising contract |
-| `postman_collection.json` | 3.9.1 | runnable requests, including the family → resolve → add-to-cart flow |
+| `openapi.json` | **3.10.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract, the Phase 27B product-detail merchandising contract and the Phase 28A quick browse |
+| `postman_collection.json` | 3.10.0 | runnable requests, including the family → resolve → add-to-cart flow |
 | `live/` | 2.0.0 (**superseded**) | a 2026-08-13 response capture, kept for history only |
 
 The table above went stale between 3.4.0 and 3.8.0 while the JSON itself was
@@ -19,6 +19,28 @@ it. Per-version detail for every release lives in
 [`docs/api-handoff/API-CHANGELOG.md`](../../docs/api-handoff/API-CHANGELOG.md),
 which is the backend's own changelog and is not summarised again here; only the
 newest release is described below.
+
+## What changed in 3.10.0 (Phase 28A)
+
+Catalogue-wide browsing, behind the new `/products` page.
+
+* `catalog.get_items` — **`scope_value` is now optional**. Omit it and the listing
+  browses the whole public catalogue instead of one category. Only the SCOPE
+  changes: same eligibility, same pricing, same sort, same cursor, same response
+  shape. `scope_type` is unaffected, and `all`/`collection` remain reserved words
+  that answer `unsupported_scope`.
+* `catalog.get_browse_categories` — **new**. Every enabled, slugged, listable
+  category, FLAT, at every depth. Each row is a valid `scope_value` target, so a
+  chip drawn from it cannot answer `category_not_listable`. Metadata only — no
+  items, no prices — and **no synthetic `All` row**: that option is the absence of
+  a scope, so the storefront adds it client-side.
+* Merchandising filters stay category-only. A `storefront_filters` selection sent
+  without `scope_value` answers `storefront_filter_context_required`, and the
+  scope is part of the cursor binding — a catalogue-wide cursor replayed against a
+  category answers `cursor_invalid`.
+* The destination projector resolves a merchant `External URL` of `/products` to
+  `external: false`. **Follow the `external` boolean, never the machine `type`**,
+  which still reads `external_url`.
 
 ## What changed in 3.9.1 (Phase 27B, corrected)
 

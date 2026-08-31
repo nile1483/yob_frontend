@@ -3,6 +3,7 @@ import { map, type Observable } from 'rxjs';
 
 import { YobApiClient } from '../../../foundation/network/yob-api-client';
 import type {
+  BrowseCategoriesDto,
   CategoryListItemDto,
   CategoryFiltersDto,
   CategoryMetaDto,
@@ -23,6 +24,7 @@ const GET_ITEMS = 'yob_storefront.api.catalog.get_items';
 const RESOLVE_VARIANT = 'yob_storefront.api.catalog.resolve_variant';
 const GET_CATEGORY_FILTERS = 'yob_storefront.api.catalog.get_category_filters';
 const GET_PRODUCT_SUGGESTIONS = 'yob_storefront.api.catalog.get_product_suggestions';
+const GET_BROWSE_CATEGORIES = 'yob_storefront.api.catalog.get_browse_categories';
 
 /** `get_category` returns its counts in `meta`; the payload and counts travel together. */
 export interface CategoryResult {
@@ -136,6 +138,26 @@ export class CatalogApi {
    * Wire-documented failures: `category_not_found` (404), `category_not_listable` (422)
    * for a group category, which has no listing of its own to filter.
    */
+  /**
+   * Every category the `/products` quick browse may offer as a chip.
+   *
+   * Flat, at every depth, and **already reduced to valid listing targets** - the backend
+   * drops disabled, unslugged and group categories, so a chip drawn from this can never
+   * answer `category_not_listable` when a buyer clicks it.
+   *
+   * Deliberately not `get_categories`, which answers one level at a time because it
+   * serves tree navigation: drawing a chip row from it would cost one request per node.
+   * This is the flat shape, and it carries metadata only - no items, no prices, no stock.
+   *
+   * There is no `All` row. That option is the **absence** of a scope, so the storefront
+   * synthesises it rather than expecting the merchant to have configured one.
+   */
+  getBrowseCategories(): Observable<BrowseCategoriesDto> {
+    return this.api
+      .get<BrowseCategoriesDto>(GET_BROWSE_CATEGORIES, {})
+      .pipe(map((response) => response.data));
+  }
+
   getCategoryFilters(scopeValue: string): Observable<CategoryFiltersDto> {
     return this.api
       .get<CategoryFiltersDto>(GET_CATEGORY_FILTERS, { scope_value: scopeValue })

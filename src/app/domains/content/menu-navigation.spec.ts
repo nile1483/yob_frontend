@@ -5,7 +5,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 
 import { YOB_API_CONFIG, type YobApiConfig } from '../../foundation/network/yob-api.config';
 import { SecureNav } from '../../shells/secure/parts/secure-nav';
@@ -21,6 +21,21 @@ function menuPayload(over: Record<string, unknown> = {}) {
         key: 'main',
         label: 'Main Menu',
         items: [
+          {
+            // Phase 28A: a merchant configures an External URL of `/products`, and the
+            // backend's destination projector resolves it to an INTERNAL route. The
+            // machine `type` still says `external_url`; only `external` is authoritative.
+            label: 'All Products',
+            type: 'external_url',
+            destination: {
+              type: 'external_url',
+              target: '/products',
+              href: '/products',
+              external: false,
+              open_in_new_tab: false,
+            },
+            children: [],
+          },
           {
             label: 'Catalog',
             type: 'catalog',
@@ -156,7 +171,10 @@ describe('merchant navigation', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([]),
+        // `/products` is registered so the internal-navigation test below can actually
+        // route: RouterLink takes the click either way, but an unroutable URL rejects
+        // asynchronously and the navigation would never be proven to succeed.
+        provideRouter([{ path: 'products', children: [] }]),
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: YOB_API_CONFIG, useValue: CONFIG },
@@ -274,6 +292,46 @@ describe('merchant navigation', () => {
       const sameTab = byLabel('nav-link', 'Brochure');
       expect(sameTab?.getAttribute('href')).toBe('https://files.example.invalid/b.pdf');
       expect(sameTab?.getAttribute('target')).toBeNull();
+    });
+
+    it('follows the external flag, not the destination type (Phase 28A)', async () => {
+      // The trap this pins: a merchant's `External URL` pointing at `/products` arrives
+      // with `type: "external_url"` and `external: false`. A renderer that switched on
+      // the type would send the buyer through a full browser navigation and reload the
+      // whole SPA; the boolean is what decides, and it says internal.
+      await render();
+
+      // A routerLink renders an href too, so the tell is the absence of external
+      // behaviour here plus the router taking the click in the test below.
+      const internal = byLabel('nav-link', 'All Products');
+      expect(internal?.getAttribute('href')).toBe('/products');
+      expect(internal?.getAttribute('target')).toBeNull();
+      expect(internal?.getAttribute('rel')).toBeNull();
+
+      // ...while a genuinely external one still leaves the application.
+      const external = byLabel('nav-link', 'Supplier');
+      expect(external?.getAttribute('href')).toBe('https://supplier.example.invalid/');
+      expect(external?.getAttribute('target')).toBe('_blank');
+      expect(external?.getAttribute('rel')).toContain('noopener');
+    });
+
+    it('routes an internal external_url through the router rather than the browser', async () => {
+      await render();
+      const router = TestBed.inject(Router);
+
+      const internal = byLabel('nav-link', 'All Products') as HTMLAnchorElement;
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      internal.dispatchEvent(event);
+      // Navigation is asynchronous: the click schedules it, and `whenStable` waits for
+      // the router to finish rather than guessing at a number of microtasks.
+      await fixture.whenStable();
+      await settle();
+
+      // RouterLink calls preventDefault when it handles a click; a plain anchor does not
+      // and the browser would leave the SPA. Both halves are asserted: the click was
+      // taken, and the application router - not the browser - ended up on /products.
+      expect(event.defaultPrevented).toBe(true);
+      expect(router.url).toBe('/products');
     });
 
     it('renders a null destination as text, not a link', async () => {

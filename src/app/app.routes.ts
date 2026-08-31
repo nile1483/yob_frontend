@@ -90,6 +90,16 @@ export const routes: Routes = [
           import('./domains/catalog/catalog.routes').then((m) => m.CATALOG_ROUTES),
       },
       {
+        // The quick browse. A sibling of `catalog`, not a route inside it and not a
+        // redirect through `/category/:slug`: it browses the whole catalogue rather than
+        // one category, so there is no slug to redirect to and no synthetic category to
+        // invent. `/catalog/:categorySlug` is untouched by it.
+        path: 'products',
+        loadComponent: () =>
+          import('./domains/catalog/pages/products-page').then((m) => m.ProductsPage),
+        title: 'All products',
+      },
+      {
         path: 'cart',
         loadChildren: () => import('./domains/cart/cart.routes').then((m) => m.CART_ROUTES),
       },

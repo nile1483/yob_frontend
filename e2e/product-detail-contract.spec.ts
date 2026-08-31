@@ -167,8 +167,8 @@ function payloadOf(wrapper: Schema): Schema {
 }
 
 test.describe('Phase 27B product detail merchandising contract', () => {
-  test('the mirrors are 3.9.1, identical, and the README agrees', () => {
-    expect(REFERENCE.info.version).toBe('3.9.1');
+  test('the mirrors are 3.10.0, identical, and the README agrees', () => {
+    expect(REFERENCE.info.version).toBe('3.10.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(JSON.stringify(HANDOFF)).toBe(JSON.stringify(REFERENCE));
 

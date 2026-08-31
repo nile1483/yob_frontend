@@ -106,11 +106,27 @@ export class ItemListing {
     sort: ItemListingSort,
     storefrontFilters: StorefrontFilterSelection = NO_FILTERS,
   ): void {
+    this.start(categoryListingQuery(slug, sort, storefrontFilters));
+  }
+
+  /**
+   * Start a listing over from an already-built query.
+   *
+   * The same reset {@link load} performs, for callers whose query is not a category's.
+   * `/products` browses the whole catalogue, with a search and an optional category, and
+   * building that shape here would mean this class knowing about two pages' worth of
+   * browse rules instead of none.
+   *
+   * Everything {@link load} guarantees still holds: the cursor is dropped, the generation
+   * is bumped, and a slower response for the previous query is discarded rather than
+   * rendered over the current one.
+   */
+  start(query: ItemListingQuery): void {
     this.generation++;
     this.inFlight?.unsubscribe();
     this.inFlight = null;
 
-    this.query = categoryListingQuery(slug, sort, storefrontFilters);
+    this.query = { ...query, cursor: null };
     this.rows.set([]);
     this.cursorSignal.set(null);
     this.hasMoreSignal.set(false);
