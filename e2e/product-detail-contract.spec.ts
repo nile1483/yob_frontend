@@ -167,8 +167,8 @@ function payloadOf(wrapper: Schema): Schema {
 }
 
 test.describe('Phase 27B product detail merchandising contract', () => {
-  test('the mirrors are 3.12.0, identical, and the README agrees', () => {
-    expect(REFERENCE.info.version).toBe('3.12.0');
+  test('the mirrors are 3.13.0, identical, and the README agrees', () => {
+    expect(REFERENCE.info.version).toBe('3.13.0');
     expect(HANDOFF.info.version).toBe(REFERENCE.info.version);
     expect(JSON.stringify(HANDOFF)).toBe(JSON.stringify(REFERENCE));
 
@@ -391,13 +391,25 @@ test.describe('Phase 27B product detail merchandising contract', () => {
     expect(cms.oneOf, 'the CMS block is still a flat schema').toBeUndefined();
     expect(product.oneOf, 'the product block is still a oneOf').toBeDefined();
 
+    // Six generic content types since 3.13.0 (`target_progress`). The invariant this
+    // guards is not the COUNT but the separation: no product-content type may ever
+    // appear in the CMS union, which the oneOf/flat-schema split above and the
+    // disjointness check below both rest on.
     expect(cms.properties?.['type']?.enum).toEqual([
       'image_banner',
       'rich_text',
       'banner_carousel',
       'product_grid',
       'promo_grid',
+      'target_progress',
     ]);
+
+    for (const productOnly of ['key_value', 'table', 'download', 'video']) {
+      expect(
+        cms.properties?.['type']?.enum ?? [],
+        `the CMS union must not contain the product type ${productOnly}`,
+      ).not.toContain(productOnly);
+    }
 
     // `rich_text` exists in both and means different things: CMS carries title/html plus
     // placement presentation, product carries only content. Reading one as the other

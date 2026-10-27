@@ -8,8 +8,8 @@ the full package (markdown + OpenAPI + Postman + examples) is mirrored at
 
 | File | Version | Contents |
 |---|---|---|
-| `openapi.json` | **3.12.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract, the Phase 27B product-detail merchandising contract and the Phase 28A quick browse |
-| `postman_collection.json` | 3.12.0 | runnable requests, including the family → resolve → add-to-cart flow |
+| `openapi.json` | **3.13.0** | every whitelisted storefront/auth endpoint, including the Phase 24B variant contract, the Phase 27B product-detail merchandising contract, the Phase 28A quick browse and the Phase 30B target-progress block |
+| `postman_collection.json` | 3.13.0 | runnable requests, including the family → resolve → add-to-cart flow |
 | `live/` | 2.0.0 (**superseded**) | a 2026-08-13 response capture, kept for history only |
 
 The table above went stale between 3.4.0 and 3.8.0 while the JSON itself was
@@ -19,6 +19,44 @@ it. Per-version detail for every release lives in
 [`docs/api-handoff/API-CHANGELOG.md`](../../docs/api-handoff/API-CHANGELOG.md),
 which is the backend's own changelog and is not summarised again here; only the
 newest release is described below.
+
+## What changed in 3.13.0 (Phase 30B)
+
+**Additive.** A sixth `ContentBlock` type, `target_progress`, carrying `targets`.
+It arrives through the block mechanisms already consumed — `cms.get_page` and
+`cms.get_route_content` — so switching on `type` is all that is new.
+
+**Nothing renders it yet.** `isRenderableBlock()` skips unknown types, so the
+current build ignores a `target_progress` block safely; Phase 30C adds it to
+`RENDERABLE_TYPES` along with the card.
+
+Each entry is already resolved. The client performs **no** eligibility,
+achievement, UOM, remaining, incentive, slab, milestone, status or visibility
+logic. Two values to read precisely:
+
+* `achievement_percentage` is **not capped** — 125% achievement returns `125`.
+  Cap the bar if you like; do not cap the number.
+* `remaining_amount` / `remaining_quantity` are `max(target - achieved, 0)` and
+  never negative. Only the field matching `target_type` is populated, while
+  `achieved_amount` is present for both types because a percentage incentive
+  applies to it.
+
+`next_milestone` is already worked out — the next slab's achievement % and how
+much more is needed — and is `null` when the incentive is not slab-based or the
+customer is past the top slab. Never parse a slab table.
+
+**Three different date ranges exist and must stay apart.** The Target Period says
+which sales counted; the Report Window says when the backend recalculates (not
+published); and the block's own Show From / Show Until say when the card appears,
+applied server-side. **A target whose sales period has closed is still shown**
+while its display window is open — so do not hide a card because
+`target_period_end` has passed, and do not filter `targets` at all.
+
+An empty `targets` is an ordinary answer, not an error, and no reason is given.
+
+**There is no targets endpoint**, by design: a block is the only path, the
+customer comes from the session, and nothing accepts a customer or a list of
+Target Rules.
 
 ## What changed in 3.12.0 (Phase 29A)
 
