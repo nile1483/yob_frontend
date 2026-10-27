@@ -7,6 +7,7 @@ import { ImageBannerBlock } from './image-banner-block';
 import { ProductGridBlock } from './product-grid-block';
 import { PromoGridBlock } from './promo-grid-block';
 import { RichTextBlock } from './rich-text-block';
+import { TargetProgressBlock } from './target-progress-block';
 
 /**
  * An ordered list of merchant blocks, drawn.
@@ -44,6 +45,7 @@ import { RichTextBlock } from './rich-text-block';
     ProductGridBlock,
     PromoGridBlock,
     RichTextBlock,
+    TargetProgressBlock,
   ],
   template: `
     @for (block of renderable(); track $index) {
@@ -70,6 +72,9 @@ import { RichTextBlock } from './rich-text-block';
             }
             @case ('promo_grid') {
               <app-promo-grid-block [block]="block" />
+            }
+            @case ('target_progress') {
+              <app-target-progress-block [block]="block" />
             }
           }
         </div>

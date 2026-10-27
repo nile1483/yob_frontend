@@ -128,6 +128,8 @@ describe('home', () => {
       expect(byType).toEqual([
         'image_banner',
         'rich_text',
+        // The buyer's own targets (3.13.0), in the slot position the merchant chose.
+        'target_progress',
         'product_grid',
         'rich_text',
         'promo_grid',

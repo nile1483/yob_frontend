@@ -148,13 +148,174 @@ export interface PromoGridBlockDto extends ContentBlockBase {
   readonly cards: readonly ContentMediaRowDto[];
 }
 
+/**
+ * The next slab worth reaching, already worked out by the backend (API 3.13.0).
+ *
+ * Every figure here is the server's answer, including how much more is needed. Angular
+ * does not inspect slab configuration, compare percentages or pick a slab: the backend
+ * chose one and said what it takes to reach it.
+ *
+ * `null` on the entry when the incentive is not slab-based, or when the customer is
+ * already past the highest configured slab.
+ */
+export interface TargetNextMilestoneDto {
+  /** The achievement % that reaches the next slab. */
+  readonly achievement_percentage: number;
+  /** How much more is needed. Amount targets only. */
+  readonly remaining_amount?: number | null;
+  /** How much more is needed. Quantity targets only. */
+  readonly remaining_quantity?: number | null;
+  readonly incentive_amount?: number | null;
+  readonly incentive_percentage?: number | null;
+  /** That slab's cap; `null` means uncapped. */
+  readonly max_incentive?: number | null;
+}
+
+/** What a target is measured in. Decides which half of the entry carries figures. */
+export type TargetType = 'Amount' | 'Quantity';
+
+/**
+ * How a target is progressing, as the backend resolved it (API 3.13.0
+ * `TargetProgressEntry`).
+ *
+ * ## Every number here is already decided
+ *
+ * Eligibility, the display window, achievement, UOM conversion, slab selection,
+ * incentive and status are all the backend's. Angular renders them. The one calculation
+ * the storefront may do is cosmetic - clamping a bar's **width** to 100% - and even then
+ * the figure it prints beside the bar stays the real one.
+ *
+ * ## `achievement_percentage` is NOT capped
+ *
+ * 125% achievement arrives as `125`. The contract says so explicitly: a progress bar may
+ * stop drawing at 100, and the value stays truthful. Printing 100 because the bar
+ * stopped there would be the storefront lying about a number it was given.
+ *
+ * ## Which fields carry figures
+ *
+ * `target_type` decides. `Amount` populates `currency`, `target_amount` and
+ * `remaining_amount`; `Quantity` populates `uom`, `target_quantity`,
+ * `achieved_quantity` and `remaining_quantity`. `achieved_amount` is present for
+ * **both**, because a percentage incentive applies to the sales value either way.
+ *
+ * The two `remaining_*` fields are `max(target - achieved, 0)` server-side and are
+ * never negative, so an over-achieved target has `0` rather than a negative figure.
+ */
+export interface TargetProgressEntryDto {
+  /** Identifier of this customer's calculated target. Identity for tracking only. */
+  readonly customer_target: string;
+  readonly target_rule: string;
+  readonly title: string;
+  readonly description?: string | null;
+
+  /**
+   * The first and last dates whose sales counted.
+   *
+   * **The target's own period, not the block's display window.** Show From / Show Until
+   * decide when this card appears and are configuration the buyer never sees; a closed
+   * target period is still displayed when the merchant configured it to be.
+   */
+  readonly target_period_start?: string | null;
+  readonly target_period_end?: string | null;
+
+  /** `Item` | `Item Group` | `Brand` | `Total Sales Order`. */
+  readonly target_scope: string;
+  /** The scoped Item/Item Group/Brand; `null` for Total Sales Order. */
+  readonly scope_value?: string | null;
+
+  readonly target_type: TargetType;
+
+  /**
+   * The company's base currency, present on **every** entry - both target types.
+   *
+   * A Quantity target is counted in {@link uom} and still carries a currency, because
+   * its incentive is money: a percentage incentive applies to the achieved *amount*. So
+   * every card has something to label its reward with, and the storefront never needs a
+   * currency default of its own to print one.
+   *
+   * Derived from the Company and never chosen. Achievement is summed from
+   * `Sales Order Item.base_net_amount`, which ERPNext stores in base currency, so no
+   * other currency could honestly label the figures.
+   */
+  readonly currency: string;
+
+  /** Quantity targets only; `achieved_quantity` is already converted into it. */
+  readonly uom?: string | null;
+
+  readonly target_amount?: number | null;
+  /** Qualifying sales value. Present for BOTH target types. */
+  readonly achieved_amount: number;
+  readonly target_quantity?: number | null;
+  readonly achieved_quantity?: number | null;
+
+  /** **Not capped at 100.** See the note above. */
+  readonly achievement_percentage: number;
+
+  readonly remaining_amount?: number | null;
+  readonly remaining_quantity?: number | null;
+
+  /**
+   * Decided by the target period and the achievement, never by the display window.
+   * `Completed` is an administrative settlement state.
+   */
+  readonly status: TargetStatus;
+
+  readonly incentive_type?: string | null;
+
+  /**
+   * The calculated figure before any settlement reduction.
+   *
+   * Equal to {@link final_incentive} today, and retained for administrative and future
+   * use. **Not the value a buyer is shown** - see below.
+   */
+  readonly eligible_incentive: number;
+
+  /**
+   * The customer-facing reward: the authoritative post-slab, post-cap value.
+   *
+   * The two incentive fields are identical today and exist separately so a later
+   * settlement workflow can reduce one against the other without a contract change. A
+   * storefront showing {@link eligible_incentive} would, at that point, start promising
+   * a reward nobody receives - so the card reads this one and only this one.
+   */
+  readonly final_incentive: number;
+  /** The applicable slab as a label, e.g. `50% - 74.99%`. */
+  readonly current_slab?: string | null;
+
+  readonly next_milestone: TargetNextMilestoneDto | null;
+  readonly last_calculated_on?: string | null;
+}
+
+/** The five statuses the contract publishes, and no others. */
+export type TargetStatus = 'Not Started' | 'In Progress' | 'Achieved' | 'Expired' | 'Completed';
+
+/**
+ * A customer's own target progress, as a block.
+ *
+ * ## Reachable only through a block
+ *
+ * There is no endpoint that accepts a customer or a list of Target Rules. The customer
+ * comes from the authenticated session and the rules come from what a merchant
+ * configured, so a browser cannot widen what it is shown - and nothing here asks for
+ * more than the block already carries.
+ *
+ * `targets` holds the targets this block exposes that are inside their display window
+ * **and** that this customer actually has. Empty is an ordinary answer, not a failure,
+ * and the row order is the merchant's.
+ */
+export interface TargetProgressBlockDto extends ContentBlockBase {
+  readonly type: 'target_progress';
+  readonly targets: readonly TargetProgressEntryDto[];
+}
+
 /** Every block type this release renders. */
 export type ContentBlockDto =
   | ImageBannerBlockDto
   | RichTextBlockDto
   | BannerCarouselBlockDto
   | ProductGridBlockDto
-  | PromoGridBlockDto;
+  | PromoGridBlockDto
+  | TargetProgressBlockDto;
 
 /**
  * A block whose `type` this release does not know.
@@ -186,6 +347,9 @@ const RENDERABLE_TYPES = new Set<ContentBlockDto['type']>([
   'banner_carousel',
   'product_grid',
   'promo_grid',
+  // 3.13.0. Added here and to the union above; the dispatcher's `@switch` is the only
+  // other place that learns a new type exists.
+  'target_progress',
 ]);
 
 /**

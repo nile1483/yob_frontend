@@ -1,5 +1,8 @@
 import type { MenuDto } from '../../app/domains/content/contracts/cms.types';
-import type { StorefrontPageDto } from '../../app/domains/content/contracts/page.types';
+import type {
+  StorefrontPageDto,
+  TargetProgressBlockDto,
+} from '../../app/domains/content/contracts/page.types';
 import type { RouteContentDto } from '../../app/domains/content/contracts/route-content.types';
 import {
   IMAGE_HUGE,
@@ -8,6 +11,148 @@ import {
   IMAGE_SQUARE,
   MOCK_ITEMS_BY_CATEGORY,
 } from './catalog.fixture';
+
+/* ------------------------------------------------- target progress (30C) */
+
+/**
+ * One customer's targets, covering every case the card must tell apart.
+ *
+ * | Row | Case |
+ * | --- | --- |
+ * | 1 | **Amount**, in progress, under target, with a next milestone and an incentive |
+ * | 2 | **Quantity**, over-achieved at 125% - the bar caps, the text does not |
+ * | 3 | Not Started: nothing achieved, no incentive, no milestone |
+ * | 4 | Expired: a closed period the merchant still chose to display |
+ *
+ * Order is the merchant's and the renderer keeps it. Every figure is a value a backend
+ * would have resolved - nothing here is computed by the storefront.
+ */
+export const MOCK_TARGETS: TargetProgressBlockDto['targets'] = [
+  {
+    customer_target: 'CTGT-0001',
+    target_rule: 'TRUL-0001',
+    title: 'Quarterly sales target',
+    description: 'Across all products.',
+    target_period_start: '2026-01-01',
+    target_period_end: '2026-03-31',
+    target_scope: 'Total Sales Order',
+    scope_value: null,
+    target_type: 'Amount',
+    currency: 'INR',
+    uom: null,
+    target_amount: 1000000,
+    achieved_amount: 765000,
+    target_quantity: null,
+    achieved_quantity: null,
+    achievement_percentage: 76.5,
+    remaining_amount: 235000,
+    remaining_quantity: null,
+    status: 'In Progress',
+    incentive_type: 'Percentage',
+    // Equal, as the backend always emits them today: the cap is applied before both
+    // are set. They exist separately for a later settlement workflow, and the card
+    // reads `final_incentive` so that change needs no storefront edit.
+    eligible_incentive: 7650,
+    final_incentive: 7650,
+    current_slab: '75% - 99.99%',
+    next_milestone: {
+      achievement_percentage: 80,
+      remaining_amount: 35000,
+      remaining_quantity: null,
+      incentive_amount: null,
+      incentive_percentage: 1.5,
+      max_incentive: null,
+    },
+    last_calculated_on: '2026-01-25',
+  },
+  {
+    // 125%: the bar stops drawing at 100 and the text still reads 125% achieved.
+    customer_target: 'CTGT-0002',
+    target_rule: 'TRUL-0002',
+    title: 'Safety vest volume',
+    description: null,
+    target_period_start: '2026-01-01',
+    target_period_end: '2026-01-31',
+    target_scope: 'Item Group',
+    scope_value: 'Safety Equipment',
+    target_type: 'Quantity',
+    // A Quantity target carries a currency too: its incentive is money. The valid
+    // contract never leaves this null, so no fixture may depend on a UI fallback.
+    currency: 'INR',
+    uom: 'Boxes',
+    target_amount: null,
+    achieved_amount: 312500,
+    target_quantity: 500,
+    achieved_quantity: 625,
+    achievement_percentage: 125,
+    remaining_amount: null,
+    // Floored server-side: an over-achieved target has nothing remaining, not a negative.
+    remaining_quantity: 0,
+    status: 'Achieved',
+    incentive_type: 'Fixed',
+    eligible_incentive: 15000,
+    final_incentive: 15000,
+    current_slab: '100% and above',
+    next_milestone: null,
+    last_calculated_on: '2026-01-25',
+  },
+  {
+    customer_target: 'CTGT-0003',
+    target_rule: 'TRUL-0003',
+    title: 'New season pre-orders',
+    description: null,
+    target_period_start: '2026-04-01',
+    target_period_end: '2026-06-30',
+    target_scope: 'Brand',
+    scope_value: 'Acme',
+    target_type: 'Quantity',
+    currency: 'INR',
+    uom: 'Nos',
+    target_amount: null,
+    achieved_amount: 0,
+    target_quantity: 200,
+    achieved_quantity: 0,
+    achievement_percentage: 0,
+    remaining_amount: null,
+    remaining_quantity: 200,
+    status: 'Not Started',
+    incentive_type: null,
+    // Zero, so the card shows no incentive row at all rather than a meaningless one.
+    eligible_incentive: 0,
+    final_incentive: 0,
+    current_slab: null,
+    next_milestone: null,
+    last_calculated_on: null,
+  },
+  {
+    // A closed period. Phase 30B visibility decided it still appears, so it is drawn.
+    customer_target: 'CTGT-0004',
+    target_rule: 'TRUL-0004',
+    title: 'Festive push',
+    description: null,
+    target_period_start: '2025-10-01',
+    target_period_end: '2025-11-15',
+    target_scope: 'Total Sales Order',
+    scope_value: null,
+    target_type: 'Amount',
+    currency: 'INR',
+    uom: null,
+    target_amount: 500000,
+    achieved_amount: 180000,
+    target_quantity: null,
+    achieved_quantity: null,
+    achievement_percentage: 36,
+    remaining_amount: 320000,
+    remaining_quantity: null,
+    status: 'Expired',
+    incentive_type: 'Percentage',
+    eligible_incentive: 0,
+    final_incentive: 0,
+    current_slab: null,
+    next_milestone: null,
+    last_calculated_on: '2025-11-16',
+  },
+];
 
 /**
  * The merchant-configured navigation tree, shaped from API 3.4.0 `MenuResponse`.
@@ -497,6 +642,15 @@ export const MOCK_ROUTE_CONTENT: Readonly<Record<string, RouteContentDto>> = {
             title: 'Welcome back',
             html: '<p>Your trade prices, ready to order.</p>',
             text_alignment: 'left',
+          },
+          {
+            // A buyer's own targets, on the page they land on. Reachable only through a
+            // block: the customer comes from the session, so there is nothing to widen.
+            type: 'target_progress',
+            block_name: 'Your targets',
+            section_style: 'default',
+            content_width: 'contained',
+            targets: MOCK_TARGETS,
           },
           {
             type: 'product_grid',

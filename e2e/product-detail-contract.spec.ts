@@ -27,6 +27,7 @@ import { expect, test } from '@playwright/test';
 
 interface Schema {
   readonly type?: string;
+  readonly description?: string;
   readonly nullable?: boolean;
   readonly enum?: readonly string[];
   readonly required?: readonly string[];
@@ -691,5 +692,73 @@ test.describe('Phase 27B product detail merchandising contract', () => {
       expect(family, `VariantFamily dropped ${field}`).toContain(field);
     }
     expect(family.length).toBe(10 + 2);
+  });
+});
+
+/**
+ * The Phase 30B target-progress contract, as the storefront card consumes it.
+ *
+ * Two corrections to the unshipped 3.13.0 document are pinned here, because both are
+ * things a card gets visibly wrong if the contract drifts back:
+ *
+ * 1. `currency` is on **every** entry, not just Amount targets. A Quantity target's
+ *    incentive is money, and without a currency the card falls back to a default - which
+ *    printed `$15,000.00` on a rupee storefront.
+ * 2. `final_incentive` is the customer-facing reward; `eligible_incentive` is the
+ *    pre-settlement figure and must not be the one displayed.
+ */
+test.describe('target progress contract (Phase 30B)', () => {
+  test('currency is required on every entry, both target types', () => {
+    const entry = schema('TargetProgressEntry');
+
+    expect(requiredOf(entry)).toContain('currency');
+    expect(entry.properties?.['currency']?.nullable ?? false).toBe(false);
+
+    // `uom` stays Quantity-only and nullable - the two are independent, which is the
+    // distinction the earlier wording collapsed.
+    expect(entry.properties?.['uom']?.nullable).toBe(true);
+  });
+
+  test('both incentive figures are published, and final is the customer-facing one', () => {
+    const entry = schema('TargetProgressEntry');
+
+    // Published and non-nullable. Not asserted as members of `required`: that list is
+    // deliberately minimal on this schema and never held most always-present fields.
+    for (const field of ['eligible_incentive', 'final_incentive']) {
+      expect(Object.keys(entry.properties ?? {}), `${field} is published`).toContain(field);
+      expect(entry.properties?.[field]?.nullable ?? false).toBe(false);
+    }
+
+    // The document says which one a client shows. A contract that stopped saying so
+    // would leave the choice to whoever next edits the card.
+    const description = entry.properties?.['final_incentive']?.description ?? '';
+    expect(description.toLowerCase()).toContain('customer-facing');
+  });
+
+  test('the Angular card reads final_incentive and the entry currency', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/content/parts/target-progress-block.ts'),
+      'utf8',
+    );
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    expect(code).toContain('target.final_incentive');
+    expect(code, 'the card reads the pre-settlement figure').not.toContain(
+      'target.eligible_incentive',
+    );
+    expect(code, 'the card reads the entry currency').toContain('target.currency');
+  });
+
+  test('the Angular DTO types currency as required', () => {
+    const types = readFileSync(
+      resolve(process.cwd(), 'src/app/domains/content/contracts/page.types.ts'),
+      'utf8',
+    );
+    const entry = /export interface TargetProgressEntryDto \{([\s\S]*?)\n\}/.exec(types)?.[1] ?? '';
+
+    // Required, so a fixture that omitted one would not compile - which is what keeps
+    // the valid-payload tests off the malformed-payload fallback.
+    expect(entry).toMatch(/readonly currency: string;/);
+    expect(entry).not.toMatch(/readonly currency\?/);
   });
 });

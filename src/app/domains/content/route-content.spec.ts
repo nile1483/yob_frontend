@@ -197,13 +197,13 @@ describe('system route content', () => {
     it('preserves the merchant block order inside one slot', async () => {
       const view = await render(HomeSlotsHost);
 
-      // `main` holds rich text then a product grid. Sequence is a merchandising decision
-      // that has already been made.
+      // `main` holds rich text, then the customer's targets, then a product grid.
+      // Sequence is a merchandising decision that has already been made.
       const main = view.all('content-slot').find((s) => s.getAttribute('data-slot') === 'main');
       const types = Array.from(main?.querySelectorAll('[data-testid="page-block"]') ?? []).map(
         (block) => block.getAttribute('data-block-type'),
       );
-      expect(types).toEqual(['rich_text', 'product_grid']);
+      expect(types).toEqual(['rich_text', 'target_progress', 'product_grid']);
     });
 
     it('goes through the same renderer a Storefront Page uses', async () => {
@@ -216,6 +216,10 @@ describe('system route content', () => {
       expect(types).toEqual([
         'image_banner',
         'rich_text',
+        // 3.13.0, drawn by the same dispatcher as every other type - which is the point
+        // of this assertion: a slot with its own dispatch would be a second place to
+        // register a block.
+        'target_progress',
         'product_grid',
         'rich_text',
         'promo_grid',
